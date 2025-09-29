@@ -15,5 +15,10 @@
     "astro": "^5.14.1",
     "tailwindcss": "^4.1.13",
     "vue": "^3.5.22"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "prettier-plugin-astro": "^0.14.1",
+    "prettier-plugin-tailwindcss": "^0.6.14"
   }
 }
