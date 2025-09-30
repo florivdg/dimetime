@@ -10,7 +10,7 @@ Use `bun run dev` (or `bun dev`) for a hot-reloading Astro dev server. `bun run 
 
 ## Coding Style & Naming Conventions
 
-The project relies on Prettier with `prettier-plugin-astro` and `prettier-plugin-tailwindcss`; run `bunx prettier --check .` before pushing or enable format-on-save. Use two-space indentation, PascalCase for Vue components, and kebab-case route filenames. Favor colocated component-specific styles scoped via `<style>` blocks; keep cross-cutting CSS in `src/styles/global.css`.
+The project relies on Prettier with `prettier-plugin-astro` and `prettier-plugin-tailwindcss`; run `bunx prettier --check .` before pushing or enable format-on-save. After editing files, run `bunx prettier --write <files>` on changed files to ensure consistent formatting. Linting is handled by `oxlint`; run `bun run lint` to check for code issues. Use two-space indentation, PascalCase for Vue components, and kebab-case route filenames. Favor colocated component-specific styles scoped via `<style>` blocks; keep cross-cutting CSS in `src/styles/global.css`.
 
 ## Testing Guidelines
 
