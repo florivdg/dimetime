@@ -4,6 +4,7 @@ import { defineConfig } from 'astro/config'
 import node from '@astrojs/node'
 import vue from '@astrojs/vue'
 import tailwindcss from '@tailwindcss/vite'
+import ui from '@nuxt/ui/vite'
 
 // https://astro.build/config
 export default defineConfig({
@@ -11,9 +12,13 @@ export default defineConfig({
     mode: 'standalone',
   }),
 
-  integrations: [vue()],
+  integrations: [
+    vue({
+      appEntrypoint: '/src/vue/_app',
+    }),
+  ],
 
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss(), ui()],
   },
 })

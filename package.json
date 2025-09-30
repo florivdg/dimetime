@@ -11,10 +11,13 @@
   "dependencies": {
     "@astrojs/node": "^9.4.4",
     "@astrojs/vue": "^5.1.1",
+    "@nuxt/ui": "^4.0.0",
     "@tailwindcss/vite": "^4.1.13",
+    "@unhead/vue": "^2.0.17",
     "astro": "^5.14.1",
     "tailwindcss": "^4.1.13",
-    "vue": "^3.5.22"
+    "vue": "^3.5.22",
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

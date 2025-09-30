@@ -3,6 +3,10 @@ dist/
 # generated types
 .astro/
 
+# auto-generated type declarations
+auto-imports.d.ts
+components.d.ts
+
 # dependencies
 node_modules/
 
