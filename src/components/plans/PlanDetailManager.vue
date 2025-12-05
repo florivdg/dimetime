@@ -10,6 +10,7 @@ import PlanTransactionFilters from './PlanTransactionFilters.vue'
 import PlanTransactionTable from './PlanTransactionTable.vue'
 import TransactionEditDialog from '@/components/transactions/TransactionEditDialog.vue'
 import TransactionCreateDialog from '@/components/transactions/TransactionCreateDialog.vue'
+import { toast } from 'vue-sonner'
 
 const props = defineProps<{
   plan: Plan
@@ -137,6 +138,37 @@ function handleUpdated() {
   loadBalance()
 }
 
+async function handleToggleDone(id: string, isDone: boolean) {
+  // Find transaction and store original state for potential rollback
+  const index = transactions.value.findIndex((t) => t.id === id)
+  if (index === -1) return
+
+  const originalValue = transactions.value[index].isDone
+
+  // Optimistically update UI immediately
+  transactions.value[index].isDone = isDone
+
+  try {
+    const response = await fetch(`/api/transactions/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isDone }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Fehler beim Aktualisieren')
+    }
+
+    // Success: show toast and reload balance only
+    toast.success(isDone ? 'Als erledigt markiert' : 'Als offen markiert')
+    loadBalance()
+  } catch {
+    // Error: revert the optimistic update
+    transactions.value[index].isDone = originalValue
+    toast.error('Status konnte nicht aktualisiert werden')
+  }
+}
+
 function handleCreated() {
   loadTransactions()
   loadBalance()
@@ -214,7 +246,7 @@ function handleFilterReset() {
       @deleted="handleDeleted"
       @error="handleError"
       @sort="handleSort"
-      @toggle-done="handleUpdated"
+      @toggle-done="handleToggleDone"
     />
 
     <!-- Edit Dialog -->

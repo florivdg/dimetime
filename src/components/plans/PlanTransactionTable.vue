@@ -83,29 +83,8 @@ async function deleteTransaction(id: string) {
   }
 }
 
-async function handleToggleDone(transaction: TransactionWithCategory) {
-  const newIsDone = !transaction.isDone
-  try {
-    const response = await fetch(`/api/transactions/${transaction.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isDone: newIsDone }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Aktualisieren')
-    }
-
-    emit('toggleDone', transaction.id, newIsDone)
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Status konnte nicht aktualisiert werden.',
-    )
-  }
+function handleToggleDone(transaction: TransactionWithCategory) {
+  emit('toggleDone', transaction.id, !transaction.isDone)
 }
 
 function formatDate(dateString: string): string {
