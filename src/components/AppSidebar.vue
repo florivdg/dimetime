@@ -9,6 +9,7 @@ import {
   Receipt,
   Settings,
   Tags,
+  Upload,
 } from 'lucide-vue-next'
 import { computed } from 'vue'
 
@@ -72,7 +73,8 @@ const data = computed(() => ({
         !isActiveSection('/help') &&
         !isActiveSection('/categories') &&
         !isActiveSection('/plans') &&
-        !isActiveSection('/transactions'),
+        !isActiveSection('/transactions') &&
+        !isActiveSection('/import'),
     },
     {
       title: 'Pläne',
@@ -92,6 +94,12 @@ const data = computed(() => ({
       url: '/categories',
       icon: Tags,
       isActive: isActiveSection('/categories'),
+    },
+    {
+      title: 'Import',
+      url: '/import',
+      icon: Upload,
+      isActive: isActiveSection('/import'),
     },
     {
       title: 'Einstellungen',
