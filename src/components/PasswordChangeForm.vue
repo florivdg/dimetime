@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useForm } from 'vee-validate'
 import { z } from 'zod'
 import { authClient } from '@/lib/auth-client'
@@ -22,6 +22,9 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { KeyRound } from 'lucide-vue-next'
+
+const session = authClient.useSession()
+const userEmail = computed(() => session.value?.data?.user?.email || '')
 
 const passwordSchema = z
   .object({
@@ -115,6 +118,17 @@ const onSubmit = form.handleSubmit(async (values) => {
           >
             {{ successMessage }}
           </div>
+
+          <!-- Hidden username field for accessibility and password managers -->
+          <input
+            name="username"
+            type="email"
+            :value="userEmail"
+            autocomplete="username"
+            readonly
+            class="sr-only"
+            tabindex="-1"
+          />
 
           <FormField v-slot="{ componentField }" name="currentPassword">
             <FormItem>

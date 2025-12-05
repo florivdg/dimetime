@@ -105,9 +105,11 @@ function handleError(message: string) {
           class="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
         />
         <Input
+          name="query"
           v-model="searchQuery"
           placeholder="Kategorien durchsuchen..."
           class="pl-9"
+          @keyup.escape="searchQuery = ''"
         />
       </div>
 
