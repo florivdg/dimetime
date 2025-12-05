@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import type { Plan } from '@/lib/plans'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { CalendarDays, Loader2, Pencil, Search, Trash2 } from 'lucide-vue-next'
 
@@ -37,6 +38,16 @@ const emit = defineEmits<{
   deleted: []
   error: [message: string]
 }>()
+
+// Delete confirmation state
+const deleteConfirmation = ref('')
+const isDeleteConfirmed = computed(
+  () => deleteConfirmation.value.toLowerCase() === 'löschen',
+)
+
+function resetDeleteConfirmation() {
+  deleteConfirmation.value = ''
+}
 
 // Edit state
 const editingId = ref<string | null>(null)
@@ -158,10 +169,10 @@ function formatCreatedAt(date: Date): string {
 function getPlanDisplayName(plan: Plan): string {
   if (plan.name) return plan.name
   const date = new Date(plan.date)
-  return `Plan ${new Intl.DateTimeFormat('de-DE', {
+  return new Intl.DateTimeFormat('de-DE', {
     month: 'long',
     year: 'numeric',
-  }).format(date)}`
+  }).format(date)
 }
 
 function truncateNotes(notes: string | null, maxLength = 50): string {
@@ -300,7 +311,7 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
               >
                 <Pencil class="size-4" />
               </Button>
-              <AlertDialog>
+              <AlertDialog @update:open="resetDeleteConfirmation">
                 <AlertDialogTrigger as-child>
                   <Button size="icon-sm" variant="ghost" title="Löschen">
                     <Trash2 class="size-4" />
@@ -315,9 +326,25 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
                       ebenfalls gelöscht.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
+                  <div class="space-y-2">
+                    <Label for="delete-confirmation">
+                      Geben Sie
+                      <span class="font-semibold">löschen</span>
+                      ein, um fortzufahren:
+                    </Label>
+                    <Input
+                      id="delete-confirmation"
+                      v-model="deleteConfirmation"
+                      placeholder="löschen"
+                      autocomplete="off"
+                    />
+                  </div>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                    <AlertDialogAction @click="deletePlan(plan.id)">
+                    <AlertDialogAction
+                      :disabled="!isDeleteConfirmed"
+                      @click="deletePlan(plan.id)"
+                    >
                       Löschen
                     </AlertDialogAction>
                   </AlertDialogFooter>

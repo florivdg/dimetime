@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Plan } from '@/lib/plans'
 import {
   Card,
@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { CalendarDays, Search } from 'lucide-vue-next'
 import PlanCreateDialog from './PlanCreateDialog.vue'
@@ -26,6 +26,9 @@ const showArchived = ref(false)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 const isCreateDialogOpen = ref(false)
+
+// Watchers
+watch(showArchived, () => loadPlans())
 
 // Computed
 const filteredPlans = computed(() => {
@@ -126,11 +129,7 @@ function handleError(message: string) {
           />
         </div>
         <div class="flex items-center gap-2">
-          <Checkbox
-            id="show-archived"
-            v-model="showArchived"
-            @update:model-value="loadPlans"
-          />
+          <Switch id="show-archived" v-model="showArchived" />
           <Label for="show-archived" class="cursor-pointer text-sm">
             Archivierte anzeigen
           </Label>
