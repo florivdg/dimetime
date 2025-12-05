@@ -2,7 +2,7 @@
 import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import PlanDetailManager from '@/components/plans/PlanDetailManager.vue'
-import { getPlanById } from '@/lib/plans'
+import { getPlanById, getSidebarPlans } from '@/lib/plans'
 import { getTransactions, getPlanBalance } from '@/lib/transactions'
 import { getAllCategories } from '@/lib/categories'
 import { getPlanDisplayName } from '@/lib/format'
@@ -35,6 +35,22 @@ const balance = await getPlanBalance(id)
 const categories = await getAllCategories()
 
 const planDisplayName = getPlanDisplayName(plan.name, plan.date)
+
+// Sidebar plan items
+const { currentMonth, latest } = await getSidebarPlans()
+const planItems: { title: string; url: string }[] = []
+if (currentMonth) {
+  planItems.push({
+    title: getPlanDisplayName(currentMonth.name, currentMonth.date),
+    url: `/plans/${currentMonth.id}`,
+  })
+}
+if (latest && latest.id !== currentMonth?.id) {
+  planItems.push({
+    title: getPlanDisplayName(latest.name, latest.date),
+    url: `/plans/${latest.id}`,
+  })
+}
 ---
 
 <Layout title={planDisplayName}>
@@ -45,6 +61,7 @@ const planDisplayName = getPlanDisplayName(plan.name, plan.date)
       { label: 'Pläne', href: '/plans' },
       { label: planDisplayName },
     ]}
+    planItems={planItems}
   >
     <div class="flex flex-1 flex-col gap-4">
       <PlanDetailManager

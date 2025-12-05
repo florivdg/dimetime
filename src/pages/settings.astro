@@ -2,6 +2,24 @@
 import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import UserSettings from '@/components/settings/UserSettings.vue'
+import { getSidebarPlans } from '@/lib/plans'
+import { getPlanDisplayName } from '@/lib/format'
+
+// Sidebar plan items
+const { currentMonth, latest } = await getSidebarPlans()
+const planItems: { title: string; url: string }[] = []
+if (currentMonth) {
+  planItems.push({
+    title: getPlanDisplayName(currentMonth.name, currentMonth.date),
+    url: `/plans/${currentMonth.id}`,
+  })
+}
+if (latest && latest.id !== currentMonth?.id) {
+  planItems.push({
+    title: getPlanDisplayName(latest.name, latest.date),
+    url: `/plans/${latest.id}`,
+  })
+}
 ---
 
 <Layout>
@@ -9,6 +27,7 @@ import UserSettings from '@/components/settings/UserSettings.vue'
     client:load
     currentPath={Astro.url.pathname}
     breadcrumbs={[{ label: 'Einstellungen' }]}
+    planItems={planItems}
   >
     <div class="flex flex-1 flex-col gap-4">
       <div class="flex items-center justify-between">

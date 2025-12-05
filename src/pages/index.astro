@@ -3,12 +3,30 @@ import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import DashboardContent from '@/components/dashboard/DashboardContent.vue'
 import { getDashboardStats } from '@/lib/dashboard'
+import { getSidebarPlans } from '@/lib/plans'
+import { getPlanDisplayName } from '@/lib/format'
 
 const stats = await getDashboardStats()
+
+// Sidebar plan items
+const { currentMonth, latest } = await getSidebarPlans()
+const planItems: { title: string; url: string }[] = []
+if (currentMonth) {
+  planItems.push({
+    title: getPlanDisplayName(currentMonth.name, currentMonth.date),
+    url: `/plans/${currentMonth.id}`,
+  })
+}
+if (latest && latest.id !== currentMonth?.id) {
+  planItems.push({
+    title: getPlanDisplayName(latest.name, latest.date),
+    url: `/plans/${latest.id}`,
+  })
+}
 ---
 
 <Layout>
-  <Dashboard client:load currentPath={Astro.url.pathname}>
+  <Dashboard client:load currentPath={Astro.url.pathname} planItems={planItems}>
     <DashboardContent client:load stats={stats} />
   </Dashboard>
 </Layout>

@@ -29,7 +29,12 @@ import {
 } from '@/components/ui/sidebar'
 
 const props = withDefaults(
-  defineProps<SidebarProps & { currentPath?: string }>(),
+  defineProps<
+    SidebarProps & {
+      currentPath?: string
+      planItems?: { title: string; url: string }[]
+    }
+  >(),
   {
     variant: 'inset',
     currentPath: '',
@@ -74,6 +79,7 @@ const data = computed(() => ({
       url: '/plans',
       icon: CalendarDays,
       isActive: isActiveSection('/plans'),
+      items: props.planItems,
     },
     {
       title: 'Transaktionen',

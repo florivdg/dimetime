@@ -158,3 +158,39 @@ export async function deletePlan(id: string): Promise<boolean> {
     .returning({ id: plan.id })
   return result.length > 0
 }
+
+/**
+ * Get the plan for the current month (if it exists)
+ */
+export async function getCurrentMonthPlan(): Promise<Plan | undefined> {
+  const now = new Date()
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+  return db.query.plan.findFirst({
+    where: and(
+      like(plan.date, `${currentMonth}-%`),
+      eq(plan.isArchived, false),
+    ),
+  })
+}
+
+/**
+ * Get the latest (most recent by date) non-archived plan
+ */
+export async function getLatestPlan(): Promise<Plan | undefined> {
+  return db.query.plan.findFirst({
+    where: eq(plan.isArchived, false),
+    orderBy: desc(plan.date),
+  })
+}
+
+/**
+ * Get sidebar plan data (current month + latest plan)
+ */
+export async function getSidebarPlans() {
+  const [currentMonth, latest] = await Promise.all([
+    getCurrentMonthPlan(),
+    getLatestPlan(),
+  ])
+  return { currentMonth, latest }
+}
