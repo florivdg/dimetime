@@ -1,17 +1,14 @@
 ---
 import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
+import DashboardContent from '@/components/dashboard/DashboardContent.vue'
+import { getDashboardStats } from '@/lib/dashboard'
+
+const stats = await getDashboardStats()
 ---
 
 <Layout>
   <Dashboard client:load currentPath={Astro.url.pathname}>
-    <div class="flex flex-1 flex-col gap-4">
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold tracking-tight">Dasboard</h1>
-      </div>
-      <div class="bg-muted/50 flex-1 rounded-xl p-6">
-        <p class="text-muted-foreground">Dashboard wird hier angezeigt.</p>
-      </div>
-    </div>
+    <DashboardContent client:load stats={stats} />
   </Dashboard>
 </Layout>
