@@ -23,7 +23,7 @@ const updateTransactionSchema = z.object({
     .optional(),
   amount: z.number().int().min(0, 'Betrag muss positiv sein').optional(),
   isDone: z.boolean().optional(),
-  categoryId: z.string().uuid().nullable().optional(),
+  categoryId: z.uuid().nullable().optional(),
 })
 
 export const PUT: APIRoute = async ({ params, request }) => {

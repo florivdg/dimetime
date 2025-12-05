@@ -6,7 +6,7 @@ import { inArray } from 'drizzle-orm'
 import type { ImportResult } from '@/lib/import'
 
 const importPlanSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string().nullable(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notes: z.string().nullable(),
@@ -16,7 +16,7 @@ const importPlanSchema = z.object({
 })
 
 const importTransactionSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string().min(1),
   note: z.string().nullable(),
   type: z.enum(['income', 'expense']),
@@ -24,9 +24,9 @@ const importTransactionSchema = z.object({
   amount: z.number().int().min(0),
   isDone: z.boolean(),
   completedAt: z.number().nullable(),
-  planId: z.string().uuid(),
+  planId: z.uuid(),
   userId: z.string(),
-  categoryId: z.string().uuid().nullable(),
+  categoryId: z.uuid().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
 })

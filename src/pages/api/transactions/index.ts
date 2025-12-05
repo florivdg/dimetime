@@ -5,8 +5,8 @@ import { getSetting } from '@/lib/settings'
 
 const querySchema = z.object({
   search: z.string().optional(),
-  categoryId: z.string().uuid().optional(),
-  planId: z.string().uuid().optional(),
+  categoryId: z.uuid().optional(),
+  planId: z.uuid().optional(),
   type: z.enum(['income', 'expense']).optional(),
   isDone: z
     .string()
@@ -41,8 +41,8 @@ const createSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   amount: z.number().int().min(0),
   isDone: z.boolean().optional(),
-  planId: z.string().uuid(),
-  categoryId: z.string().uuid().nullable().optional(),
+  planId: z.uuid(),
+  categoryId: z.uuid().nullable().optional(),
 })
 
 export const GET: APIRoute = async ({ url, locals }) => {
