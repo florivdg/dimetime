@@ -9,6 +9,7 @@ export const auth = betterAuth({
     provider: 'sqlite',
     schema,
   }),
+  trustedOrigins: [process.env.BETTER_AUTH_URL ?? 'http://localhost:4321'],
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
@@ -21,6 +22,24 @@ export const auth = betterAuth({
         return await Bun.password.verify(data.password, data.hash)
       },
     },
+  },
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 100,
+    customRules: {
+      '/sign-in/*': {
+        window: 60,
+        max: 5,
+      },
+      '/passkey/*': {
+        window: 60,
+        max: 10,
+      },
+    },
+  },
+  advanced: {
+    useSecureCookies: process.env.NODE_ENV === 'production',
   },
   plugins: [
     passkey({

@@ -64,7 +64,7 @@ const loginSchema = z.object({
   password: z
     .string()
     .min(1, 'Passwort ist erforderlich')
-    .min(8, 'Passwort muss mindestens 8 Zeichen lang sein'),
+    .min(16, 'Passwort muss mindestens 16 Zeichen lang sein'),
 })
 
 const form = useForm({
@@ -203,7 +203,7 @@ const onSubmit = form.handleSubmit(async (values) => {
                   <Input
                     type="password"
                     placeholder="********"
-                    autocomplete="current-password"
+                    autocomplete="current-password webauthn"
                     v-bind="componentField"
                   />
                 </FormControl>
