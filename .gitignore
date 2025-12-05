@@ -26,3 +26,5 @@ pnpm-debug.log*
 sqlite.db
 *.db-shm
 *.db-wal
+
+data/
