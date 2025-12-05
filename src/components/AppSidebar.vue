@@ -83,13 +83,15 @@ const data = computed(() => ({
           <SidebarMenuButton size="lg" as-child>
             <a href="/">
               <div
-                class="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg"
+                class="text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg bg-lime-500"
               >
                 <PiggyBank class="size-4" />
               </div>
               <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-medium">DimeTime</span>
-                <span class="truncate text-xs">Administration</span>
+                <span class="font-medium">DimeTime</span>
+                <span class="truncate text-xs font-extralight"
+                  >Finanzplanung</span
+                >
               </div>
             </a>
           </SidebarMenuButton>

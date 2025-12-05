@@ -161,14 +161,14 @@ const onSubmit = form.handleSubmit(async (values) => {
       <CardHeader class="text-center">
         <div class="mb-4 flex justify-center">
           <div
-            class="bg-primary text-primary-foreground flex size-12 items-center justify-center rounded-lg"
+            class="flex size-12 items-center justify-center rounded-lg bg-lime-500 text-white"
           >
             <PiggyBank class="size-6" />
           </div>
         </div>
         <CardTitle class="text-2xl">DimeTime</CardTitle>
-        <CardDescription>
-          Melden Sie sich an, um auf das Admin-Panel zuzugreifen.
+        <CardDescription class="text-balance">
+          Melde dich an, um auf das Dashboard zuzugreifen.
         </CardDescription>
       </CardHeader>
       <CardContent>

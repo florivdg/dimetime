@@ -40,7 +40,7 @@ defineProps<{
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem class="hidden md:block">
-                <BreadcrumbLink href="/"> Admin </BreadcrumbLink>
+                <BreadcrumbLink href="/"> Home </BreadcrumbLink>
               </BreadcrumbItem>
               <template v-if="breadcrumbs?.length">
                 <template v-for="(crumb, index) in breadcrumbs" :key="index">
