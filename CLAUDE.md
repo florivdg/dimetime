@@ -71,3 +71,4 @@ Required in `.env` (see `.env.example`):
 
 - After applying changes, always run the linter and astro check
 - After final changes, run the `bunx prettier --write` on changed files to ensure consistent formatting
+- always use german umlaute for user facing UI texts
