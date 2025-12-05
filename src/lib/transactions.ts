@@ -1,15 +1,17 @@
 import { db } from '@/db/database'
-import { plannedTransaction, category } from '@/db/schema/plans'
+import { plannedTransaction, category, plan } from '@/db/schema/plans'
 import { and, asc, count, desc, eq, getTableColumns, like } from 'drizzle-orm'
 
 // Infer types from Drizzle schema
 export type Transaction = typeof plannedTransaction.$inferSelect
 export type NewTransaction = typeof plannedTransaction.$inferInsert
 
-// Transaction with category details for display
+// Transaction with category and plan details for display
 export type TransactionWithCategory = Transaction & {
   categoryName: string | null
   categoryColor: string | null
+  planName: string | null
+  planDate: string | null
 }
 
 // Pagination response type
@@ -27,6 +29,7 @@ export interface PaginatedTransactions {
 export interface TransactionQueryOptions {
   search?: string
   categoryId?: string
+  planId?: string
   sortBy?: 'name' | 'dueDate' | 'categoryName' | 'amount'
   sortDir?: 'asc' | 'desc'
   page?: number
@@ -53,6 +56,7 @@ export async function getTransactions(
   const {
     search,
     categoryId,
+    planId,
     sortBy = 'dueDate',
     sortDir = 'desc',
     page = 1,
@@ -68,6 +72,10 @@ export async function getTransactions(
 
   if (categoryId) {
     conditions.push(eq(plannedTransaction.categoryId, categoryId))
+  }
+
+  if (planId) {
+    conditions.push(eq(plannedTransaction.planId, planId))
   }
 
   const whereClause =
@@ -99,15 +107,18 @@ export async function getTransactions(
   const total = countResult[0]?.count ?? 0
   const totalPages = Math.ceil(total / limit)
 
-  // Get paginated transactions with category info
+  // Get paginated transactions with category and plan info
   const result = await db
     .select({
       ...getTableColumns(plannedTransaction),
       categoryName: category.name,
       categoryColor: category.color,
+      planName: plan.name,
+      planDate: plan.date,
     })
     .from(plannedTransaction)
     .leftJoin(category, eq(plannedTransaction.categoryId, category.id))
+    .leftJoin(plan, eq(plannedTransaction.planId, plan.id))
     .where(whereClause)
     .orderBy(orderFn(sortColumn))
     .limit(limit)

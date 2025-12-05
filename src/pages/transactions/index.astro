@@ -4,6 +4,7 @@ import Dashboard from '@/components/Dashboard.vue'
 import TransactionManager from '@/components/transactions/TransactionManager.vue'
 import { getTransactions } from '@/lib/transactions'
 import { getAllCategories } from '@/lib/categories'
+import { getAllPlans } from '@/lib/plans'
 
 // Load initial data server-side
 const { transactions, pagination } = await getTransactions({
@@ -13,6 +14,7 @@ const { transactions, pagination } = await getTransactions({
   limit: 20,
 })
 const categories = await getAllCategories()
+const plans = await getAllPlans(true) // Include archived plans for filter
 ---
 
 <Layout>
@@ -30,6 +32,7 @@ const categories = await getAllCategories()
         initialTransactions={transactions}
         initialPagination={pagination}
         categories={categories}
+        plans={plans}
       />
     </div>
   </Dashboard>

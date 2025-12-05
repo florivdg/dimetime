@@ -2,6 +2,7 @@
 import { computed, nextTick, ref } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import type { Plan } from '@/lib/plans'
+import { getPlanDisplayName } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -166,15 +167,6 @@ function formatCreatedAt(date: Date): string {
   }).format(new Date(date))
 }
 
-function getPlanDisplayName(plan: Plan): string {
-  if (plan.name) return plan.name
-  const date = new Date(plan.date)
-  return new Intl.DateTimeFormat('de-DE', {
-    month: 'long',
-    year: 'numeric',
-  }).format(date)
-}
-
 function truncateNotes(notes: string | null, maxLength = 50): string {
   if (!notes) return ''
   if (notes.length <= maxLength) return notes
@@ -233,7 +225,7 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
               :href="`/plans/${plan.id}`"
               class="font-medium hover:underline"
             >
-              {{ getPlanDisplayName(plan) }}
+              {{ getPlanDisplayName(plan.name, plan.date) }}
             </a>
           </TableCell>
 
@@ -321,9 +313,10 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Plan löschen?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Möchten Sie den Plan "{{ getPlanDisplayName(plan) }}"
-                      wirklich löschen? Alle zugehörigen Transaktionen werden
-                      ebenfalls gelöscht.
+                      Möchten Sie den Plan "{{
+                        getPlanDisplayName(plan.name, plan.date)
+                      }}" wirklich löschen? Alle zugehörigen Transaktionen
+                      werden ebenfalls gelöscht.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <div class="space-y-2">

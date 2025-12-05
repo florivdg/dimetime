@@ -3,6 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
+import { getPlanDisplayName } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -260,6 +261,7 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
               />
             </Button>
           </TableHead>
+          <TableHead>Plan</TableHead>
           <TableHead class="w-36">
             <Button
               variant="ghost"
@@ -333,6 +335,20 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
               />
               <span>{{ transaction.categoryName || '-' }}</span>
             </div>
+          </TableCell>
+
+          <!-- Plan -->
+          <TableCell>
+            <a
+              v-if="transaction.planId"
+              :href="`/plans/${transaction.planId}`"
+              class="hover:underline"
+            >
+              {{
+                getPlanDisplayName(transaction.planName, transaction.planDate)
+              }}
+            </a>
+            <span v-else class="text-muted-foreground">-</span>
           </TableCell>
 
           <!-- Amount -->

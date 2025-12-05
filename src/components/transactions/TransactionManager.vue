@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
+import type { Plan } from '@/lib/plans'
+import { getPlanDisplayName } from '@/lib/format'
 import {
   Card,
   CardContent,
@@ -27,7 +29,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination'
-import { Receipt, Search } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import { Receipt, Search, X } from 'lucide-vue-next'
 import TransactionTable from './TransactionTable.vue'
 
 const props = defineProps<{
@@ -39,6 +42,7 @@ const props = defineProps<{
     totalPages: number
   }
   categories: Category[]
+  plans: Plan[]
 }>()
 
 // State
@@ -46,11 +50,19 @@ const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
 const pagination = ref(props.initialPagination)
 const searchQuery = ref('')
 const selectedCategoryId = ref<string>('all')
+const selectedPlanId = ref<string>('all')
 const sortBy = ref<'name' | 'dueDate' | 'categoryName' | 'amount'>('dueDate')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const currentPage = ref(1)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
+
+const hasActiveFilters = computed(
+  () =>
+    searchQuery.value !== '' ||
+    selectedCategoryId.value !== 'all' ||
+    selectedPlanId.value !== 'all',
+)
 
 // Debounced search watcher
 let searchTimeout: ReturnType<typeof setTimeout>
@@ -63,7 +75,7 @@ watch(searchQuery, () => {
 })
 
 // Immediate watchers for filters
-watch([selectedCategoryId, sortBy, sortDir], () => {
+watch([selectedCategoryId, selectedPlanId, sortBy, sortDir], () => {
   currentPage.value = 1
   loadTransactions()
 })
@@ -81,6 +93,9 @@ async function loadTransactions() {
     if (searchQuery.value) params.set('search', searchQuery.value)
     if (selectedCategoryId.value !== 'all') {
       params.set('categoryId', selectedCategoryId.value)
+    }
+    if (selectedPlanId.value !== 'all') {
+      params.set('planId', selectedPlanId.value)
     }
     params.set('sortBy', sortBy.value)
     params.set('sortDir', sortDir.value)
@@ -123,6 +138,12 @@ function handleSort(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
 
 function handlePageChange(page: number) {
   currentPage.value = page
+}
+
+function resetFilters() {
+  searchQuery.value = ''
+  selectedCategoryId.value = 'all'
+  selectedPlanId.value = 'all'
 }
 </script>
 
@@ -171,6 +192,26 @@ function handlePageChange(page: number) {
             </SelectItem>
           </SelectContent>
         </Select>
+        <Select v-model="selectedPlanId">
+          <SelectTrigger class="w-[180px]">
+            <SelectValue placeholder="Plan" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Pläne</SelectItem>
+            <SelectItem v-for="p in plans" :key="p.id" :value="p.id">
+              {{ getPlanDisplayName(p.name, p.date) }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="icon"
+          title="Filter zurücksetzen"
+          :disabled="!hasActiveFilters"
+          @click="resetFilters"
+        >
+          <X class="size-4" />
+        </Button>
       </div>
 
       <!-- Table -->
