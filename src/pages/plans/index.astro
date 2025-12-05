@@ -2,9 +2,16 @@
 import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import PlanManager from '@/components/plans/PlanManager.vue'
-import { getAllPlans } from '@/lib/plans'
+import { getAllPlans, getAvailableYears } from '@/lib/plans'
 
-const plans = await getAllPlans(false)
+const currentYear = new Date().getFullYear()
+const availableYears = await getAvailableYears()
+
+// Default to current year if plans exist for it, otherwise show all
+const initialYear = availableYears.includes(currentYear)
+  ? currentYear
+  : undefined
+const plans = await getAllPlans(true, initialYear)
 ---
 
 <Layout>
@@ -17,7 +24,12 @@ const plans = await getAllPlans(false)
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold tracking-tight">Pläne</h1>
       </div>
-      <PlanManager client:load initialPlans={plans} />
+      <PlanManager
+        client:load
+        initialPlans={plans}
+        availableYears={availableYears}
+        initialYear={initialYear}
+      />
     </div>
   </Dashboard>
 </Layout>

@@ -11,17 +11,51 @@ export type CreatePlanInput = Omit<NewPlan, 'id' | 'createdAt' | 'updatedAt'>
 export type UpdatePlanInput = Partial<CreatePlanInput>
 
 /**
+ * Get all distinct years from plans (sorted descending)
+ */
+export async function getAvailableYears(): Promise<number[]> {
+  const plans = await db.query.plan.findMany({
+    columns: { date: true },
+  })
+
+  const years = new Set<number>()
+  plans.forEach((p) => {
+    const year = parseInt(p.date.substring(0, 4), 10)
+    if (!isNaN(year)) {
+      years.add(year)
+    }
+  })
+
+  return Array.from(years).sort((a, b) => b - a)
+}
+
+/**
  * Get all plans ordered by date (newest first)
  * @param includeArchived - Whether to include archived plans (default: false)
+ * @param year - Optional year to filter by
  */
-export async function getAllPlans(includeArchived = false): Promise<Plan[]> {
-  if (includeArchived) {
+export async function getAllPlans(
+  includeArchived = false,
+  year?: number,
+): Promise<Plan[]> {
+  const conditions = []
+
+  if (!includeArchived) {
+    conditions.push(eq(plan.isArchived, false))
+  }
+
+  if (year !== undefined) {
+    conditions.push(like(plan.date, `${year}-%`))
+  }
+
+  if (conditions.length === 0) {
     return db.query.plan.findMany({
       orderBy: desc(plan.date),
     })
   }
+
   return db.query.plan.findMany({
-    where: eq(plan.isArchived, false),
+    where: conditions.length === 1 ? conditions[0] : and(...conditions),
     orderBy: desc(plan.date),
   })
 }
@@ -30,25 +64,27 @@ export async function getAllPlans(includeArchived = false): Promise<Plan[]> {
  * Search plans by name (case-insensitive partial match)
  * @param query - Search query string
  * @param includeArchived - Whether to include archived plans (default: false)
+ * @param year - Optional year to filter by
  */
 export async function searchPlans(
   query: string,
   includeArchived = false,
+  year?: number,
 ): Promise<Plan[]> {
-  const searchCondition = or(
-    like(plan.name, `%${query}%`),
-    like(plan.date, `%${query}%`),
-  )
+  const conditions = [
+    or(like(plan.name, `%${query}%`), like(plan.date, `%${query}%`)),
+  ]
 
-  if (includeArchived) {
-    return db.query.plan.findMany({
-      where: searchCondition,
-      orderBy: desc(plan.date),
-    })
+  if (!includeArchived) {
+    conditions.push(eq(plan.isArchived, false))
+  }
+
+  if (year !== undefined) {
+    conditions.push(like(plan.date, `${year}-%`))
   }
 
   return db.query.plan.findMany({
-    where: and(eq(plan.isArchived, false), searchCondition),
+    where: and(...conditions),
     orderBy: desc(plan.date),
   })
 }

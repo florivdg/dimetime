@@ -11,31 +11,42 @@ import {
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { CalendarDays, Search } from 'lucide-vue-next'
 import PlanCreateDialog from './PlanCreateDialog.vue'
 import PlanTable from './PlanTable.vue'
 
 const props = defineProps<{
   initialPlans: Plan[]
+  availableYears: number[]
+  initialYear?: number
 }>()
 
 // State
 const plans = ref<Plan[]>(props.initialPlans)
 const searchQuery = ref('')
-const showArchived = ref(false)
+const hideArchived = ref(false)
+const selectedYear = ref<string>(props.initialYear?.toString() ?? 'all')
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 const isCreateDialogOpen = ref(false)
 
 // Watchers
-watch(showArchived, () => loadPlans())
+watch(hideArchived, () => loadPlans())
+watch(selectedYear, () => loadPlans())
 
 // Computed
 const filteredPlans = computed(() => {
   let result = plans.value
 
   // Filter by archived status
-  if (!showArchived.value) {
+  if (hideArchived.value) {
     result = result.filter((p) => !p.isArchived)
   }
 
@@ -56,9 +67,10 @@ async function loadPlans() {
   errorMessage.value = null
   try {
     const params = new URLSearchParams()
-    if (showArchived.value) {
+    if (!hideArchived.value) {
       params.set('includeArchived', 'true')
     }
+    params.set('year', selectedYear.value)
     const response = await fetch(`/api/plans?${params.toString()}`)
     if (!response.ok) throw new Error('Fehler beim Laden')
     const data = await response.json()
@@ -128,10 +140,25 @@ function handleError(message: string) {
             @keyup.escape="searchQuery = ''"
           />
         </div>
+        <Select v-model="selectedYear">
+          <SelectTrigger class="w-[140px]">
+            <SelectValue placeholder="Jahr" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Jahre</SelectItem>
+            <SelectItem
+              v-for="year in availableYears"
+              :key="year"
+              :value="year.toString()"
+            >
+              {{ year }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
         <div class="flex items-center gap-2">
-          <Switch id="show-archived" v-model="showArchived" />
-          <Label for="show-archived" class="cursor-pointer text-sm">
-            Archivierte anzeigen
+          <Switch id="hide-archived" v-model="hideArchived" />
+          <Label for="hide-archived" class="cursor-pointer text-sm">
+            Archivierte ausblenden
           </Label>
         </div>
       </div>

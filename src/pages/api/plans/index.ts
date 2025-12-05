@@ -17,10 +17,15 @@ const createPlanSchema = z.object({
 export const GET: APIRoute = async ({ url }) => {
   const search = url.searchParams.get('search')
   const includeArchived = url.searchParams.get('includeArchived') === 'true'
+  const yearParam = url.searchParams.get('year')
+
+  // Parse year parameter: null/"all" = undefined, otherwise parse as number
+  const year =
+    yearParam === 'all' || !yearParam ? undefined : parseInt(yearParam, 10)
 
   const plans = search
-    ? await searchPlans(search, includeArchived)
-    : await getAllPlans(includeArchived)
+    ? await searchPlans(search, includeArchived, year)
+    : await getAllPlans(includeArchived, year)
 
   return new Response(JSON.stringify({ plans }), {
     status: 200,
