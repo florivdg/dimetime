@@ -29,11 +29,18 @@ import {
   ArrowUp,
   ArrowUpDown,
   Loader2,
+  Lock,
   Pencil,
   Receipt,
   Search,
   Trash2,
 } from 'lucide-vue-next'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 const props = defineProps<{
   transactions: TransactionWithCategory[]
@@ -103,6 +110,10 @@ function formatAmount(cents: number): string {
 function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
   if (props.sortBy !== column) return ArrowUpDown
   return props.sortDir === 'asc' ? ArrowUp : ArrowDown
+}
+
+function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
+  return transaction.planIsArchived === true
 }
 </script>
 
@@ -198,7 +209,20 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
         >
           <!-- Status -->
           <TableCell>
+            <TooltipProvider v-if="isTransactionReadOnly(transaction)">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <div class="flex items-center">
+                    <Lock class="text-muted-foreground size-4" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Plan ist archiviert - Transaktion ist schreibgeschützt</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Checkbox
+              v-else
               :model-value="Boolean(transaction.isDone)"
               @update:model-value="handleToggleDone(transaction)"
             />
@@ -244,7 +268,29 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
 
           <!-- Actions -->
           <TableCell class="text-right">
-            <div class="flex justify-end gap-1">
+            <!-- Read-only: show lock icon -->
+            <div
+              v-if="isTransactionReadOnly(transaction)"
+              class="flex justify-end"
+            >
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <div class="text-muted-foreground flex items-center gap-1">
+                      <Lock class="size-4" />
+                      <span class="sr-only">Schreibgeschützt</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      Plan ist archiviert - Transaktion ist schreibgeschützt
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <!-- Editable: show edit/delete buttons -->
+            <div v-else class="flex justify-end gap-1">
               <Button
                 size="icon-sm"
                 variant="ghost"

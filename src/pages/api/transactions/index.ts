@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { createTransaction, getTransactions } from '@/lib/transactions'
+import { getPlanById } from '@/lib/plans'
 import { getSetting } from '@/lib/settings'
 
 const querySchema = z.object({
@@ -102,6 +103,25 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response(
       JSON.stringify({ error: parsed.error.issues[0].message }),
       { status: 400, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // Check if the target plan exists and is not archived
+  const targetPlan = await getPlanById(parsed.data.planId)
+  if (!targetPlan) {
+    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  if (targetPlan.isArchived) {
+    return new Response(
+      JSON.stringify({
+        error:
+          'Transaktionen können nicht zu einem archivierten Plan hinzugefügt werden.',
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
     )
   }
 

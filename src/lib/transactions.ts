@@ -23,6 +23,12 @@ export type TransactionWithCategory = Transaction & {
   categoryColor: string | null
   planName: string | null
   planDate: string | null
+  planIsArchived: boolean
+}
+
+// Transaction with plan archive status for API validation
+export type TransactionWithPlanStatus = Transaction & {
+  planIsArchived: boolean
 }
 
 // Pagination response type
@@ -189,6 +195,7 @@ export async function getTransactions(
       categoryColor: category.color,
       planName: plan.name,
       planDate: plan.date,
+      planIsArchived: plan.isArchived,
     })
     .from(plannedTransaction)
     .leftJoin(category, eq(plannedTransaction.categoryId, category.id))
@@ -196,10 +203,16 @@ export async function getTransactions(
     .where(whereClause)
     .orderBy(...orderByClause)
 
-  const result =
+  const rawResult =
     limit === -1
       ? await query
       : await query.limit(limit).offset((page - 1) * limit)
+
+  // Ensure planIsArchived is always a boolean (not null)
+  const result: TransactionWithCategory[] = rawResult.map((row) => ({
+    ...row,
+    planIsArchived: row.planIsArchived ?? false,
+  }))
 
   return {
     transactions: result,
@@ -221,6 +234,31 @@ export async function getTransactionById(
   return db.query.plannedTransaction.findFirst({
     where: eq(plannedTransaction.id, id),
   })
+}
+
+/**
+ * Get a transaction by ID with its plan's archived status
+ * Used for checking if modifications are allowed
+ */
+export async function getTransactionWithPlanStatus(
+  id: string,
+): Promise<TransactionWithPlanStatus | undefined> {
+  const result = await db
+    .select({
+      ...getTableColumns(plannedTransaction),
+      planIsArchived: plan.isArchived,
+    })
+    .from(plannedTransaction)
+    .leftJoin(plan, eq(plannedTransaction.planId, plan.id))
+    .where(eq(plannedTransaction.id, id))
+    .limit(1)
+
+  if (result.length === 0) return undefined
+
+  return {
+    ...result[0],
+    planIsArchived: result[0].planIsArchived ?? false,
+  }
 }
 
 /**

@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import {
   deleteTransaction,
-  getTransactionById,
+  getTransactionWithPlanStatus,
   updateTransaction,
 } from '@/lib/transactions'
 
@@ -36,11 +36,22 @@ export const PUT: APIRoute = async ({ params, request }) => {
     )
   }
 
-  const existing = await getTransactionById(id)
+  const existing = await getTransactionWithPlanStatus(id)
   if (!existing) {
     return new Response(
       JSON.stringify({ error: 'Transaktion nicht gefunden' }),
       { status: 404, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // Reject if plan is archived
+  if (existing.planIsArchived) {
+    return new Response(
+      JSON.stringify({
+        error:
+          'Transaktion kann nicht bearbeitet werden, da der zugehörige Plan archiviert ist.',
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
     )
   }
 
@@ -80,11 +91,22 @@ export const DELETE: APIRoute = async ({ params }) => {
     )
   }
 
-  const existing = await getTransactionById(id)
+  const existing = await getTransactionWithPlanStatus(id)
   if (!existing) {
     return new Response(
       JSON.stringify({ error: 'Transaktion nicht gefunden' }),
       { status: 404, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // Reject if plan is archived
+  if (existing.planIsArchived) {
+    return new Response(
+      JSON.stringify({
+        error:
+          'Transaktion kann nicht gelöscht werden, da der zugehörige Plan archiviert ist.',
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
     )
   }
 

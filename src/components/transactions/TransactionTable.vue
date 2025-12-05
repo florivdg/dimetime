@@ -45,6 +45,7 @@ import {
   ArrowUpDown,
   Check,
   Loader2,
+  Lock,
   Minus,
   Pencil,
   Plus,
@@ -53,6 +54,12 @@ import {
   Trash2,
   X,
 } from 'lucide-vue-next'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 const props = defineProps<{
   transactions: TransactionWithCategory[]
@@ -114,7 +121,15 @@ function focusEditInput(id: string) {
   }
 }
 
+function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
+  return transaction.planIsArchived === true
+}
+
 function startEditing(transaction: TransactionWithCategory) {
+  // Don't allow editing archived plan transactions
+  if (isTransactionReadOnly(transaction)) {
+    return
+  }
   editingId.value = transaction.id
   editName.value = transaction.name
   editDueDate.value = transaction.dueDate
@@ -408,8 +423,30 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
 
           <!-- Actions -->
           <TableCell class="text-right">
+            <!-- Read-only: show lock icon -->
             <div
-              v-if="editingId === transaction.id"
+              v-if="isTransactionReadOnly(transaction)"
+              class="flex justify-end"
+            >
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <div class="text-muted-foreground flex items-center gap-1">
+                      <Lock class="size-4" />
+                      <span class="sr-only">Schreibgeschützt</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      Plan ist archiviert - Transaktion ist schreibgeschützt
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <!-- Edit mode: show save/cancel buttons -->
+            <div
+              v-else-if="editingId === transaction.id"
               class="flex justify-end gap-1"
             >
               <Button
@@ -431,6 +468,7 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
                 <span class="sr-only">Abbrechen</span>
               </Button>
             </div>
+            <!-- Normal mode: show edit/delete buttons -->
             <div v-else class="flex justify-end gap-1">
               <Button
                 size="icon-sm"

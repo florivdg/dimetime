@@ -54,6 +54,16 @@ watch(
   () => props.transaction,
   (transaction) => {
     if (transaction) {
+      // If plan is archived, close the dialog and don't allow editing
+      if (transaction.planIsArchived) {
+        open.value = false
+        emit(
+          'error',
+          'Transaktion kann nicht bearbeitet werden - Plan ist archiviert',
+        )
+        return
+      }
+
       editName.value = transaction.name
       editNote.value = transaction.note ?? ''
       editDueDate.value = transaction.dueDate

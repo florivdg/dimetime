@@ -10,6 +10,14 @@ import PlanTransactionFilters from './PlanTransactionFilters.vue'
 import PlanTransactionTable from './PlanTransactionTable.vue'
 import TransactionEditDialog from '@/components/transactions/TransactionEditDialog.vue'
 import TransactionCreateDialog from '@/components/transactions/TransactionCreateDialog.vue'
+import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Lock, Plus } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
@@ -139,6 +147,12 @@ function handleUpdated() {
 }
 
 async function handleToggleDone(id: string, isDone: boolean) {
+  // Check if plan is archived
+  if (props.plan.isArchived) {
+    toast.error('Transaktion kann nicht geändert werden - Plan ist archiviert')
+    return
+  }
+
   // Find transaction and store original state for potential rollback
   const index = transactions.value.findIndex((t) => t.id === id)
   if (index === -1) return
@@ -225,7 +239,23 @@ function handleFilterReset() {
             @reset="handleFilterReset"
           />
         </div>
+        <!-- Disabled button for archived plans -->
+        <TooltipProvider v-if="plan.isArchived">
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <Button disabled>
+                <Lock class="mr-2 size-4" />
+                Neue Transaktion
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Plan ist archiviert - keine neuen Transaktionen möglich</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <!-- Create dialog for active plans -->
         <TransactionCreateDialog
+          v-else
           v-model:open="createDialogOpen"
           :plan-id="plan.id"
           :categories="categories"
