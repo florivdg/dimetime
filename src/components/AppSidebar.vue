@@ -6,6 +6,7 @@ import {
   Home,
   LifeBuoy,
   PiggyBank,
+  Receipt,
   Settings,
   Tags,
 } from 'lucide-vue-next'
@@ -65,13 +66,20 @@ const data = computed(() => ({
         !isActiveSection('/settings') &&
         !isActiveSection('/help') &&
         !isActiveSection('/categories') &&
-        !isActiveSection('/plans'),
+        !isActiveSection('/plans') &&
+        !isActiveSection('/transactions'),
     },
     {
       title: 'Pläne',
       url: '/plans',
       icon: CalendarDays,
       isActive: isActiveSection('/plans'),
+    },
+    {
+      title: 'Transaktionen',
+      url: '/transactions',
+      icon: Receipt,
+      isActive: isActiveSection('/transactions'),
     },
     {
       title: 'Kategorien',
