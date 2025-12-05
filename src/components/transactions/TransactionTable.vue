@@ -32,6 +32,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
 import {
   ArrowDown,
@@ -39,7 +45,9 @@ import {
   ArrowUpDown,
   Check,
   Loader2,
+  Minus,
   Pencil,
+  Plus,
   Receipt,
   Search,
   Trash2,
@@ -77,6 +85,7 @@ const editingId = ref<string | null>(null)
 const editName = ref('')
 const editDueDate = ref('')
 const editAmount = ref(0)
+const editType = ref<'income' | 'expense'>('expense')
 const editCategoryId = ref<string | null>(null)
 const editInputRefs = ref<
   Record<string, HTMLInputElement | ComponentPublicInstance | null>
@@ -110,6 +119,7 @@ function startEditing(transaction: TransactionWithCategory) {
   editName.value = transaction.name
   editDueDate.value = transaction.dueDate
   editAmount.value = transaction.amount / 100 // Convert cents to euros for display
+  editType.value = transaction.type
   editCategoryId.value = transaction.categoryId
   nextTick(() => {
     focusEditInput(transaction.id)
@@ -121,7 +131,12 @@ function cancelEditing() {
   editName.value = ''
   editDueDate.value = ''
   editAmount.value = 0
+  editType.value = 'expense'
   editCategoryId.value = null
+}
+
+function toggleType() {
+  editType.value = editType.value === 'income' ? 'expense' : 'income'
 }
 
 async function updateTransaction(id: string) {
@@ -129,6 +144,7 @@ async function updateTransaction(id: string) {
     name: editName.value.trim(),
     dueDate: editDueDate.value,
     amount: Math.round(editAmount.value * 100), // Convert euros to cents
+    type: editType.value,
     categoryId: editCategoryId.value,
   }
   try {
@@ -355,15 +371,28 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
 
           <!-- Amount -->
           <TableCell>
-            <Input
-              v-if="editingId === transaction.id"
-              v-model.number="editAmount"
-              type="number"
-              step="0.01"
-              class="h-8"
-              @keyup.enter="updateTransaction(transaction.id)"
-              @keyup.escape="cancelEditing"
-            />
+            <InputGroup v-if="editingId === transaction.id" class="h-8">
+              <InputGroupAddon>
+                <InputGroupButton
+                  :class="
+                    editType === 'income'
+                      ? 'text-green-600 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950'
+                      : 'text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950'
+                  "
+                  @click="toggleType"
+                >
+                  <Plus v-if="editType === 'income'" class="size-4" />
+                  <Minus v-else class="size-4" />
+                </InputGroupButton>
+              </InputGroupAddon>
+              <InputGroupInput
+                v-model.number="editAmount"
+                type="number"
+                step="0.01"
+                @keyup.enter="updateTransaction(transaction.id)"
+                @keyup.escape="cancelEditing"
+              />
+            </InputGroup>
             <span
               v-else
               :class="
