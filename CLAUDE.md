@@ -15,8 +15,8 @@ bun run build          # Build for production
 bun --bun run preview  # Preview production build
 
 # Database
-bun run db:generate  # Generate Drizzle migrations from schema
-bun run db:migrate   # Run database migrations
+bun run db:generate  # Generate Drizzle migrations from schema - never run this directly
+bun run db:migrate   # Run database migrations - never run this directly
 
 # Code Quality
 bun run lint --type-aware  # Run OxLint
@@ -41,6 +41,7 @@ bun run astro check        # Astro project check
 - `src/db/schema/` - Drizzle schema definitions
 - `src/lib/` - Auth configuration and utilities
 - `scripts/` - CLI scripts (migrations, user management)
+- `drizzle`- Never touch this folder - auto-generated Drizzle files
 
 ### Authentication Flow
 
