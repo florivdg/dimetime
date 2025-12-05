@@ -23,7 +23,15 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
-import { Loader2, Pencil, Search, Tags, Trash2 } from 'lucide-vue-next'
+import {
+  Check,
+  Loader2,
+  Pencil,
+  Search,
+  Tags,
+  Trash2,
+  X,
+} from 'lucide-vue-next'
 
 const props = defineProps<{
   categories: Category[]
@@ -248,14 +256,22 @@ function formatDate(date: Date): string {
             <template v-if="editingId === cat.id">
               <div class="flex justify-end gap-1">
                 <Button
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
+                  title="Speichern"
                   @click="updateCategory(cat.id)"
                 >
-                  Speichern
+                  <Check class="size-4" />
+                  <span class="sr-only">Speichern</span>
                 </Button>
-                <Button size="sm" variant="ghost" @click="cancelEditing">
-                  Abbrechen
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  title="Abbrechen"
+                  @click="cancelEditing"
+                >
+                  <X class="size-4" />
+                  <span class="sr-only">Abbrechen</span>
                 </Button>
               </div>
             </template>

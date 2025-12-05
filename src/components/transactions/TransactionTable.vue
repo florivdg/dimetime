@@ -37,11 +37,13 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Check,
   Loader2,
   Pencil,
   Receipt,
   Search,
   Trash2,
+  X,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -382,14 +384,22 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
               class="flex justify-end gap-1"
             >
               <Button
-                size="sm"
+                size="icon-sm"
                 variant="ghost"
+                title="Speichern"
                 @click="updateTransaction(transaction.id)"
               >
-                Speichern
+                <Check class="size-4" />
+                <span class="sr-only">Speichern</span>
               </Button>
-              <Button size="sm" variant="ghost" @click="cancelEditing">
-                Abbrechen
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                title="Abbrechen"
+                @click="cancelEditing"
+              >
+                <X class="size-4" />
+                <span class="sr-only">Abbrechen</span>
               </Button>
             </div>
             <div v-else class="flex justify-end gap-1">

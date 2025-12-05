@@ -26,7 +26,15 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { CalendarDays, Loader2, Pencil, Search, Trash2 } from 'lucide-vue-next'
+import {
+  CalendarDays,
+  Check,
+  Loader2,
+  Pencil,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-vue-next'
 
 const props = defineProps<{
   plans: Plan[]
@@ -287,11 +295,23 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
           <!-- Actions -->
           <TableCell class="text-right">
             <div v-if="editingId === plan.id" class="flex justify-end gap-1">
-              <Button size="sm" variant="ghost" @click="updatePlan(plan.id)">
-                Speichern
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                title="Speichern"
+                @click="updatePlan(plan.id)"
+              >
+                <Check class="size-4" />
+                <span class="sr-only">Speichern</span>
               </Button>
-              <Button size="sm" variant="ghost" @click="cancelEditing">
-                Abbrechen
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                title="Abbrechen"
+                @click="cancelEditing"
+              >
+                <X class="size-4" />
+                <span class="sr-only">Abbrechen</span>
               </Button>
             </div>
             <div v-else class="flex justify-end gap-1">
