@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,6 +37,32 @@ const isAdding = ref(false)
 const editingId = ref<string | null>(null)
 const editName = ref('')
 const errorMessage = ref<string | null>(null)
+const editInputRefs = ref<
+  Record<string, HTMLInputElement | ComponentPublicInstance | null>
+>({})
+
+function setEditInputRef(
+  id: string,
+  el: HTMLInputElement | ComponentPublicInstance | null,
+) {
+  if (el === null) {
+    delete editInputRefs.value[id]
+    return
+  }
+  editInputRefs.value[id] = el
+}
+
+function focusEditInput(id: string) {
+  const refValue = editInputRefs.value[id]
+  const inputEl =
+    refValue instanceof HTMLInputElement
+      ? refValue
+      : (refValue as ComponentPublicInstance | undefined)?.$el
+  if (inputEl instanceof HTMLInputElement) {
+    inputEl.focus()
+    inputEl.select?.()
+  }
+}
 
 async function loadPasskeys() {
   isLoading.value = true
@@ -43,7 +70,7 @@ async function loadPasskeys() {
   try {
     const result = await authClient.passkey.listUserPasskeys()
     if (result.data) {
-      passkeys.value = result.data
+      passkeys.value = result.data as Passkey[]
     }
   } catch {
     errorMessage.value = 'Passkeys konnten nicht geladen werden.'
@@ -80,6 +107,9 @@ async function deletePasskey(id: string) {
 function startEditing(passkey: Passkey) {
   editingId.value = passkey.id
   editName.value = passkey.name || ''
+  nextTick(() => {
+    focusEditInput(passkey.id)
+  })
 }
 
 function cancelEditing() {
@@ -178,6 +208,9 @@ onMounted(() => {
               >
                 <Input
                   v-model="editName"
+                  :ref="
+                    (el) => setEditInputRef(passkey.id, el as HTMLInputElement)
+                  "
                   placeholder="Passkey-Name"
                   class="h-8 w-48"
                   @keyup.enter="saveEdit(passkey.id)"
