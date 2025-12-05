@@ -176,10 +176,7 @@ const onSubmit = form.handleSubmit(async (values) => {
           </FormField>
 
           <div class="flex items-center gap-2">
-            <Checkbox
-              id="revokeOtherSessions"
-              v-model:checked="revokeOtherSessions"
-            />
+            <Checkbox id="revokeOtherSessions" v-model="revokeOtherSessions" />
             <Label for="revokeOtherSessions" class="cursor-pointer text-sm">
               Andere Sitzungen abmelden
             </Label>

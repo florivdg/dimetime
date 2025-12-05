@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import type { SidebarProps } from '@/components/ui/sidebar'
 
-import { Home, LifeBuoy, PiggyBank, Settings, Tags } from 'lucide-vue-next'
+import {
+  CalendarDays,
+  Home,
+  LifeBuoy,
+  PiggyBank,
+  Settings,
+  Tags,
+} from 'lucide-vue-next'
 import { computed } from 'vue'
 
 import { authClient } from '@/lib/auth-client'
@@ -57,7 +64,14 @@ const data = computed(() => ({
         isActiveSection('/') &&
         !isActiveSection('/settings') &&
         !isActiveSection('/help') &&
-        !isActiveSection('/categories'),
+        !isActiveSection('/categories') &&
+        !isActiveSection('/plans'),
+    },
+    {
+      title: 'Pläne',
+      url: '/plans',
+      icon: CalendarDays,
+      isActive: isActiveSection('/plans'),
     },
     {
       title: 'Kategorien',
