@@ -81,6 +81,7 @@ const data = computed(() => ({
       url: '/plans',
       icon: CalendarDays,
       isActive: isActiveSection('/plans'),
+      defaultOpen: true,
       items: props.planItems,
     },
     {

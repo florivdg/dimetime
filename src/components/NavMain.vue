@@ -24,6 +24,7 @@ defineProps<{
     url: string
     icon: LucideIcon
     isActive?: boolean
+    defaultOpen?: boolean
     items?: {
       title: string
       url: string
@@ -40,7 +41,7 @@ defineProps<{
         v-for="item in items"
         :key="item.title"
         as-child
-        :default-open="item.isActive"
+        :default-open="item.defaultOpen || item.isActive"
       >
         <SidebarMenuItem>
           <SidebarMenuButton as-child :tooltip="item.title">
