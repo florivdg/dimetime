@@ -1,6 +1,7 @@
 import { db } from '@/db/database'
-import { plannedTransaction, category, plan } from '@/db/schema/plans'
+import { plannedTransaction, category } from '@/db/schema/plans'
 import { and, asc, count, desc, eq, gte, sql, sum } from 'drizzle-orm'
+import { getCurrentMonthPlan } from '@/lib/plans'
 
 // Dashboard stats types
 export interface CurrentPlanStats {
@@ -39,20 +40,6 @@ export interface MonthlyChartData {
 }
 
 export type ChartRange = '6m' | '12m' | 'year'
-
-/**
- * Get the current (latest non-archived) plan
- */
-async function getCurrentPlan() {
-  const result = await db
-    .select()
-    .from(plan)
-    .where(eq(plan.isArchived, false))
-    .orderBy(desc(plan.date))
-    .limit(1)
-
-  return result[0] ?? null
-}
 
 /**
  * Get balance for a plan (income, expense, net)
@@ -182,10 +169,10 @@ async function getTopCategories(planId: string): Promise<TopCategory[]> {
 }
 
 /**
- * Get all dashboard stats
+ * Get all dashboard stats for the current calendar month
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const currentPlan = await getCurrentPlan()
+  const currentPlan = await getCurrentMonthPlan()
 
   if (!currentPlan) {
     return {
