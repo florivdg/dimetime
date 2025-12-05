@@ -33,18 +33,19 @@ export function generateSlug(name: string): string {
  * Get all categories ordered by creation date (newest first)
  */
 export async function getAllCategories(): Promise<Category[]> {
-  return db.select().from(category).orderBy(desc(category.createdAt))
+  return db.query.category.findMany({
+    orderBy: desc(category.createdAt),
+  })
 }
 
 /**
  * Search categories by name (case-insensitive partial match)
  */
 export async function searchCategories(query: string): Promise<Category[]> {
-  return db
-    .select()
-    .from(category)
-    .where(like(category.name, `%${query}%`))
-    .orderBy(desc(category.createdAt))
+  return db.query.category.findMany({
+    where: like(category.name, `%${query}%`),
+    orderBy: desc(category.createdAt),
+  })
 }
 
 /**
@@ -53,12 +54,9 @@ export async function searchCategories(query: string): Promise<Category[]> {
 export async function getCategoryById(
   id: string,
 ): Promise<Category | undefined> {
-  const result = await db
-    .select()
-    .from(category)
-    .where(eq(category.id, id))
-    .limit(1)
-  return result[0]
+  return db.query.category.findFirst({
+    where: eq(category.id, id),
+  })
 }
 
 /**
@@ -67,12 +65,9 @@ export async function getCategoryById(
 export async function getCategoryBySlug(
   slug: string,
 ): Promise<Category | undefined> {
-  const result = await db
-    .select()
-    .from(category)
-    .where(eq(category.slug, slug))
-    .limit(1)
-  return result[0]
+  return db.query.category.findFirst({
+    where: eq(category.slug, slug),
+  })
 }
 
 /**
