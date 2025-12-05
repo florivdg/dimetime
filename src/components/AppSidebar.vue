@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import type { SidebarProps } from '@/components/ui/sidebar'
 
-import {
-  Calendar,
-  Home,
-  LifeBuoy,
-  PiggyBank,
-  Settings,
-  Ticket,
-} from 'lucide-vue-next'
+import { Home, LifeBuoy, PiggyBank, Settings } from 'lucide-vue-next'
 import { computed } from 'vue'
 
+import { authClient } from '@/lib/auth-client'
 import NavMain from '@/components/NavMain.vue'
 import NavSecondary from '@/components/NavSecondary.vue'
 import NavUser from '@/components/NavUser.vue'
+
+const session = authClient.useSession()
 import {
   Sidebar,
   SidebarContent,
@@ -48,9 +44,9 @@ function isActiveSection(url: string): boolean {
 
 const data = computed(() => ({
   user: {
-    name: 'Admin',
-    email: 'admin@dimetime.org',
-    avatar: '',
+    name: session.value?.data?.user?.name || '',
+    email: session.value?.data?.user?.email || '',
+    avatar: session.value?.data?.user?.image || '',
   },
   navMain: [
     {
@@ -61,38 +57,6 @@ const data = computed(() => ({
         isActiveSection('/') &&
         !isActiveSection('/settings') &&
         !isActiveSection('/help'),
-    },
-    {
-      title: 'Events',
-      url: '/events',
-      icon: Calendar,
-      isActive: isActiveSection('/events'),
-      items: [
-        {
-          title: 'Übersicht',
-          url: '/events',
-        },
-        {
-          title: 'Neues Event',
-          url: '/events/new',
-        },
-      ],
-    },
-    {
-      title: 'Tokens',
-      url: '/tokens',
-      icon: Ticket,
-      isActive: isActiveSection('/tokens'),
-      items: [
-        {
-          title: 'Übersicht',
-          url: '/tokens',
-        },
-        {
-          title: 'Generieren',
-          url: '/tokens/generate',
-        },
-      ],
     },
     {
       title: 'Einstellungen',
