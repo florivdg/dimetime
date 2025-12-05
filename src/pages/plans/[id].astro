@@ -1,0 +1,59 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import Dashboard from '@/components/Dashboard.vue'
+import PlanDetailManager from '@/components/plans/PlanDetailManager.vue'
+import { getPlanById } from '@/lib/plans'
+import { getTransactions, getPlanBalance } from '@/lib/transactions'
+import { getAllCategories } from '@/lib/categories'
+import { getPlanDisplayName } from '@/lib/format'
+
+const { id } = Astro.params
+
+if (!id) {
+  return Astro.redirect('/plans')
+}
+
+// Load plan
+const plan = await getPlanById(id)
+
+if (!plan) {
+  return Astro.redirect('/plans')
+}
+
+// Load all transactions for this plan
+const { transactions } = await getTransactions({
+  planId: id,
+  sortBy: 'dueDate',
+  sortDir: 'desc',
+  limit: -1,
+})
+
+// Load balance
+const balance = await getPlanBalance(id)
+
+// Load categories
+const categories = await getAllCategories()
+
+const planDisplayName = getPlanDisplayName(plan.name, plan.date)
+---
+
+<Layout title={planDisplayName}>
+  <Dashboard
+    client:load
+    currentPath={Astro.url.pathname}
+    breadcrumbs={[
+      { label: 'Pläne', href: '/plans' },
+      { label: planDisplayName },
+    ]}
+  >
+    <div class="flex flex-1 flex-col gap-4">
+      <PlanDetailManager
+        client:load
+        plan={plan}
+        initialTransactions={transactions}
+        initialBalance={balance}
+        categories={categories}
+      />
+    </div>
+  </Dashboard>
+</Layout>

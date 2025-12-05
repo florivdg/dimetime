@@ -1,0 +1,322 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import type { TransactionWithCategory } from '@/lib/transactions'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Loader2,
+  Pencil,
+  Receipt,
+  Search,
+  Trash2,
+} from 'lucide-vue-next'
+
+const props = defineProps<{
+  transactions: TransactionWithCategory[]
+  isLoading: boolean
+  searchQuery: string
+  sortBy: 'name' | 'dueDate' | 'categoryName' | 'amount'
+  sortDir: 'asc' | 'desc'
+}>()
+
+const emit = defineEmits<{
+  edit: [transaction: TransactionWithCategory]
+  deleted: []
+  error: [message: string]
+  sort: [column: 'name' | 'dueDate' | 'categoryName' | 'amount']
+  toggleDone: [id: string, isDone: boolean]
+}>()
+
+// Delete confirmation state
+const deleteConfirmation = ref('')
+const isDeleteConfirmed = computed(
+  () => deleteConfirmation.value.toLowerCase() === 'löschen',
+)
+
+function resetDeleteConfirmation() {
+  deleteConfirmation.value = ''
+}
+
+async function deleteTransaction(id: string) {
+  try {
+    const response = await fetch(`/api/transactions/${id}`, {
+      method: 'DELETE',
+    })
+
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.error || 'Fehler beim Löschen')
+    }
+
+    emit('deleted')
+  } catch (error) {
+    emit(
+      'error',
+      error instanceof Error
+        ? error.message
+        : 'Transaktion konnte nicht gelöscht werden.',
+    )
+  }
+}
+
+async function handleToggleDone(transaction: TransactionWithCategory) {
+  const newIsDone = !transaction.isDone
+  try {
+    const response = await fetch(`/api/transactions/${transaction.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isDone: newIsDone }),
+    })
+
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.error || 'Fehler beim Aktualisieren')
+    }
+
+    emit('toggleDone', transaction.id, newIsDone)
+  } catch (error) {
+    emit(
+      'error',
+      error instanceof Error
+        ? error.message
+        : 'Status konnte nicht aktualisiert werden.',
+    )
+  }
+}
+
+function formatDate(dateString: string): string {
+  return new Intl.DateTimeFormat('de-DE', {
+    dateStyle: 'medium',
+  }).format(new Date(dateString))
+}
+
+function formatAmount(cents: number): string {
+  return new Intl.NumberFormat('de-DE', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(cents / 100)
+}
+
+function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
+  if (props.sortBy !== column) return ArrowUpDown
+  return props.sortDir === 'asc' ? ArrowUp : ArrowDown
+}
+</script>
+
+<template>
+  <!-- Loading -->
+  <div v-if="isLoading" class="flex items-center justify-center py-8">
+    <Loader2 class="text-muted-foreground size-6 animate-spin" />
+  </div>
+
+  <!-- Empty state -->
+  <div
+    v-else-if="transactions.length === 0 && !searchQuery"
+    class="py-8 text-center"
+  >
+    <Receipt class="text-muted-foreground mx-auto mb-4 size-12" />
+    <p class="text-muted-foreground">Keine Transaktionen vorhanden.</p>
+  </div>
+
+  <!-- No results -->
+  <div
+    v-else-if="transactions.length === 0 && searchQuery"
+    class="py-8 text-center"
+  >
+    <Search class="text-muted-foreground mx-auto mb-4 size-12" />
+    <p class="text-muted-foreground">
+      Keine Transaktionen gefunden für "{{ searchQuery }}".
+    </p>
+  </div>
+
+  <!-- Table -->
+  <div v-else class="rounded-md border">
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead class="w-12">
+            <span class="sr-only">Status</span>
+          </TableHead>
+          <TableHead>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="-ml-3"
+              @click="emit('sort', 'name')"
+            >
+              Name
+              <component :is="getSortIcon('name')" class="ml-2 size-4" />
+            </Button>
+          </TableHead>
+          <TableHead class="w-36">
+            <Button
+              variant="ghost"
+              size="sm"
+              class="-ml-3"
+              @click="emit('sort', 'dueDate')"
+            >
+              Datum
+              <component :is="getSortIcon('dueDate')" class="ml-2 size-4" />
+            </Button>
+          </TableHead>
+          <TableHead>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="-ml-3"
+              @click="emit('sort', 'categoryName')"
+            >
+              Kategorie
+              <component
+                :is="getSortIcon('categoryName')"
+                class="ml-2 size-4"
+              />
+            </Button>
+          </TableHead>
+          <TableHead class="w-36">
+            <Button
+              variant="ghost"
+              size="sm"
+              class="-ml-3"
+              @click="emit('sort', 'amount')"
+            >
+              Betrag
+              <component :is="getSortIcon('amount')" class="ml-2 size-4" />
+            </Button>
+          </TableHead>
+          <TableHead class="w-24 text-right">Aktionen</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow
+          v-for="transaction in transactions"
+          :key="transaction.id"
+          :class="{ 'opacity-60': transaction.isDone }"
+        >
+          <!-- Status -->
+          <TableCell>
+            <Checkbox
+              :model-value="Boolean(transaction.isDone)"
+              @update:model-value="handleToggleDone(transaction)"
+            />
+          </TableCell>
+
+          <!-- Name -->
+          <TableCell>
+            <span :class="{ 'line-through': transaction.isDone }">
+              {{ transaction.name }}
+            </span>
+          </TableCell>
+
+          <!-- Date -->
+          <TableCell>
+            {{ formatDate(transaction.dueDate) }}
+          </TableCell>
+
+          <!-- Category -->
+          <TableCell>
+            <div class="flex items-center gap-2">
+              <span
+                v-if="transaction.categoryColor"
+                class="size-3 shrink-0 rounded-full"
+                :style="{ backgroundColor: transaction.categoryColor }"
+              />
+              <span>{{ transaction.categoryName || '-' }}</span>
+            </div>
+          </TableCell>
+
+          <!-- Amount -->
+          <TableCell>
+            <span
+              :class="
+                transaction.type === 'income'
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-red-600 dark:text-red-400'
+              "
+            >
+              {{ transaction.type === 'income' ? '+' : '-'
+              }}{{ formatAmount(transaction.amount) }}
+            </span>
+          </TableCell>
+
+          <!-- Actions -->
+          <TableCell class="text-right">
+            <div class="flex justify-end gap-1">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                title="Bearbeiten"
+                @click="emit('edit', transaction)"
+              >
+                <Pencil class="size-4" />
+              </Button>
+              <AlertDialog @update:open="resetDeleteConfirmation">
+                <AlertDialogTrigger as-child>
+                  <Button size="icon-sm" variant="ghost" title="Löschen">
+                    <Trash2 class="size-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Transaktion löschen?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Möchten Sie die Transaktion "{{ transaction.name }}"
+                      wirklich löschen? Diese Aktion kann nicht rückgängig
+                      gemacht werden.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div class="space-y-2">
+                    <Label for="delete-confirmation">
+                      Geben Sie
+                      <span class="font-semibold">löschen</span>
+                      ein, um fortzufahren:
+                    </Label>
+                    <Input
+                      id="delete-confirmation"
+                      v-model="deleteConfirmation"
+                      placeholder="löschen"
+                      autocomplete="off"
+                    />
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                    <AlertDialogAction
+                      :disabled="!isDeleteConfirmed"
+                      @click="deleteTransaction(transaction.id)"
+                    >
+                      Löschen
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
+  </div>
+</template>
