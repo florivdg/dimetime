@@ -17,6 +17,7 @@
     "@astrojs/vue": "^5.1.3",
     "@better-auth/passkey": "^1.4.5",
     "@tailwindcss/vite": "^4.1.17",
+    "@tanstack/vue-table": "^8.21.3",
     "@vueuse/core": "^14.1.0",
     "astro": "^5.16.4",
     "better-auth": "^1.4.5",
