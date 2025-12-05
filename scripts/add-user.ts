@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-import { db } from '@/db/database'
-import { user, account } from '@/db/schema/auth'
+import { auth } from '@/lib/auth'
+import { APIError } from 'better-auth/api'
 
 async function main() {
   const [, , email, password, name] = process.argv
@@ -10,48 +10,42 @@ async function main() {
     process.exit(1)
   }
 
-  const userId = crypto.randomUUID()
-  const accountId = crypto.randomUUID()
-  const now = new Date()
+  const MIN_PASSWORD_LENGTH = 16
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    console.error(
+      `Error: Password must be at least ${MIN_PASSWORD_LENGTH} characters long`,
+    )
+    process.exit(1)
+  }
+
   const displayName = name ?? email.split('@')[0]
 
   try {
-    // Create user
-    await db.insert(user).values({
-      id: userId,
-      email: email,
-      name: displayName,
-      emailVerified: true,
-      image: null,
-      createdAt: now,
-      updatedAt: now,
+    const result = await auth.api.createUser({
+      body: {
+        email,
+        password,
+        name: displayName,
+        role: 'user',
+      },
     })
 
-    // Create account with hashed password
-    await db.insert(account).values({
-      id: accountId,
-      accountId: accountId,
-      providerId: 'credential',
-      userId: userId,
-      accessToken: null,
-      refreshToken: null,
-      idToken: null,
-      accessTokenExpiresAt: null,
-      refreshTokenExpiresAt: null,
-      scope: null,
-      password: await Bun.password.hash(password),
-      createdAt: now,
-      updatedAt: now,
-    })
-
-    console.log('User created successfully:', email)
+    console.log('User created successfully:', result.user.email)
   } catch (error) {
-    console.error('Error creating user:', error)
+    if (error instanceof APIError) {
+      if (
+        error.message.includes('email') ||
+        error.message.includes('already exists')
+      ) {
+        console.error(`Error: A user with email "${email}" already exists`)
+      } else {
+        console.error('Error creating user:', error.message)
+      }
+    } else {
+      console.error('Error creating user:', error)
+    }
     process.exit(1)
   }
 }
 
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+void main()
