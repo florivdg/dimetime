@@ -1,6 +1,8 @@
 ---
 import '@/styles/global.css'
 import { Font } from 'astro:assets'
+import 'vue-sonner/style.css'
+import { Toaster } from '@/components/ui/sonner'
 ---
 
 <html lang="de" class="dark">
@@ -15,6 +17,7 @@ import { Font } from 'astro:assets'
   <body
     class="bg-background text-foreground min-h-screen font-sans antialiased"
   >
+    <Toaster client:load />
     <slot />
   </body>
 </html>
