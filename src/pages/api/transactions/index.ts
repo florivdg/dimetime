@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { createTransaction, getTransactions } from '@/lib/transactions'
+import { getSetting } from '@/lib/settings'
 
 const querySchema = z.object({
   search: z.string().optional(),
@@ -44,7 +45,7 @@ const createSchema = z.object({
   categoryId: z.string().uuid().nullable().optional(),
 })
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ url, locals }) => {
   const rawParams = {
     search: url.searchParams.get('search') || undefined,
     categoryId: url.searchParams.get('categoryId') || undefined,
@@ -69,7 +70,15 @@ export const GET: APIRoute = async ({ url }) => {
     )
   }
 
-  const result = await getTransactions(parsed.data)
+  const userId = locals.user?.id
+  const groupByType = userId
+    ? await getSetting(userId, 'groupTransactionsByType')
+    : false
+
+  const result = await getTransactions({
+    ...parsed.data,
+    groupByType,
+  })
 
   return new Response(JSON.stringify(result), {
     status: 200,

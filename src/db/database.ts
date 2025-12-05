@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { Database } from 'bun:sqlite'
 import * as authSchema from './schema/auth'
 import * as plansSchema from './schema/plans'
+import * as settingsSchema from './schema/settings'
 
 const sqlite = new Database(process.env.DB_FILE_NAME!)
 
@@ -13,7 +14,7 @@ sqlite.run('PRAGMA journal_mode = WAL;')
 
 const db = drizzle({
   client: sqlite,
-  schema: { ...authSchema, ...plansSchema },
+  schema: { ...authSchema, ...plansSchema, ...settingsSchema },
 })
 
 export { db }

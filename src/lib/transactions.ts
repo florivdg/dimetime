@@ -51,6 +51,7 @@ export interface TransactionQueryOptions {
   sortDir?: 'asc' | 'desc'
   page?: number
   limit?: number
+  groupByType?: boolean
 }
 
 // Create input type
@@ -103,6 +104,7 @@ export async function getTransactions(
     sortDir = 'desc',
     page = 1,
     limit = 20,
+    groupByType = false,
   } = options
 
   // Build where conditions
@@ -174,6 +176,12 @@ export async function getTransactions(
   const totalPages = limit === -1 ? 1 : Math.ceil(total / limit)
 
   // Get transactions with category and plan info
+  // When groupByType is enabled and sorting by amount, group by income/expense first
+  const orderByClause =
+    sortBy === 'amount' && groupByType
+      ? [desc(plannedTransaction.type), orderFn(plannedTransaction.amount)]
+      : [orderFn(sortColumn)]
+
   const query = db
     .select({
       ...getTableColumns(plannedTransaction),
@@ -186,7 +194,7 @@ export async function getTransactions(
     .leftJoin(category, eq(plannedTransaction.categoryId, category.id))
     .leftJoin(plan, eq(plannedTransaction.planId, plan.id))
     .where(whereClause)
-    .orderBy(orderFn(sortColumn))
+    .orderBy(...orderByClause)
 
   const result =
     limit === -1

@@ -1,6 +1,7 @@
 import { relations } from 'drizzle-orm'
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
 import { plannedTransaction } from './plans'
+import { userSetting } from './settings'
 
 export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
@@ -111,6 +112,7 @@ export const userRelations = relations(user, ({ many }) => ({
   accounts: many(account),
   passkeys: many(passkey),
   plannedTransactions: many(plannedTransaction),
+  settings: many(userSetting),
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({

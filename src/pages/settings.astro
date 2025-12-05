@@ -1,6 +1,7 @@
 ---
 import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
+import UserSettings from '@/components/settings/UserSettings.vue'
 ---
 
 <Layout>
@@ -13,10 +14,8 @@ import Dashboard from '@/components/Dashboard.vue'
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold tracking-tight">Einstellungen</h1>
       </div>
-      <div class="bg-muted/50 flex-1 rounded-xl p-6">
-        <p class="text-muted-foreground">
-          Systemeinstellungen werden hier angezeigt.
-        </p>
+      <div class="flex-1">
+        <UserSettings client:load />
       </div>
     </div>
   </Dashboard>
