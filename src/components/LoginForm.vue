@@ -4,6 +4,7 @@ import { useForm } from 'vee-validate'
 import { z } from 'zod'
 import { authClient } from '@/lib/auth-client'
 import { cn } from '@/lib/utils'
+import { getSafeRedirectUrl } from '@/lib/redirect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -27,37 +28,6 @@ const props = defineProps<{
   class?: HTMLAttributes['class']
   redirectTo?: string
 }>()
-
-function getSafeRedirectUrl(url: string | undefined): string {
-  const fallback = '/'
-  if (!url) return fallback
-
-  // Must be a relative path starting with /
-  if (!url.startsWith('/')) return fallback
-
-  // Block protocol-relative URLs (//evil.com)
-  if (url.startsWith('//')) return fallback
-
-  // Block dangerous protocols (javascript:, data:, vbscript:, etc.)
-  const lowercaseUrl = url.toLowerCase()
-  if (
-    lowercaseUrl.includes('javascript:') ||
-    lowercaseUrl.includes('data:') ||
-    lowercaseUrl.includes('vbscript:')
-  ) {
-    return fallback
-  }
-
-  // Ensure it stays within the same origin
-  try {
-    const parsed = new URL(url, window.location.origin)
-    if (parsed.origin !== window.location.origin) return fallback
-  } catch {
-    return fallback
-  }
-
-  return url
-}
 
 const loginSchema = z.object({
   email: z

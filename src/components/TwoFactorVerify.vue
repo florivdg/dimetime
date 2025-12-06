@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { authClient } from '@/lib/auth-client'
+import { getSafeRedirectUrl } from '@/lib/redirect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -26,22 +27,6 @@ const errorMessage = ref<string | null>(null)
 const totpCode = ref<string[]>([])
 const showBackupInput = ref(false)
 const backupCode = ref('')
-
-function getSafeRedirectUrl(url: string | undefined): string {
-  const fallback = '/'
-  if (!url) return fallback
-  if (!url.startsWith('/')) return fallback
-  if (url.startsWith('//')) return fallback
-  const lowercaseUrl = url.toLowerCase()
-  if (
-    lowercaseUrl.includes('javascript:') ||
-    lowercaseUrl.includes('data:') ||
-    lowercaseUrl.includes('vbscript:')
-  ) {
-    return fallback
-  }
-  return url
-}
 
 async function verifyTotp() {
   const code = totpCode.value.join('')

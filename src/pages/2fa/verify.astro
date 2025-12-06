@@ -1,24 +1,7 @@
 ---
 import Layout from '@/layouts/Layout.astro'
 import TwoFactorVerify from '@/components/TwoFactorVerify.vue'
-
-function getSafeRedirectUrl(url: string | null): string {
-  const fallback = '/'
-  if (!url) return fallback
-  if (!url.startsWith('/')) return fallback
-  if (url.startsWith('//')) return fallback
-
-  const lowercaseUrl = url.toLowerCase()
-  if (
-    lowercaseUrl.includes('javascript:') ||
-    lowercaseUrl.includes('data:') ||
-    lowercaseUrl.includes('vbscript:')
-  ) {
-    return fallback
-  }
-
-  return url
-}
+import { getSafeRedirectUrl } from '@/lib/redirect'
 
 const redirectTo = getSafeRedirectUrl(Astro.url.searchParams.get('redirectTo'))
 ---
