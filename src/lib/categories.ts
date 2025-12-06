@@ -1,6 +1,6 @@
 import { db } from '@/db/database'
 import { category } from '@/db/schema/plans'
-import { desc, eq, like } from 'drizzle-orm'
+import { asc, eq, like } from 'drizzle-orm'
 
 // Infer type from Drizzle schema
 export type Category = typeof category.$inferSelect
@@ -30,11 +30,11 @@ export function generateSlug(name: string): string {
 }
 
 /**
- * Get all categories ordered by creation date (newest first)
+ * Get all categories ordered alphabetically by name
  */
 export async function getAllCategories(): Promise<Category[]> {
   return db.query.category.findMany({
-    orderBy: desc(category.createdAt),
+    orderBy: asc(category.name),
   })
 }
 
@@ -44,7 +44,7 @@ export async function getAllCategories(): Promise<Category[]> {
 export async function searchCategories(query: string): Promise<Category[]> {
   return db.query.category.findMany({
     where: like(category.name, `%${query}%`),
-    orderBy: desc(category.createdAt),
+    orderBy: asc(category.name),
   })
 }
 

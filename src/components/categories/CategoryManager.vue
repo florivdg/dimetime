@@ -9,7 +9,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Search, Tags } from 'lucide-vue-next'
+import { Search, Sparkles, Tags } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
 import CategoryCreateDialog from './CategoryCreateDialog.vue'
 import CategoryTable from './CategoryTable.vue'
 
@@ -21,10 +22,12 @@ const props = defineProps<{
 const categories = ref<Category[]>(props.initialCategories)
 const searchQuery = ref('')
 const isLoading = ref(false)
+const isSeeding = ref(false)
 const errorMessage = ref<string | null>(null)
 const isCreateDialogOpen = ref(false)
 
 // Computed
+const hasNoCategories = computed(() => categories.value.length === 0)
 const filteredCategories = computed(() => {
   if (!searchQuery.value.trim()) {
     return categories.value
@@ -50,6 +53,21 @@ async function loadCategories() {
     errorMessage.value = 'Kategorien konnten nicht geladen werden.'
   } finally {
     isLoading.value = false
+  }
+}
+
+async function seedCategories() {
+  isSeeding.value = true
+  errorMessage.value = null
+  try {
+    const response = await fetch('/api/categories/seed', { method: 'POST' })
+    if (!response.ok)
+      throw new Error('Fehler beim Laden der Standardkategorien')
+    await loadCategories()
+  } catch {
+    errorMessage.value = 'Standardkategorien konnten nicht geladen werden.'
+  } finally {
+    isSeeding.value = false
   }
 }
 
@@ -84,11 +102,22 @@ function handleError(message: string) {
             Verwalten Sie Ihre Kategorien für Transaktionen.
           </CardDescription>
         </div>
-        <CategoryCreateDialog
-          v-model:open="isCreateDialogOpen"
-          @created="handleCreated"
-          @error="handleError"
-        />
+        <div class="flex gap-2">
+          <Button
+            v-if="hasNoCategories"
+            variant="outline"
+            :disabled="isSeeding"
+            @click="seedCategories"
+          >
+            <Sparkles class="size-4" />
+            Standardkategorien
+          </Button>
+          <CategoryCreateDialog
+            v-model:open="isCreateDialogOpen"
+            @created="handleCreated"
+            @error="handleError"
+          />
+        </div>
       </div>
     </CardHeader>
     <CardContent>
