@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getPlanDisplayName } from '@/lib/format'
+import { formatAmount, getPlanDisplayName } from '@/lib/format'
 import { ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-vue-next'
 import {
   Card,
@@ -21,13 +21,6 @@ const props = defineProps<{
 const displayName = computed(() =>
   getPlanDisplayName(props.planName, props.planDate),
 )
-
-function formatAmount(cents: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(cents / 100)
-}
 </script>
 
 <template>

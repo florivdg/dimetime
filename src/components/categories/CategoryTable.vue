@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
-import type { ComponentPublicInstance } from 'vue'
+import { ref } from 'vue'
+import { formatDate } from '@/lib/format'
+import { useEditInputRefs } from '@/composables/useEditInputRefs'
 import type { Category } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
 import {
@@ -45,46 +46,21 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
+// Edit input refs
+const { setEditInputRef, focusEditInputAsync } = useEditInputRefs()
+
 // Edit state
 const editingId = ref<string | null>(null)
 const editName = ref('')
 const editSlug = ref('')
 const editColor = ref('')
-const editInputRefs = ref<
-  Record<string, HTMLInputElement | ComponentPublicInstance | null>
->({})
-
-function setEditInputRef(
-  id: string,
-  el: HTMLInputElement | ComponentPublicInstance | null,
-) {
-  if (el === null) {
-    delete editInputRefs.value[id]
-    return
-  }
-  editInputRefs.value[id] = el
-}
-
-function focusEditInput(id: string) {
-  const refValue = editInputRefs.value[id]
-  const inputEl =
-    refValue instanceof HTMLInputElement
-      ? refValue
-      : (refValue as ComponentPublicInstance | undefined)?.$el
-  if (inputEl instanceof HTMLInputElement) {
-    inputEl.focus()
-    inputEl.select?.()
-  }
-}
 
 function startEditing(category: Category) {
   editingId.value = category.id
   editName.value = category.name
   editSlug.value = category.slug
   editColor.value = category.color || '#6366f1'
-  nextTick(() => {
-    focusEditInput(category.id)
-  })
+  focusEditInputAsync(category.id)
 }
 
 function cancelEditing() {
@@ -143,12 +119,6 @@ async function deleteCategory(id: string) {
         : 'Kategorie konnte nicht gelöscht werden.',
     )
   }
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-  }).format(new Date(date))
 }
 </script>
 

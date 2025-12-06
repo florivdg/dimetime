@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
-import type { ComponentPublicInstance } from 'vue'
+import { ref } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
-import { getPlanDisplayName } from '@/lib/format'
+import { formatAmount, formatDate, getPlanDisplayName } from '@/lib/format'
+import { useDeleteConfirmation } from '@/composables/useDeleteConfirmation'
+import { useEditInputRefs } from '@/composables/useEditInputRefs'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -77,15 +78,12 @@ const emit = defineEmits<{
   sort: [column: 'name' | 'dueDate' | 'categoryName' | 'amount']
 }>()
 
-// Delete confirmation state
-const deleteConfirmation = ref('')
-const isDeleteConfirmed = computed(
-  () => deleteConfirmation.value.toLowerCase() === 'löschen',
-)
+// Delete confirmation
+const { deleteConfirmation, isDeleteConfirmed, resetDeleteConfirmation } =
+  useDeleteConfirmation()
 
-function resetDeleteConfirmation() {
-  deleteConfirmation.value = ''
-}
+// Edit input refs
+const { setEditInputRef, focusEditInputAsync } = useEditInputRefs()
 
 // Edit state
 const editingId = ref<string | null>(null)
@@ -94,32 +92,6 @@ const editDueDate = ref('')
 const editAmount = ref(0)
 const editType = ref<'income' | 'expense'>('expense')
 const editCategoryId = ref<string | null>(null)
-const editInputRefs = ref<
-  Record<string, HTMLInputElement | ComponentPublicInstance | null>
->({})
-
-function setEditInputRef(
-  id: string,
-  el: HTMLInputElement | ComponentPublicInstance | null,
-) {
-  if (el === null) {
-    delete editInputRefs.value[id]
-    return
-  }
-  editInputRefs.value[id] = el
-}
-
-function focusEditInput(id: string) {
-  const refValue = editInputRefs.value[id]
-  const inputEl =
-    refValue instanceof HTMLInputElement
-      ? refValue
-      : (refValue as ComponentPublicInstance | undefined)?.$el
-  if (inputEl instanceof HTMLInputElement) {
-    inputEl.focus()
-    inputEl.select?.()
-  }
-}
 
 function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
   return transaction.planIsArchived === true
@@ -136,9 +108,7 @@ function startEditing(transaction: TransactionWithCategory) {
   editAmount.value = transaction.amount / 100 // Convert cents to euros for display
   editType.value = transaction.type
   editCategoryId.value = transaction.categoryId
-  nextTick(() => {
-    focusEditInput(transaction.id)
-  })
+  focusEditInputAsync(transaction.id)
 }
 
 function cancelEditing() {
@@ -206,19 +176,6 @@ async function deleteTransaction(id: string) {
         : 'Transaktion konnte nicht gelöscht werden.',
     )
   }
-}
-
-function formatDate(dateString: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-  }).format(new Date(dateString))
-}
-
-function formatAmount(cents: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(cents / 100)
 }
 
 function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {

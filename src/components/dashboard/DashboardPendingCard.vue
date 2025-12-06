@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { formatAmount } from '@/lib/format'
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -21,13 +22,6 @@ const props = defineProps<{
 }>()
 
 const net = computed(() => props.incomeTotal - props.expenseTotal)
-
-function formatAmount(cents: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(cents / 100)
-}
 </script>
 
 <template>

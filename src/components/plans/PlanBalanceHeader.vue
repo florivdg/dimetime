@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getPlanDisplayName } from '@/lib/format'
+import { formatAmount, formatDate, getPlanDisplayName } from '@/lib/format'
 import { ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -15,26 +15,15 @@ const net = computed(() => props.income - props.expense)
 const displayName = computed(() =>
   getPlanDisplayName(props.planName, props.planDate),
 )
-
-function formatAmount(cents: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(cents / 100)
-}
-
-function formatDate(dateString: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'long',
-  }).format(new Date(dateString))
-}
 </script>
 
 <template>
   <div class="space-y-4">
     <div>
       <h1 class="text-2xl font-bold">{{ displayName }}</h1>
-      <p class="text-muted-foreground text-sm">{{ formatDate(planDate) }}</p>
+      <p class="text-muted-foreground text-sm">
+        {{ formatDate(planDate, 'long') }}
+      </p>
     </div>
 
     <div class="grid gap-4 sm:grid-cols-3">

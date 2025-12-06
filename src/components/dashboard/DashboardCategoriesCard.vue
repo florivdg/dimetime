@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAmount } from '@/lib/format'
 import { Tags } from 'lucide-vue-next'
 import {
   Card,
@@ -19,13 +20,6 @@ interface TopCategory {
 defineProps<{
   categories: TopCategory[]
 }>()
-
-function formatAmount(cents: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(cents / 100)
-}
 </script>
 
 <template>

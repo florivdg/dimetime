@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { formatAmount, formatDate } from '@/lib/format'
+import { useDeleteConfirmation } from '@/composables/useDeleteConfirmation'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -58,15 +59,9 @@ const emit = defineEmits<{
   toggleDone: [id: string, isDone: boolean]
 }>()
 
-// Delete confirmation state
-const deleteConfirmation = ref('')
-const isDeleteConfirmed = computed(
-  () => deleteConfirmation.value.toLowerCase() === 'löschen',
-)
-
-function resetDeleteConfirmation() {
-  deleteConfirmation.value = ''
-}
+// Delete confirmation
+const { deleteConfirmation, isDeleteConfirmed, resetDeleteConfirmation } =
+  useDeleteConfirmation()
 
 async function deleteTransaction(id: string) {
   try {
@@ -92,19 +87,6 @@ async function deleteTransaction(id: string) {
 
 function handleToggleDone(transaction: TransactionWithCategory) {
   emit('toggleDone', transaction.id, !transaction.isDone)
-}
-
-function formatDate(dateString: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-  }).format(new Date(dateString))
-}
-
-function formatAmount(cents: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(cents / 100)
 }
 
 function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {

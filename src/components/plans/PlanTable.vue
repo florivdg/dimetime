@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
-import type { ComponentPublicInstance } from 'vue'
+import { ref } from 'vue'
 import type { Plan } from '@/lib/plans'
-import { getPlanDisplayName } from '@/lib/format'
+import { formatDate, getPlanDisplayName } from '@/lib/format'
+import { useDeleteConfirmation } from '@/composables/useDeleteConfirmation'
+import { useEditInputRefs } from '@/composables/useEditInputRefs'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -48,15 +49,12 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
-// Delete confirmation state
-const deleteConfirmation = ref('')
-const isDeleteConfirmed = computed(
-  () => deleteConfirmation.value.toLowerCase() === 'löschen',
-)
+// Delete confirmation
+const { deleteConfirmation, isDeleteConfirmed, resetDeleteConfirmation } =
+  useDeleteConfirmation()
 
-function resetDeleteConfirmation() {
-  deleteConfirmation.value = ''
-}
+// Edit input refs
+const { setEditInputRef, focusEditInputAsync } = useEditInputRefs()
 
 // Edit state
 const editingId = ref<string | null>(null)
@@ -64,32 +62,6 @@ const editName = ref('')
 const editDate = ref('')
 const editNotes = ref('')
 const editIsArchived = ref(false)
-const editInputRefs = ref<
-  Record<string, HTMLInputElement | ComponentPublicInstance | null>
->({})
-
-function setEditInputRef(
-  id: string,
-  el: HTMLInputElement | ComponentPublicInstance | null,
-) {
-  if (el === null) {
-    delete editInputRefs.value[id]
-    return
-  }
-  editInputRefs.value[id] = el
-}
-
-function focusEditInput(id: string) {
-  const refValue = editInputRefs.value[id]
-  const inputEl =
-    refValue instanceof HTMLInputElement
-      ? refValue
-      : (refValue as ComponentPublicInstance | undefined)?.$el
-  if (inputEl instanceof HTMLInputElement) {
-    inputEl.focus()
-    inputEl.select?.()
-  }
-}
 
 function startEditing(plan: Plan) {
   editingId.value = plan.id
@@ -97,9 +69,7 @@ function startEditing(plan: Plan) {
   editDate.value = plan.date
   editNotes.value = plan.notes || ''
   editIsArchived.value = plan.isArchived
-  nextTick(() => {
-    focusEditInput(plan.id)
-  })
+  focusEditInputAsync(plan.id)
 }
 
 function cancelEditing() {
@@ -161,18 +131,6 @@ async function deletePlan(id: string) {
         : 'Plan konnte nicht gelöscht werden.',
     )
   }
-}
-
-function formatDate(dateString: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-  }).format(new Date(dateString))
-}
-
-function formatCreatedAt(date: Date): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-  }).format(new Date(date))
 }
 
 function truncateNotes(notes: string | null, maxLength = 50): string {
@@ -289,7 +247,7 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
 
           <!-- Created -->
           <TableCell class="text-muted-foreground">
-            <span>{{ formatCreatedAt(plan.createdAt) }}</span>
+            <span>{{ formatDate(plan.createdAt) }}</span>
           </TableCell>
 
           <!-- Actions -->

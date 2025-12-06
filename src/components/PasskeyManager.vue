@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
-import type { ComponentPublicInstance } from 'vue'
+import { ref, onMounted } from 'vue'
+import { formatDateTime } from '@/lib/format'
+import { useEditInputRefs } from '@/composables/useEditInputRefs'
 import { authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,38 +32,15 @@ interface Passkey {
   createdAt: Date
 }
 
+// Edit input refs
+const { setEditInputRef, focusEditInputAsync } = useEditInputRefs()
+
 const passkeys = ref<Passkey[]>([])
 const isLoading = ref(true)
 const isAdding = ref(false)
 const editingId = ref<string | null>(null)
 const editName = ref('')
 const errorMessage = ref<string | null>(null)
-const editInputRefs = ref<
-  Record<string, HTMLInputElement | ComponentPublicInstance | null>
->({})
-
-function setEditInputRef(
-  id: string,
-  el: HTMLInputElement | ComponentPublicInstance | null,
-) {
-  if (el === null) {
-    delete editInputRefs.value[id]
-    return
-  }
-  editInputRefs.value[id] = el
-}
-
-function focusEditInput(id: string) {
-  const refValue = editInputRefs.value[id]
-  const inputEl =
-    refValue instanceof HTMLInputElement
-      ? refValue
-      : (refValue as ComponentPublicInstance | undefined)?.$el
-  if (inputEl instanceof HTMLInputElement) {
-    inputEl.focus()
-    inputEl.select?.()
-  }
-}
 
 async function loadPasskeys() {
   isLoading.value = true
@@ -107,9 +85,7 @@ async function deletePasskey(id: string) {
 function startEditing(passkey: Passkey) {
   editingId.value = passkey.id
   editName.value = passkey.name || ''
-  nextTick(() => {
-    focusEditInput(passkey.id)
-  })
+  focusEditInputAsync(passkey.id)
 }
 
 function cancelEditing() {
@@ -129,13 +105,6 @@ async function saveEdit(id: string) {
   } catch {
     errorMessage.value = 'Passkey konnte nicht aktualisiert werden.'
   }
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(date))
 }
 
 function getDeviceTypeLabel(deviceType: string): string {
@@ -229,7 +198,7 @@ onMounted(() => {
                 </p>
                 <p class="text-muted-foreground text-sm">
                   {{ getDeviceTypeLabel(passkey.deviceType) }} &middot; Erstellt
-                  am {{ formatDate(passkey.createdAt) }}
+                  am {{ formatDateTime(passkey.createdAt) }}
                 </p>
               </template>
             </div>
