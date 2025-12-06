@@ -143,7 +143,6 @@ function handlePinComplete(value: string[]) {
             id="totp-verify-input"
             v-model="totpCode"
             placeholder=""
-            type="number"
             @complete="handlePinComplete"
           >
             <PinInputGroup>
