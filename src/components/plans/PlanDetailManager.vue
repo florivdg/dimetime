@@ -31,7 +31,7 @@ const props = defineProps<{
 const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
 const balance = ref<PlanBalance>(props.initialBalance)
 const sortBy = ref<'name' | 'dueDate' | 'categoryName' | 'amount'>('dueDate')
-const sortDir = ref<'asc' | 'desc'>('desc')
+const sortDir = ref<'asc' | 'desc'>('asc')
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 
@@ -202,7 +202,7 @@ function handleSort(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
     sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
   } else {
     sortBy.value = column
-    sortDir.value = column === 'dueDate' ? 'desc' : 'asc'
+    sortDir.value = 'asc'
   }
 }
 

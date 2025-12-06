@@ -24,7 +24,7 @@ if (!plan) {
 const { transactions } = await getTransactions({
   planId: id,
   sortBy: 'dueDate',
-  sortDir: 'desc',
+  sortDir: 'asc',
   limit: -1,
 })
 
