@@ -35,6 +35,9 @@ function getSafeRedirectUrl(url: string | undefined): string {
   // Must be a relative path starting with /
   if (!url.startsWith('/')) return fallback
 
+  // Block protocol-relative URLs (//evil.com)
+  if (url.startsWith('//')) return fallback
+
   // Block dangerous protocols (javascript:, data:, vbscript:, etc.)
   const lowercaseUrl = url.toLowerCase()
   if (
@@ -132,6 +135,8 @@ const onSubmit = form.handleSubmit(async (values) => {
       },
       {
         onSuccess: () => {
+          // When 2FA is required, twoFactorClient's onTwoFactorRedirect handles the redirect
+          // This callback only fires for users without 2FA (or after 2FA is verified)
           window.location.href = getSafeRedirectUrl(props.redirectTo)
         },
         onError: (ctx) => {

@@ -3,6 +3,7 @@ import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import PasskeyManager from '@/components/PasskeyManager.vue'
 import PasswordChangeForm from '@/components/PasswordChangeForm.vue'
+import TwoFactorManager from '@/components/TwoFactorManager.vue'
 import { getSidebarPlans } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
 
@@ -34,6 +35,7 @@ if (latest && latest.id !== currentMonth?.id) {
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold tracking-tight">Konto</h1>
       </div>
+      <TwoFactorManager client:load />
       <PasskeyManager client:load />
       <PasswordChangeForm client:load />
     </div>
