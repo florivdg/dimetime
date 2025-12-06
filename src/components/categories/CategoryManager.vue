@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import type { Category } from '@/lib/categories'
+import { useUrlState } from '@/composables/useUrlState'
 import {
   Card,
   CardContent,
@@ -18,9 +19,42 @@ const props = defineProps<{
   initialCategories: Category[]
 }>()
 
+// URL-synced filter state
+const { state: urlState } = useUrlState({
+  search: { type: 'string', default: '', urlKey: 'q', debounce: 300 },
+})
+
+// Create synced ref for v-model compatibility
+const searchQuery = ref('')
+
+// Flag to prevent infinite sync loops
+let isSyncingFromUrl = false
+
+// Initialize search from URL on mount
+onMounted(() => {
+  isSyncingFromUrl = true
+  searchQuery.value = urlState.search
+  isSyncingFromUrl = false
+})
+
+// Sync searchQuery → urlState (when user types)
+watch(searchQuery, (newSearch) => {
+  if (isSyncingFromUrl) return
+  urlState.search = newSearch
+})
+
+// Sync urlState → searchQuery (for browser back/forward)
+watch(
+  () => urlState.search,
+  (newSearch) => {
+    isSyncingFromUrl = true
+    searchQuery.value = newSearch
+    isSyncingFromUrl = false
+  },
+)
+
 // State
 const categories = ref<Category[]>(props.initialCategories)
-const searchQuery = ref('')
 const isLoading = ref(false)
 const isSeeding = ref(false)
 const errorMessage = ref<string | null>(null)

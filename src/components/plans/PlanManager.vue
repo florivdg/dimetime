@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import type { Plan } from '@/lib/plans'
+import { useUrlState } from '@/composables/useUrlState'
 import {
   Card,
   CardContent,
@@ -18,7 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CalendarDays, Search } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import { CalendarDays, Search, X } from 'lucide-vue-next'
+import { getPlanDisplayName } from '@/lib/format'
 import PlanCreateDialog from './PlanCreateDialog.vue'
 import PlanTable from './PlanTable.vue'
 
@@ -28,18 +31,83 @@ const props = defineProps<{
   initialYear?: number
 }>()
 
-// State
-const plans = ref<Plan[]>(props.initialPlans)
+// URL-synced filter state
+const { state: urlState, reset: resetUrlState } = useUrlState({
+  search: { type: 'string', default: '', urlKey: 'q', debounce: 300 },
+  hideArchived: { type: 'boolean', default: false, urlKey: 'hide' },
+  year: { type: 'string', default: 'all', urlKey: 'year' },
+})
+
+// Create synced refs for v-model compatibility
 const searchQuery = ref('')
 const hideArchived = ref(false)
 const selectedYear = ref<string>(props.initialYear?.toString() ?? 'all')
+
+// Flag to prevent infinite sync loops
+let isSyncingFromUrl = false
+
+// Helper to extract filter values from urlState
+function getFiltersFromUrlState() {
+  return {
+    search: urlState.search,
+    hideArchived: urlState.hideArchived,
+    year: urlState.year,
+  }
+}
+
+// Initialize filters from URL on mount
+onMounted(() => {
+  isSyncingFromUrl = true
+  const urlFilters = getFiltersFromUrlState()
+  searchQuery.value = urlFilters.search
+  hideArchived.value = urlFilters.hideArchived
+  // Only use URL year if it's not the default, otherwise use initialYear
+  if (urlFilters.year !== 'all' || !props.initialYear) {
+    selectedYear.value = urlFilters.year
+  }
+  // Sync the initial year back to urlState if it was set from props
+  if (props.initialYear && urlFilters.year === 'all') {
+    urlState.year = selectedYear.value
+  }
+  isSyncingFromUrl = false
+})
+
+// Sync local refs → urlState (when user changes filters in UI)
+watch(
+  [searchQuery, hideArchived, selectedYear],
+  ([newSearch, newHide, newYear]) => {
+    if (isSyncingFromUrl) return
+    urlState.search = newSearch
+    urlState.hideArchived = newHide
+    urlState.year = newYear
+  },
+)
+
+// Trigger API reload when year or hideArchived changes from UI
+watch([hideArchived, selectedYear], () => {
+  if (isSyncingFromUrl) return
+  loadPlans()
+})
+
+// Sync urlState → local refs and reload data (for browser back/forward)
+watch(
+  () => ({ ...urlState }),
+  () => {
+    isSyncingFromUrl = true
+    searchQuery.value = urlState.search
+    hideArchived.value = urlState.hideArchived
+    selectedYear.value = urlState.year
+    isSyncingFromUrl = false
+    loadPlans()
+  },
+  { deep: true },
+)
+
+// State
+const plans = ref<Plan[]>(props.initialPlans)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 const isCreateDialogOpen = ref(false)
-
-// Watchers
-watch(hideArchived, () => loadPlans())
-watch(selectedYear, () => loadPlans())
 
 // Computed
 const filteredPlans = computed(() => {
@@ -53,13 +121,19 @@ const filteredPlans = computed(() => {
   // Filter by search query
   if (searchQuery.value.trim()) {
     const query = searchQuery.value.toLowerCase()
-    result = result.filter(
-      (p) => p.name?.toLowerCase().includes(query) || p.date.includes(query),
-    )
+    result = result.filter((p) => {
+      const displayName = getPlanDisplayName(p.name, p.date).toLowerCase()
+      const notes = p.notes?.toLowerCase() ?? ''
+      return displayName.includes(query) || notes.includes(query)
+    })
   }
 
   return result
 })
+
+const hasActiveFilters = computed(
+  () => searchQuery.value !== '' || selectedYear.value !== 'all',
+)
 
 // API
 async function loadPlans() {
@@ -97,6 +171,14 @@ function handleDeleted() {
 
 function handleError(message: string) {
   errorMessage.value = message
+}
+
+function resetFilters() {
+  isSyncingFromUrl = true
+  searchQuery.value = ''
+  selectedYear.value = 'all'
+  isSyncingFromUrl = false
+  resetUrlState()
 }
 </script>
 
@@ -161,6 +243,15 @@ function handleError(message: string) {
             Archivierte ausblenden
           </Label>
         </div>
+        <Button
+          variant="outline"
+          size="icon"
+          title="Filter zurücksetzen"
+          :disabled="!hasActiveFilters"
+          @click="resetFilters"
+        >
+          <X class="size-4" />
+        </Button>
       </div>
 
       <PlanTable

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
+import { useUrlState } from '@/composables/useUrlState'
 import type { Category } from '@/lib/categories'
 import type { Plan } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
@@ -45,15 +46,118 @@ const props = defineProps<{
   plans: Plan[]
 }>()
 
-// State
-const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
-const pagination = ref(props.initialPagination)
+// URL-synced filter state
+const { state: urlState, reset: resetUrlState } = useUrlState({
+  search: { type: 'string', default: '', urlKey: 'q', debounce: 300 },
+  categoryId: { type: 'string', default: 'all', urlKey: 'cat' },
+  planId: { type: 'string', default: 'all', urlKey: 'plan' },
+  sortBy: {
+    type: 'enum',
+    default: 'dueDate' as const,
+    urlKey: 'sort',
+    enumValues: ['name', 'dueDate', 'categoryName', 'amount'] as const,
+  },
+  sortDir: {
+    type: 'enum',
+    default: 'desc' as const,
+    urlKey: 'dir',
+    enumValues: ['asc', 'desc'] as const,
+  },
+  page: { type: 'number', default: 1, urlKey: 'page' },
+})
+
+// Create synced refs for v-model compatibility
 const searchQuery = ref('')
 const selectedCategoryId = ref<string>('all')
 const selectedPlanId = ref<string>('all')
 const sortBy = ref<'name' | 'dueDate' | 'categoryName' | 'amount'>('dueDate')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const currentPage = ref(1)
+
+// Flag to prevent infinite sync loops
+let isSyncingFromUrl = false
+
+// Helper to extract filter values from urlState
+function getFiltersFromUrlState() {
+  return {
+    search: urlState.search,
+    categoryId: urlState.categoryId,
+    planId: urlState.planId,
+    sortBy: urlState.sortBy,
+    sortDir: urlState.sortDir,
+    page: urlState.page,
+  }
+}
+
+// Initialize filters from URL on mount
+onMounted(() => {
+  isSyncingFromUrl = true
+  const urlFilters = getFiltersFromUrlState()
+  searchQuery.value = urlFilters.search
+  selectedCategoryId.value = urlFilters.categoryId
+  selectedPlanId.value = urlFilters.planId
+  sortBy.value = urlFilters.sortBy
+  sortDir.value = urlFilters.sortDir
+  currentPage.value = urlFilters.page
+  isSyncingFromUrl = false
+
+  // Load if URL had non-default filters
+  if (
+    urlFilters.search ||
+    urlFilters.categoryId !== 'all' ||
+    urlFilters.planId !== 'all' ||
+    urlFilters.sortBy !== 'dueDate' ||
+    urlFilters.sortDir !== 'desc' ||
+    urlFilters.page !== 1
+  ) {
+    loadTransactions()
+  }
+})
+
+// Sync local refs → urlState (when user changes filters in UI)
+watch(
+  [
+    searchQuery,
+    selectedCategoryId,
+    selectedPlanId,
+    sortBy,
+    sortDir,
+    currentPage,
+  ],
+  ([newSearch, newCat, newPlan, newSortBy, newSortDir, newPage]) => {
+    if (isSyncingFromUrl) return
+    urlState.search = newSearch
+    urlState.categoryId = newCat
+    urlState.planId = newPlan
+    urlState.sortBy = newSortBy
+    urlState.sortDir = newSortDir
+    urlState.page = newPage
+  },
+)
+
+// Sync urlState → local refs and reload data (for browser back/forward)
+watch(
+  () => ({ ...urlState }),
+  () => {
+    const urlFilters = getFiltersFromUrlState()
+
+    isSyncingFromUrl = true
+    searchQuery.value = urlFilters.search
+    selectedCategoryId.value = urlFilters.categoryId
+    selectedPlanId.value = urlFilters.planId
+    sortBy.value = urlFilters.sortBy
+    sortDir.value = urlFilters.sortDir
+    currentPage.value = urlFilters.page
+    isSyncingFromUrl = false
+
+    loadTransactions()
+  },
+  { deep: true },
+)
+
+// State
+const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
+const pagination = ref(props.initialPagination)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 
@@ -63,26 +167,6 @@ const hasActiveFilters = computed(
     selectedCategoryId.value !== 'all' ||
     selectedPlanId.value !== 'all',
 )
-
-// Debounced search watcher
-let searchTimeout: ReturnType<typeof setTimeout>
-watch(searchQuery, () => {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    currentPage.value = 1
-    loadTransactions()
-  }, 300)
-})
-
-// Immediate watchers for filters
-watch([selectedCategoryId, selectedPlanId, sortBy, sortDir], () => {
-  currentPage.value = 1
-  loadTransactions()
-})
-
-watch(currentPage, () => {
-  loadTransactions()
-})
 
 // API
 async function loadTransactions() {
@@ -141,9 +225,14 @@ function handlePageChange(page: number) {
 }
 
 function resetFilters() {
+  // Reset both local refs and URL state
+  isSyncingFromUrl = true
   searchQuery.value = ''
   selectedCategoryId.value = 'all'
   selectedPlanId.value = 'all'
+  currentPage.value = 1
+  isSyncingFromUrl = false
+  resetUrlState()
 }
 </script>
 
