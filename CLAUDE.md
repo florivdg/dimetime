@@ -71,5 +71,6 @@ Required in `.env` (see `.env.example`):
 ## Formatting & checks
 
 - After applying changes, always run the linter and astro check
+- If Vue.js components were changed, ensure that the TypeScript types are correct by running `bunx vue-tsc --noEmit`
 - After final changes, run the `bunx prettier --write` on changed files to ensure consistent formatting
 - always use german umlaute for user facing UI texts
