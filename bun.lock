@@ -9,6 +9,7 @@
         "@astrojs/node": "^9.5.1",
         "@astrojs/vue": "^5.1.3",
         "@better-auth/passkey": "^1.4.5",
+        "@lowlighter/qrcode": "^2.0.0",
         "@tailwindcss/vite": "^4.1.17",
         "@tanstack/vue-table": "^8.21.3",
         "@unovis/vue": "^1.6.2",
@@ -308,6 +309,8 @@
     "@juggle/resize-observer": ["@juggle/resize-observer@3.4.0", "", {}, "sha512-dfLbk+PwWvFzSxwk3n5ySL0hfBog779o8h68wK/7/APo/7cgyWp5jcXockbxdk5kFRkbeXWm4Fbi9FrdN381sA=="],
 
     "@levischuck/tiny-cbor": ["@levischuck/tiny-cbor@0.2.11", "", {}, "sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow=="],
+
+    "@lowlighter/qrcode": ["@lowlighter/qrcode@2.0.0", "", {}, "sha512-5Iq6nU/yIAhcajwmrtpE8XJWZ811VqsaSWGnfF1+oipLn5MuR6BMLJc9tj/tAnbJXlASZ8Mae6Pdcj/7cUiQLQ=="],
 
     "@mapbox/geojson-rewind": ["@mapbox/geojson-rewind@0.5.2", "", { "dependencies": { "get-stream": "^6.0.1", "minimist": "^1.2.6" }, "bin": { "geojson-rewind": "geojson-rewind" } }, "sha512-tJaT+RbYGJYStt7wI3cq4Nl4SXxG8W7JDG5DMJu97V25RnbNg3QtQtf+KD+VLjNpWKYsRvXDNmNrBgEETr1ifA=="],
 

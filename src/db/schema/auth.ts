@@ -19,6 +19,9 @@ export const user = sqliteTable('user', {
   banned: integer('banned', { mode: 'boolean' }).default(false),
   banReason: text('ban_reason'),
   banExpires: integer('ban_expires', { mode: 'timestamp_ms' }),
+  twoFactorEnabled: integer('two_factor_enabled', { mode: 'boolean' }).default(
+    false,
+  ),
 })
 
 export const session = sqliteTable(
@@ -107,12 +110,26 @@ export const passkey = sqliteTable(
   ],
 )
 
-export const userRelations = relations(user, ({ many }) => ({
+export const twoFactor = sqliteTable(
+  'two_factor',
+  {
+    id: text('id').primaryKey(),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+  },
+  (table) => [index('twoFactor_userId_idx').on(table.userId)],
+)
+
+export const userRelations = relations(user, ({ many, one }) => ({
   sessions: many(session),
   accounts: many(account),
   passkeys: many(passkey),
   plannedTransactions: many(plannedTransaction),
   settings: many(userSetting),
+  twoFactor: one(twoFactor),
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -132,6 +149,13 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const passkeyRelations = relations(passkey, ({ one }) => ({
   user: one(user, {
     fields: [passkey.userId],
+    references: [user.id],
+  }),
+}))
+
+export const twoFactorRelations = relations(twoFactor, ({ one }) => ({
+  user: one(user, {
+    fields: [twoFactor.userId],
     references: [user.id],
   }),
 }))

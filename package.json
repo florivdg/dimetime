@@ -16,6 +16,7 @@
     "@astrojs/node": "^9.5.1",
     "@astrojs/vue": "^5.1.3",
     "@better-auth/passkey": "^1.4.5",
+    "@lowlighter/qrcode": "^2.0.0",
     "@tailwindcss/vite": "^4.1.17",
     "@tanstack/vue-table": "^8.21.3",
     "@unovis/vue": "^1.6.2",

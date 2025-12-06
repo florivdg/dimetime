@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { admin } from 'better-auth/plugins'
+import { admin, twoFactor } from 'better-auth/plugins'
 import { passkey } from '@better-auth/passkey'
 import { db } from '@/db/database'
 import * as schema from '@/db/schema/auth'
@@ -10,6 +10,7 @@ export const auth = betterAuth({
     provider: 'sqlite',
     schema,
   }),
+  appName: 'DimeTime',
   trustedOrigins: [process.env.BETTER_AUTH_URL ?? 'http://localhost:4321'],
   emailAndPassword: {
     enabled: true,
@@ -37,6 +38,10 @@ export const auth = betterAuth({
         window: 60,
         max: 10,
       },
+      '/two-factor/*': {
+        window: 60,
+        max: 10,
+      },
     },
   },
   advanced: {
@@ -48,6 +53,9 @@ export const auth = betterAuth({
       rpID: process.env.PASSKEY_RP_ID ?? 'localhost',
       rpName: 'DimeTime',
       origin: process.env.PASSKEY_ORIGIN ?? 'http://localhost:4321',
+    }),
+    twoFactor({
+      issuer: 'DimeTime',
     }),
   ],
 })

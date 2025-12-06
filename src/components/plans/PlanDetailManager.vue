@@ -6,6 +6,20 @@ import type { Plan } from '@/lib/plans'
 import type { PlanBalance } from '@/lib/transactions'
 import type { FilterState } from './PlanTransactionFilters.vue'
 import { useUrlState } from '@/composables/useUrlState'
+
+interface UrlStateSchema extends Record<string, unknown> {
+  search: string
+  categoryId: string | null
+  type: 'income' | 'expense' | null
+  isDone: boolean | null
+  dateFrom: string
+  dateTo: string
+  amountMin: string
+  amountMax: string
+  hideZeroValue: boolean
+  sortBy: 'name' | 'dueDate' | 'categoryName' | 'amount'
+  sortDir: 'asc' | 'desc'
+}
 import PlanBalanceHeader from './PlanBalanceHeader.vue'
 import PlanTransactionFilters from './PlanTransactionFilters.vue'
 import PlanTransactionTable from './PlanTransactionTable.vue'
@@ -29,7 +43,7 @@ const props = defineProps<{
 }>()
 
 // URL-synced filter and sort state
-const { state: urlState, reset: resetUrlState } = useUrlState({
+const { state: urlState, reset: resetUrlState } = useUrlState<UrlStateSchema>({
   search: { type: 'string', default: '', urlKey: 'q', debounce: 300 },
   categoryId: { type: 'nullable-string', default: null, urlKey: 'cat' },
   type: {

@@ -18,6 +18,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Loader2, Palette } from 'lucide-vue-next'
 import type { ThemePreference } from '@/lib/settings'
+import type { AcceptableValue } from 'reka-ui'
 
 const { store: colorModeStore } = useColorMode()
 
@@ -28,7 +29,7 @@ const errorMessage = ref<string | null>(null)
 // Map between API values and vueuse-color-scheme values
 // API: 'light' | 'dark' | 'system'
 // vueuse: 'light' | 'dark' | 'auto'
-function apiToLocal(value: ThemePreference): string {
+function apiToLocal(value: ThemePreference): 'light' | 'dark' | 'auto' {
   return value === 'system' ? 'auto' : value
 }
 
@@ -58,12 +59,14 @@ async function loadSettings() {
   }
 }
 
-async function updateTheme(value: string) {
+async function updateTheme(value: AcceptableValue) {
+  if (typeof value !== 'string') return
+
   isSaving.value = true
   errorMessage.value = null
 
   const oldValue = colorModeStore.value
-  colorModeStore.value = value
+  colorModeStore.value = value as 'light' | 'dark' | 'auto'
 
   try {
     const response = await fetch('/api/settings', {

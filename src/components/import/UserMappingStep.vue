@@ -146,7 +146,7 @@ function formatUserId(id: string): string {
               <Select
                 :model-value="modelValue[userId] || ''"
                 @update:model-value="
-                  (val: string) => updateMapping(userId, val)
+                  (val) => val && updateMapping(userId, String(val))
                 "
               >
                 <SelectTrigger class="w-full">
