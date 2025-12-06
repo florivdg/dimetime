@@ -3,13 +3,17 @@ import { userSetting } from '@/db/schema/settings'
 import { and, eq } from 'drizzle-orm'
 
 // Type-safe settings definitions
+export type ThemePreference = 'light' | 'dark' | 'system'
+
 export interface UserSettings {
   groupTransactionsByType: boolean
+  themePreference: ThemePreference
 }
 
 // Default values for all settings
 export const DEFAULT_SETTINGS: UserSettings = {
   groupTransactionsByType: false,
+  themePreference: 'system',
 }
 
 // Type for a single setting key
@@ -45,7 +49,9 @@ export async function getAllSettings(userId: string): Promise<UserSettings> {
 
   for (const row of results) {
     if (row.key in DEFAULT_SETTINGS) {
-      settings[row.key as SettingKey] = JSON.parse(row.value)
+      const key = row.key as SettingKey
+      ;(settings as Record<SettingKey, UserSettings[SettingKey]>)[key] =
+        JSON.parse(row.value) as UserSettings[typeof key]
     }
   }
 

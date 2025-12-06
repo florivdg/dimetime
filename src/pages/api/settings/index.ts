@@ -4,6 +4,7 @@ import { getAllSettings, updateSettings } from '@/lib/settings'
 
 const updateSettingsSchema = z.object({
   groupTransactionsByType: z.boolean().optional(),
+  themePreference: z.enum(['light', 'dark', 'system']).optional(),
 })
 
 export const GET: APIRoute = async ({ locals }) => {

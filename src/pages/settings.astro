@@ -2,6 +2,7 @@
 import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import UserSettings from '@/components/settings/UserSettings.vue'
+import ThemeSettings from '@/components/settings/ThemeSettings.vue'
 import { getSidebarPlans } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
 
@@ -33,7 +34,8 @@ if (latest && latest.id !== currentMonth?.id) {
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold tracking-tight">Einstellungen</h1>
       </div>
-      <div class="flex-1">
+      <div class="flex flex-col gap-6">
+        <ThemeSettings client:load />
         <UserSettings client:load />
       </div>
     </div>

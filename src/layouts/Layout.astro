@@ -5,8 +5,22 @@ import 'vue-sonner/style.css'
 import { Toaster } from '@/components/ui/sonner'
 ---
 
-<html lang="de" class="dark">
+<html lang="de">
   <head>
+    <script is:inline>
+      ;(function () {
+        const stored = localStorage.getItem('vueuse-color-scheme')
+        let isDark = true // default to dark
+        if (stored === 'auto') {
+          isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        } else if (stored === 'light') {
+          isDark = false
+        } else if (stored === 'dark') {
+          isDark = true
+        }
+        document.documentElement.classList.toggle('dark', isDark)
+      })()
+    </script>
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width" />
