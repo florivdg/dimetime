@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
 import type { Plan } from '@/lib/plans'
 import type { PlanBalance } from '@/lib/transactions'
 import type { FilterState } from './PlanTransactionFilters.vue'
+import { useUrlState } from '@/composables/useUrlState'
 import PlanBalanceHeader from './PlanBalanceHeader.vue'
 import PlanTransactionFilters from './PlanTransactionFilters.vue'
 import PlanTransactionTable from './PlanTransactionTable.vue'
@@ -27,15 +28,37 @@ const props = defineProps<{
   categories: Category[]
 }>()
 
-// State
-const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
-const balance = ref<PlanBalance>(props.initialBalance)
-const sortBy = ref<'name' | 'dueDate' | 'categoryName' | 'amount'>('dueDate')
-const sortDir = ref<'asc' | 'desc'>('asc')
-const isLoading = ref(false)
-const errorMessage = ref<string | null>(null)
+// URL-synced filter and sort state
+const { state: urlState, reset: resetUrlState } = useUrlState({
+  search: { type: 'string', default: '', urlKey: 'q', debounce: 300 },
+  categoryId: { type: 'nullable-string', default: null, urlKey: 'cat' },
+  type: {
+    type: 'nullable-enum',
+    default: null,
+    urlKey: 'type',
+    enumValues: ['income', 'expense'] as const,
+  },
+  isDone: { type: 'nullable-boolean', default: null, urlKey: 'done' },
+  dateFrom: { type: 'string', default: '', urlKey: 'from' },
+  dateTo: { type: 'string', default: '', urlKey: 'to' },
+  amountMin: { type: 'string', default: '', urlKey: 'min' },
+  amountMax: { type: 'string', default: '', urlKey: 'max' },
+  hideZeroValue: { type: 'boolean', default: true, urlKey: 'hideZero' },
+  sortBy: {
+    type: 'enum',
+    default: 'dueDate' as const,
+    urlKey: 'sort',
+    enumValues: ['name', 'dueDate', 'categoryName', 'amount'] as const,
+  },
+  sortDir: {
+    type: 'enum',
+    default: 'asc' as const,
+    urlKey: 'dir',
+    enumValues: ['asc', 'desc'] as const,
+  },
+})
 
-// Filter state
+// Create proper ref for v-model compatibility with child's defineModel
 const filters = ref<FilterState>({
   search: '',
   categoryId: null,
@@ -48,45 +71,88 @@ const filters = ref<FilterState>({
   hideZeroValue: true,
 })
 
+// Flag to prevent infinite sync loops
+let isSyncingFromUrl = false
+
+// Helper to extract filter fields from urlState
+function getFiltersFromUrlState(): FilterState {
+  return {
+    search: urlState.search,
+    categoryId: urlState.categoryId,
+    type: urlState.type,
+    isDone: urlState.isDone,
+    dateFrom: urlState.dateFrom,
+    dateTo: urlState.dateTo,
+    amountMin: urlState.amountMin,
+    amountMax: urlState.amountMax,
+    hideZeroValue: urlState.hideZeroValue,
+  }
+}
+
+// Initialize filters from URL on mount
+onMounted(() => {
+  isSyncingFromUrl = true
+  filters.value = getFiltersFromUrlState()
+  isSyncingFromUrl = false
+})
+
+// Sync filters → urlState (when user changes filters in UI)
+watch(
+  filters,
+  (newFilters) => {
+    if (isSyncingFromUrl) return
+    urlState.search = newFilters.search
+    urlState.categoryId = newFilters.categoryId
+    urlState.type = newFilters.type
+    urlState.isDone = newFilters.isDone
+    urlState.dateFrom = newFilters.dateFrom
+    urlState.dateTo = newFilters.dateTo
+    urlState.amountMin = newFilters.amountMin
+    urlState.amountMax = newFilters.amountMax
+    urlState.hideZeroValue = newFilters.hideZeroValue
+  },
+  { deep: true },
+)
+
+// Sync urlState → filters (for browser back/forward via popstate)
+watch(
+  () => ({ ...urlState }),
+  () => {
+    isSyncingFromUrl = true
+    filters.value = getFiltersFromUrlState()
+    isSyncingFromUrl = false
+    loadTransactions()
+  },
+  { deep: true },
+)
+
+// Direct access to sort properties from reactive state
+const sortBy = computed({
+  get: () => urlState.sortBy,
+  set: (value: 'name' | 'dueDate' | 'categoryName' | 'amount') => {
+    urlState.sortBy = value
+  },
+})
+
+const sortDir = computed({
+  get: () => urlState.sortDir,
+  set: (value: 'asc' | 'desc') => {
+    urlState.sortDir = value
+  },
+})
+
+// State
+const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
+const balance = ref<PlanBalance>(props.initialBalance)
+const isLoading = ref(false)
+const errorMessage = ref<string | null>(null)
+
 // Edit dialog state
 const editDialogOpen = ref(false)
 const selectedTransaction = ref<TransactionWithCategory | null>(null)
 
 // Create dialog state
 const createDialogOpen = ref(false)
-
-// Debounced search watcher
-let searchTimeout: ReturnType<typeof setTimeout>
-watch(
-  () => filters.value.search,
-  () => {
-    clearTimeout(searchTimeout)
-    searchTimeout = setTimeout(() => {
-      loadTransactions()
-    }, 300)
-  },
-)
-
-// Immediate watchers for other filters
-watch(
-  () => [
-    filters.value.categoryId,
-    filters.value.type,
-    filters.value.isDone,
-    filters.value.dateFrom,
-    filters.value.dateTo,
-    filters.value.amountMin,
-    filters.value.amountMax,
-    filters.value.hideZeroValue,
-  ],
-  () => {
-    loadTransactions()
-  },
-)
-
-watch([sortBy, sortDir], () => {
-  loadTransactions()
-})
 
 // API
 async function loadTransactions() {
@@ -164,8 +230,23 @@ async function handleToggleDone(id: string, isDone: boolean) {
 
   const originalValue = transactions.value[index].isDone
 
+  // Check if transaction will be filtered out after toggle
+  const willBeFilteredOut =
+    filters.value.isDone !== null && filters.value.isDone !== isDone
+
+  // Store transaction for potential restoration on error
+  const removedTransaction = willBeFilteredOut
+    ? { ...transactions.value[index] }
+    : null
+
   // Optimistically update UI immediately
-  transactions.value[index].isDone = isDone
+  if (willBeFilteredOut) {
+    // Remove from list since it won't match the current filter anymore
+    transactions.value.splice(index, 1)
+  } else {
+    // Just update the isDone property
+    transactions.value[index].isDone = isDone
+  }
 
   try {
     const response = await fetch(`/api/transactions/${id}`, {
@@ -183,7 +264,12 @@ async function handleToggleDone(id: string, isDone: boolean) {
     loadBalance()
   } catch {
     // Error: revert the optimistic update
-    transactions.value[index].isDone = originalValue
+    if (willBeFilteredOut && removedTransaction) {
+      // Re-insert the removed transaction at original position
+      transactions.value.splice(index, 0, removedTransaction)
+    } else if (index < transactions.value.length) {
+      transactions.value[index].isDone = originalValue
+    }
     toast.error('Status konnte nicht aktualisiert werden')
   }
 }
@@ -212,7 +298,11 @@ function handleSort(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
 }
 
 function handleFilterReset() {
-  loadTransactions()
+  // Reset both urlState and filters ref
+  resetUrlState()
+  isSyncingFromUrl = true
+  filters.value = getFiltersFromUrlState()
+  isSyncingFromUrl = false
 }
 </script>
 
