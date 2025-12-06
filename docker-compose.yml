@@ -1,0 +1,24 @@
+services:
+  dimetime:
+    build: .
+    ports:
+      - '4321:4321'
+    volumes:
+      - dimetime-data:/data
+    environment:
+      - DB_FILE_NAME=/data/sqlite.db
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:4321}
+      - PASSKEY_RP_ID=${PASSKEY_RP_ID:-localhost}
+      - PASSKEY_ORIGIN=${PASSKEY_ORIGIN:-http://localhost:4321}
+    restart: unless-stopped
+    # Security options
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  dimetime-data:
