@@ -98,6 +98,32 @@ bun --bun run dev
 | `bun run lint --type-aware` | Run linter                      |
 | `bun run astro check`       | TypeScript and Astro validation |
 
+## Releasing
+
+Docker images are automatically built and published to GitHub Container Registry when version tags are pushed.
+
+### Release Workflow
+
+1. Merge all changes to `main`
+2. Create and push a version tag:
+   ```bash
+   git checkout main
+   git pull origin main
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+3. GitHub Actions builds multi-platform images (amd64, arm64) and publishes to `ghcr.io`
+
+> **Important:** Tags must be created on the `main` branch. Tags on feature or release branches will not trigger a build.
+
+### Pulling the Image
+
+```bash
+docker pull ghcr.io/<owner>/dimetime:latest
+# or specific version
+docker pull ghcr.io/<owner>/dimetime:1.0.0
+```
+
 ## Project Structure
 
 ```
