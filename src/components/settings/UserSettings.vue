@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import {
   Card,
   CardContent,
@@ -9,36 +9,18 @@ import {
 } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Loader2, Settings } from 'lucide-vue-next'
+import { Settings } from 'lucide-vue-next'
+import type { UserSettings } from '@/lib/settings'
 
-interface UserSettings {
-  groupTransactionsByType: boolean
+interface Props {
+  initialSettings: UserSettings
 }
 
-const isLoading = ref(true)
+const props = defineProps<Props>()
+
 const isSaving = ref(false)
 const errorMessage = ref<string | null>(null)
-const settings = ref<UserSettings>({
-  groupTransactionsByType: false,
-})
-
-onMounted(async () => {
-  await loadSettings()
-})
-
-async function loadSettings() {
-  isLoading.value = true
-  errorMessage.value = null
-  try {
-    const response = await fetch('/api/settings')
-    if (!response.ok) throw new Error('Fehler beim Laden')
-    settings.value = await response.json()
-  } catch {
-    errorMessage.value = 'Einstellungen konnten nicht geladen werden.'
-  } finally {
-    isLoading.value = false
-  }
-}
+const settings = ref<UserSettings>({ ...props.initialSettings })
 
 async function updateSetting<K extends keyof UserSettings>(
   key: K,
@@ -83,12 +65,8 @@ async function updateSetting<K extends keyof UserSettings>(
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <div v-if="isLoading" class="flex items-center justify-center py-8">
-        <Loader2 class="text-muted-foreground size-6 animate-spin" />
-      </div>
-
       <div
-        v-else-if="errorMessage"
+        v-if="errorMessage"
         class="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
       >
         {{ errorMessage }}
