@@ -1,0 +1,34 @@
+services:
+  dimetime:
+    image: ghcr.io/florivdg/dimetime:latest
+    env_file: .env
+    environment:
+      - DB_FILE_NAME=/data/sqlite.db
+      - NODE_ENV=production
+    volumes:
+      - dimetime-data:/data
+    networks:
+      - traefik_system_traefik
+    labels:
+      # Traefik configuration
+      - traefik.enable=true
+      - traefik.http.routers.dimetime.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.dimetime.entrypoints=websecure
+      - traefik.http.routers.dimetime.tls.certresolver=le
+      - traefik.http.services.dimetime.loadbalancer.server.port=4321
+      - traefik.docker.network=traefik_system_traefik
+    restart: always
+    # Security options
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  dimetime-data:
+
+networks:
+  traefik_system_traefik:
+    external: true
