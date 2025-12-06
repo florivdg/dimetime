@@ -25,6 +25,13 @@ import {
   PinInputGroup,
   PinInputSlot,
 } from '@/components/ui/pin-input'
+import { useClipboard } from '@vueuse/core'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group'
 import { ShieldCheck, Copy, Check, Loader2 } from 'lucide-vue-next'
 
 type SetupStep = 'password' | 'qrcode' | 'verify' | 'backup'
@@ -36,6 +43,7 @@ const totpUri = ref<string | null>(null)
 const totpSecret = ref<string | null>(null)
 const backupCodes = ref<string[]>([])
 const copiedIndex = ref<number | null>(null)
+const { copy: copySecret, copied: secretCopied } = useClipboard()
 
 const passwordSchema = z.object({
   password: z.string().min(1, 'Passwort ist erforderlich'),
@@ -71,7 +79,9 @@ async function enableTwoFactor(password: string) {
 
     if (result.data) {
       totpUri.value = result.data.totpURI
-      totpSecret.value = result.data.secret
+      // Extract secret from URI since Better Auth doesn't return it separately
+      const uriParams = new URL(result.data.totpURI).searchParams
+      totpSecret.value = uriParams.get('secret')
       backupCodes.value = result.data.backupCodes
       currentStep.value = 'qrcode'
     }
@@ -204,16 +214,31 @@ function handlePinComplete(value: string[]) {
       <div v-else-if="currentStep === 'qrcode'" class="space-y-4">
         <div
           v-if="qrCodeSvg"
-          class="flex justify-center rounded-lg bg-white p-4"
+          class="mx-auto max-w-48 rounded-lg bg-white p-4 [&>svg]:w-full"
           v-html="qrCodeSvg"
         />
-        <div class="text-center">
-          <p class="text-muted-foreground text-sm">
+        <div v-if="totpSecret" class="space-y-2">
+          <p class="text-muted-foreground text-center text-sm">
             Oder geben Sie diesen Code manuell ein:
           </p>
-          <code class="bg-muted mt-2 block rounded px-2 py-1 text-sm">
-            {{ totpSecret }}
-          </code>
+          <InputGroup>
+            <InputGroupInput
+              :model-value="totpSecret"
+              readonly
+              class="text-center font-mono text-sm"
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                aria-label="Kopieren"
+                title="Kopieren"
+                size="icon-xs"
+                @click="copySecret(totpSecret!)"
+              >
+                <Check v-if="secretCopied" class="size-3.5" />
+                <Copy v-else class="size-3.5" />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         </div>
         <Button class="w-full" @click="currentStep = 'verify'"> Weiter </Button>
       </div>
