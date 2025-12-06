@@ -45,6 +45,8 @@ const selectedYear = ref<string>(props.initialYear?.toString() ?? 'all')
 
 // Flag to prevent infinite sync loops
 let isSyncingFromUrl = false
+// Flag to skip initial API call when server already provided data
+let isInitialMount = true
 
 // Helper to extract filter values from urlState
 function getFiltersFromUrlState() {
@@ -98,6 +100,12 @@ watch(
     hideArchived.value = urlState.hideArchived
     selectedYear.value = urlState.year
     isSyncingFromUrl = false
+
+    // Skip loadPlans on initial mount - server already provided correct data
+    if (isInitialMount) {
+      isInitialMount = false
+      return
+    }
     loadPlans()
   },
   { deep: true },
