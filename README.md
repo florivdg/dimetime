@@ -1,43 +1,116 @@
-# Astro Starter Kit: Minimal
+# DimeTime
 
-```sh
-bun create astro@latest -- --template minimal
+> **Work in Progress** - This project is under active development.
+
+A German-language personal financial planner web application for managing budgets, tracking transactions, and organizing expenses by category.
+
+## Overview
+
+DimeTime helps you plan and track your personal finances with:
+
+- **Monthly budget plans** - Create financial plans for specific periods
+- **Transaction tracking** - Record income and expenses with due dates
+- **Category management** - Organize transactions with color-coded categories
+- **Dashboard analytics** - Visualize spending patterns and balance overview
+
+## Features
+
+- Dashboard with balance overview, monthly spending charts, and category breakdown
+- Plan management with archiving and search functionality
+- Transaction filtering by category, type, date range, and amount
+- Passkey (WebAuthn) authentication for passwordless login
+- Email/password authentication
+- Data import wizard for bulk transaction import
+- Responsive design for desktop and mobile
+
+## Tech Stack
+
+- **Astro 5** - SSR framework with Node adapter
+- **Vue 3** - Interactive components with Composition API
+- **SQLite** - Database with Drizzle ORM
+- **Better Auth** - Authentication with passkey support
+- **Tailwind CSS 4** - Styling with CSS-first syntax
+- **Reka UI** - Headless component primitives (shadcn-vue style)
+
+## Getting Started
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) runtime
+
+### Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd dimetime
+
+# Install dependencies
+bun install
+
+# Copy environment template
+cp .env.example .env
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+### Environment Variables
 
-## 🚀 Project Structure
+Configure the following in `.env`:
 
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+```env
+DB_FILE_NAME=sqlite.db
+BETTER_AUTH_SECRET=<base64-32-byte-secret>
+BETTER_AUTH_URL=http://localhost:4321
+PASSKEY_RP_ID=localhost
+PASSKEY_ORIGIN=http://localhost:4321
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+Generate the auth secret:
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+```bash
+openssl rand -base64 32
+```
 
-Any static assets, like images, can be placed in the `public/` directory.
+### Database Setup
 
-## 🧞 Commands
+```bash
+# Run migrations
+bun run db:migrate
 
-All commands are run from the root of the project, from a terminal:
+# Create a user
+bun scripts/add-user.ts <email> <password> [name]
+```
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `bun install`             | Installs dependencies                            |
-| `bun dev`             | Starts local dev server at `localhost:4321`      |
-| `bun build`           | Build your production site to `./dist/`          |
-| `bun preview`         | Preview your build locally, before deploying     |
-| `bun astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `bun astro -- --help` | Get help using the Astro CLI                     |
+### Development
 
-## 👀 Want to learn more?
+```bash
+# Start dev server at localhost:4321
+bun --bun run dev
+```
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+## Commands
+
+| Command                     | Description                     |
+| :-------------------------- | :------------------------------ |
+| `bun --bun run dev`         | Start development server        |
+| `bun run build`             | Build for production            |
+| `bun --bun run preview`     | Preview production build        |
+| `bun run db:migrate`        | Run database migrations         |
+| `bun run lint --type-aware` | Run linter                      |
+| `bun run astro check`       | TypeScript and Astro validation |
+
+## Project Structure
+
+```
+src/
+├── pages/          # Astro file-based routing
+├── components/     # Vue components
+│   ├── ui/         # shadcn-vue style components
+│   ├── plans/      # Plan management
+│   ├── transactions/
+│   ├── categories/
+│   └── dashboard/
+├── db/schema/      # Drizzle schema definitions
+├── lib/            # Utilities and auth config
+└── middleware.ts   # Route protection
+scripts/            # CLI tools (migrations, user management)
+```
