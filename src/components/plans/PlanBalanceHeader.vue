@@ -30,12 +30,12 @@ const displayName = computed(() =>
       <!-- Income -->
       <div class="bg-card rounded-lg border p-4">
         <div class="flex items-center gap-3">
-          <div class="rounded-full bg-green-100 p-2 dark:bg-green-900">
-            <ArrowUpCircle class="size-5 text-green-600 dark:text-green-400" />
+          <div class="rounded-full bg-lime-100 p-2 dark:bg-lime-900">
+            <ArrowUpCircle class="size-5 text-lime-600 dark:text-lime-400" />
           </div>
           <div>
             <p class="text-muted-foreground text-sm">Einnahmen</p>
-            <p class="text-lg font-semibold text-green-600 dark:text-green-400">
+            <p class="text-lg font-semibold text-lime-600 dark:text-lime-400">
               {{ formatAmount(income) }}
             </p>
           </div>
@@ -45,12 +45,12 @@ const displayName = computed(() =>
       <!-- Expenses -->
       <div class="bg-card rounded-lg border p-4">
         <div class="flex items-center gap-3">
-          <div class="rounded-full bg-red-100 p-2 dark:bg-red-900">
-            <ArrowDownCircle class="size-5 text-red-600 dark:text-red-400" />
+          <div class="rounded-full bg-rose-100 p-2 dark:bg-rose-900">
+            <ArrowDownCircle class="size-5 text-rose-600 dark:text-rose-400" />
           </div>
           <div>
             <p class="text-muted-foreground text-sm">Ausgaben</p>
-            <p class="text-lg font-semibold text-red-600 dark:text-red-400">
+            <p class="text-lg font-semibold text-rose-600 dark:text-rose-400">
               {{ formatAmount(expense) }}
             </p>
           </div>
@@ -64,16 +64,16 @@ const displayName = computed(() =>
             class="rounded-full p-2"
             :class="
               net >= 0
-                ? 'bg-green-100 dark:bg-green-900'
-                : 'bg-red-100 dark:bg-red-900'
+                ? 'bg-lime-100 dark:bg-lime-900'
+                : 'bg-rose-100 dark:bg-rose-900'
             "
           >
             <Wallet
               class="size-5"
               :class="
                 net >= 0
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-red-600 dark:text-red-400'
+                  ? 'text-lime-600 dark:text-lime-400'
+                  : 'text-rose-600 dark:text-rose-400'
               "
             />
           </div>
@@ -83,8 +83,8 @@ const displayName = computed(() =>
               class="text-lg font-semibold"
               :class="
                 net >= 0
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-red-600 dark:text-red-400'
+                  ? 'text-lime-600 dark:text-lime-400'
+                  : 'text-rose-600 dark:text-rose-400'
               "
             >
               {{ net >= 0 ? '+' : '' }}{{ formatAmount(net) }}

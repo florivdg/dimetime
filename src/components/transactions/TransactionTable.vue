@@ -348,8 +348,8 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
                 <InputGroupButton
                   :class="
                     editType === 'income'
-                      ? 'text-green-600 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950'
-                      : 'text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950'
+                      ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
+                      : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
                   "
                   @click="toggleType"
                 >
@@ -369,8 +369,8 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
               v-else
               :class="
                 transaction.type === 'income'
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-red-600 dark:text-red-400'
+                  ? 'text-lime-600 dark:text-lime-400'
+                  : 'text-rose-600 dark:text-rose-400'
               "
             >
               {{ transaction.type === 'income' ? '+' : '-'

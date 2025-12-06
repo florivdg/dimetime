@@ -31,16 +31,16 @@ const displayName = computed(() =>
     </CardHeader>
     <CardContent class="space-y-3">
       <div class="flex items-center gap-2">
-        <ArrowUpCircle class="size-4 text-green-600 dark:text-green-400" />
+        <ArrowUpCircle class="size-4 text-lime-600 dark:text-lime-400" />
         <span class="text-muted-foreground text-sm">Einnahmen</span>
-        <span class="ml-auto font-medium text-green-600 dark:text-green-400">
+        <span class="ml-auto font-medium text-lime-600 dark:text-lime-400">
           {{ formatAmount(income) }}
         </span>
       </div>
       <div class="flex items-center gap-2">
-        <ArrowDownCircle class="size-4 text-red-600 dark:text-red-400" />
+        <ArrowDownCircle class="size-4 text-rose-600 dark:text-rose-400" />
         <span class="text-muted-foreground text-sm">Ausgaben</span>
-        <span class="ml-auto font-medium text-red-600 dark:text-red-400">
+        <span class="ml-auto font-medium text-rose-600 dark:text-rose-400">
           {{ formatAmount(expense) }}
         </span>
       </div>
@@ -50,8 +50,8 @@ const displayName = computed(() =>
             class="size-4"
             :class="
               net >= 0
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-red-600 dark:text-red-400'
+                ? 'text-lime-600 dark:text-lime-400'
+                : 'text-rose-600 dark:text-rose-400'
             "
           />
           <span class="text-muted-foreground text-sm">Saldo</span>
@@ -59,8 +59,8 @@ const displayName = computed(() =>
             class="ml-auto text-lg font-semibold"
             :class="
               net >= 0
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-red-600 dark:text-red-400'
+                ? 'text-lime-600 dark:text-lime-400'
+                : 'text-rose-600 dark:text-rose-400'
             "
           >
             {{ net >= 0 ? '+' : '' }}{{ formatAmount(net) }}

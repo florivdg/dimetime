@@ -238,7 +238,7 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
               :class="
                 plan.isArchived
                   ? 'bg-muted text-muted-foreground'
-                  : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                  : 'bg-lime-100 text-lime-800 dark:bg-lime-900 dark:text-lime-300'
               "
             >
               {{ plan.isArchived ? 'Archiviert' : 'Aktiv' }}

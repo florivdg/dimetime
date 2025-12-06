@@ -239,8 +239,8 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
             <span
               :class="
                 transaction.type === 'income'
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-red-600 dark:text-red-400'
+                  ? 'text-lime-600 dark:text-lime-400'
+                  : 'text-rose-600 dark:text-rose-400'
               "
             >
               {{ transaction.type === 'income' ? '+' : '-'

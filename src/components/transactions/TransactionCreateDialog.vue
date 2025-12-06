@@ -155,8 +155,8 @@ async function handleSubmit() {
                 type="button"
                 :class="
                   newType === 'income'
-                    ? 'text-green-600 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950'
-                    : 'text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950'
+                    ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
+                    : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
                 "
                 @click="toggleType"
               >

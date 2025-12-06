@@ -39,11 +39,11 @@ const isLoading = ref(true)
 const chartConfig = {
   income: {
     label: 'Einnahmen',
-    color: 'oklch(0.6 0.17 145)',
+    color: 'oklch(0.768 0.233 130.85)',
   },
   expense: {
     label: 'Ausgaben',
-    color: 'oklch(0.65 0.2 25)',
+    color: 'oklch(0.645 0.246 16.44)',
   },
 } satisfies ChartConfig
 

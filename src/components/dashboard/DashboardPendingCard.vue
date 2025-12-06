@@ -38,17 +38,17 @@ const net = computed(() => props.incomeTotal - props.expenseTotal)
       </div>
 
       <div v-if="incomeTotal > 0" class="flex items-center gap-2">
-        <ArrowUpCircle class="size-4 text-green-600 dark:text-green-400" />
+        <ArrowUpCircle class="size-4 text-lime-600 dark:text-lime-400" />
         <span class="text-muted-foreground text-sm">Erwartete Einnahmen</span>
-        <span class="ml-auto font-medium text-green-600 dark:text-green-400">
+        <span class="ml-auto font-medium text-lime-600 dark:text-lime-400">
           +{{ formatAmount(incomeTotal) }}
         </span>
       </div>
 
       <div v-if="expenseTotal > 0" class="flex items-center gap-2">
-        <ArrowDownCircle class="size-4 text-red-600 dark:text-red-400" />
+        <ArrowDownCircle class="size-4 text-rose-600 dark:text-rose-400" />
         <span class="text-muted-foreground text-sm">Ausstehende Ausgaben</span>
-        <span class="ml-auto font-medium text-red-600 dark:text-red-400">
+        <span class="ml-auto font-medium text-rose-600 dark:text-rose-400">
           -{{ formatAmount(expenseTotal) }}
         </span>
       </div>
@@ -61,8 +61,8 @@ const net = computed(() => props.incomeTotal - props.expenseTotal)
           class="size-4"
           :class="
             net >= 0
-              ? 'text-green-600 dark:text-green-400'
-              : 'text-red-600 dark:text-red-400'
+              ? 'text-lime-600 dark:text-lime-400'
+              : 'text-rose-600 dark:text-rose-400'
           "
         />
         <span class="text-muted-foreground text-sm">Netto</span>
@@ -70,8 +70,8 @@ const net = computed(() => props.incomeTotal - props.expenseTotal)
           class="ml-auto text-lg font-semibold"
           :class="
             net >= 0
-              ? 'text-green-600 dark:text-green-400'
-              : 'text-red-600 dark:text-red-400'
+              ? 'text-lime-600 dark:text-lime-400'
+              : 'text-rose-600 dark:text-rose-400'
           "
         >
           {{ net >= 0 ? '+' : '' }}{{ formatAmount(net) }}
