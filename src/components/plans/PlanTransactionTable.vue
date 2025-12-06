@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { formatAmount, formatDate } from '@/lib/format'
-import { useDeleteConfirmation } from '@/composables/useDeleteConfirmation'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -23,8 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   ArrowDown,
   ArrowUp,
@@ -58,10 +55,6 @@ const emit = defineEmits<{
   sort: [column: 'name' | 'dueDate' | 'categoryName' | 'amount']
   toggleDone: [id: string, isDone: boolean]
 }>()
-
-// Delete confirmation
-const { deleteConfirmation, isDeleteConfirmed, resetDeleteConfirmation } =
-  useDeleteConfirmation()
 
 async function deleteTransaction(id: string) {
   try {
@@ -281,7 +274,7 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
               >
                 <Pencil class="size-4" />
               </Button>
-              <AlertDialog @update:open="resetDeleteConfirmation">
+              <AlertDialog>
                 <AlertDialogTrigger as-child>
                   <Button size="icon-sm" variant="ghost" title="Löschen">
                     <Trash2 class="size-4" />
@@ -296,23 +289,9 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
                       gemacht werden.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
-                  <div class="space-y-2">
-                    <Label for="delete-confirmation">
-                      Geben Sie
-                      <span class="font-semibold">löschen</span>
-                      ein, um fortzufahren:
-                    </Label>
-                    <Input
-                      id="delete-confirmation"
-                      v-model="deleteConfirmation"
-                      placeholder="löschen"
-                      autocomplete="off"
-                    />
-                  </div>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Abbrechen</AlertDialogCancel>
                     <AlertDialogAction
-                      :disabled="!isDeleteConfirmed"
                       @click="deleteTransaction(transaction.id)"
                     >
                       Löschen

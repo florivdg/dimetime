@@ -308,6 +308,7 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
                       v-model="deleteConfirmation"
                       placeholder="löschen"
                       autocomplete="off"
+                      @keyup.enter="isDeleteConfirmed && deletePlan(plan.id)"
                     />
                   </div>
                   <AlertDialogFooter>
