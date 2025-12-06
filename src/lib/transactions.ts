@@ -10,6 +10,7 @@ import {
   gte,
   like,
   lte,
+  ne,
   sum,
 } from 'drizzle-orm'
 
@@ -53,6 +54,7 @@ export interface TransactionQueryOptions {
   dateTo?: string
   amountMin?: number
   amountMax?: number
+  hideZeroValue?: boolean
   sortBy?: 'name' | 'dueDate' | 'categoryName' | 'amount'
   sortDir?: 'asc' | 'desc'
   page?: number
@@ -106,6 +108,7 @@ export async function getTransactions(
     dateTo,
     amountMin,
     amountMax,
+    hideZeroValue = true,
     sortBy = 'dueDate',
     sortDir = 'desc',
     page = 1,
@@ -150,6 +153,10 @@ export async function getTransactions(
 
   if (amountMax !== undefined) {
     conditions.push(lte(plannedTransaction.amount, amountMax))
+  }
+
+  if (hideZeroValue) {
+    conditions.push(ne(plannedTransaction.amount, 0))
   }
 
   const whereClause =

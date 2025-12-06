@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   ChevronDown,
   RotateCcw,
@@ -32,6 +33,7 @@ export interface FilterState {
   dateTo: string
   amountMin: string
   amountMax: string
+  hideZeroValue: boolean
 }
 
 defineProps<{
@@ -48,6 +50,7 @@ const filters = defineModel<FilterState>('filters', {
     dateTo: '',
     amountMin: '',
     amountMax: '',
+    hideZeroValue: true,
   }),
 })
 
@@ -94,6 +97,7 @@ function resetFilters() {
     dateTo: '',
     amountMin: '',
     amountMax: '',
+    hideZeroValue: true,
   }
   emit('reset')
 }
@@ -234,6 +238,24 @@ function resetFilters() {
               >
                 Erledigt
               </Button>
+            </div>
+          </div>
+
+          <div>
+            <Label class="text-muted-foreground mb-1.5 block text-xs">
+              Nullwerte
+            </Label>
+            <div
+              class="bg-background flex h-9 items-center gap-2 rounded-md border px-3"
+            >
+              <Switch
+                id="filter-hide-zero"
+                :model-value="filters.hideZeroValue"
+                @update:model-value="filters.hideZeroValue = $event"
+              />
+              <Label for="filter-hide-zero" class="cursor-pointer text-sm">
+                Ausblenden
+              </Label>
             </div>
           </div>
         </div>

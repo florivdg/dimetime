@@ -45,6 +45,7 @@ const filters = ref<FilterState>({
   dateTo: '',
   amountMin: '',
   amountMax: '',
+  hideZeroValue: true,
 })
 
 // Edit dialog state
@@ -76,6 +77,7 @@ watch(
     filters.value.dateTo,
     filters.value.amountMin,
     filters.value.amountMax,
+    filters.value.hideZeroValue,
   ],
   () => {
     loadTransactions()
@@ -108,6 +110,9 @@ async function loadTransactions() {
     if (filters.value.amountMax) {
       const cents = Math.round(parseFloat(filters.value.amountMax) * 100)
       if (!isNaN(cents)) params.set('amountMax', cents.toString())
+    }
+    if (!filters.value.hideZeroValue) {
+      params.set('hideZeroValue', 'false')
     }
     params.set('sortBy', sortBy.value)
     params.set('sortDir', sortDir.value)

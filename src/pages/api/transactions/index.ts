@@ -23,6 +23,10 @@ const querySchema = z.object({
     .optional(),
   amountMin: z.coerce.number().min(0).optional(),
   amountMax: z.coerce.number().min(0).optional(),
+  hideZeroValue: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional(),
   sortBy: z.enum(['name', 'dueDate', 'categoryName', 'amount']).optional(),
   sortDir: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().min(1).optional().default(1),
@@ -57,6 +61,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
     dateTo: url.searchParams.get('dateTo') || undefined,
     amountMin: url.searchParams.get('amountMin') || undefined,
     amountMax: url.searchParams.get('amountMax') || undefined,
+    hideZeroValue: url.searchParams.get('hideZeroValue') || undefined,
     sortBy: url.searchParams.get('sortBy') || undefined,
     sortDir: url.searchParams.get('sortDir') || undefined,
     page: url.searchParams.get('page') || undefined,
