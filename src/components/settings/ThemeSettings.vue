@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useColorMode } from '@vueuse/core'
 import {
   Card,
@@ -30,6 +30,16 @@ const { store: colorModeStore } = useColorMode()
 
 const isSaving = ref(false)
 const errorMessage = ref<string | null>(null)
+const isMounted = ref(false)
+
+// Use initial settings during SSR, then switch to reactive colorModeStore after mount
+// This prevents hydration mismatch since useColorMode() defaults to 'auto'
+const displayValue = computed(() => {
+  if (!isMounted.value) {
+    return apiToLocal(props.initialSettings.themePreference)
+  }
+  return colorModeStore.value
+})
 
 // Map between API values and vueuse-color-scheme values
 // API: 'light' | 'dark' | 'system'
@@ -47,6 +57,7 @@ onMounted(() => {
   if (props.initialSettings.themePreference) {
     colorModeStore.value = apiToLocal(props.initialSettings.themePreference)
   }
+  isMounted.value = true
 })
 
 async function updateTheme(value: AcceptableValue) {
@@ -111,7 +122,7 @@ const themeOptions = [
             </p>
           </div>
           <Select
-            :model-value="colorModeStore"
+            :model-value="displayValue"
             :disabled="isSaving"
             @update:model-value="updateTheme"
           >
