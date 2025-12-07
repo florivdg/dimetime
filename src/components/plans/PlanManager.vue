@@ -85,16 +85,14 @@ watch(
   },
 )
 
-// Trigger API reload when year or hideArchived changes from UI
-watch([hideArchived, selectedYear], () => {
-  if (isSyncingFromUrl) return
-  loadPlans()
-})
-
-// Sync urlState → local refs and reload data (for browser back/forward)
+// Sync urlState → local refs and reload data (for browser back/forward and filter changes)
 watch(
   () => ({ ...urlState }),
-  () => {
+  (newState, oldState) => {
+    // Check if API-relevant filters changed
+    const yearChanged = newState.year !== oldState?.year
+    const hideArchivedChanged = newState.hideArchived !== oldState?.hideArchived
+
     isSyncingFromUrl = true
     searchQuery.value = urlState.search
     hideArchived.value = urlState.hideArchived
@@ -106,7 +104,11 @@ watch(
       isInitialMount = false
       return
     }
-    loadPlans()
+
+    // Only reload if year or hideArchived changed (not search-only changes)
+    if (yearChanged || hideArchivedChanged) {
+      loadPlans()
+    }
   },
   { deep: true },
 )
