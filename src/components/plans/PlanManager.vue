@@ -99,10 +99,18 @@ watch(
     selectedYear.value = urlState.year
     isSyncingFromUrl = false
 
-    // Skip loadPlans on initial mount - server already provided correct data
+    // Skip loadPlans on initial mount only if server data matches URL filters
     if (isInitialMount) {
       isInitialMount = false
-      return
+      // Server fetched with initialYear and includeArchived=true
+      // Only skip if URL matches what server provided
+      const serverYear = props.initialYear?.toString() ?? 'all'
+      const urlMatchesServer =
+        urlState.year === serverYear && !urlState.hideArchived
+      if (urlMatchesServer) {
+        return
+      }
+      // URL differs from server data - fall through to load correct data
     }
 
     // Only reload if year or hideArchived changed (not search-only changes)
