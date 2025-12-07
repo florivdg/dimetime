@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useColorMode } from '@vueuse/core'
 import {
   Card,
@@ -16,15 +16,30 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { Loader2, Palette } from 'lucide-vue-next'
-import type { ThemePreference } from '@/lib/settings'
+import { Palette } from 'lucide-vue-next'
+import type { ThemePreference, UserSettings } from '@/lib/settings'
 import type { AcceptableValue } from 'reka-ui'
+
+interface Props {
+  initialSettings: UserSettings
+}
+
+const props = defineProps<Props>()
 
 const { store: colorModeStore } = useColorMode()
 
-const isLoading = ref(true)
 const isSaving = ref(false)
 const errorMessage = ref<string | null>(null)
+const isMounted = ref(false)
+
+// Use initial settings during SSR, then switch to reactive colorModeStore after mount
+// This prevents hydration mismatch since useColorMode() defaults to 'auto'
+const displayValue = computed(() => {
+  if (!isMounted.value) {
+    return apiToLocal(props.initialSettings.themePreference)
+  }
+  return colorModeStore.value
+})
 
 // Map between API values and vueuse-color-scheme values
 // API: 'light' | 'dark' | 'system'
@@ -37,27 +52,13 @@ function localToApi(value: string): ThemePreference {
   return value === 'auto' ? 'system' : (value as ThemePreference)
 }
 
-onMounted(async () => {
-  await loadSettings()
-})
-
-async function loadSettings() {
-  isLoading.value = true
-  errorMessage.value = null
-  try {
-    const response = await fetch('/api/settings')
-    if (!response.ok) throw new Error('Fehler beim Laden')
-    const settings = await response.json()
-    // Sync server preference to local useColorMode store
-    if (settings.themePreference) {
-      colorModeStore.value = apiToLocal(settings.themePreference)
-    }
-  } catch {
-    errorMessage.value = 'Einstellungen konnten nicht geladen werden.'
-  } finally {
-    isLoading.value = false
+onMounted(() => {
+  // Sync server preference to local useColorMode store on mount
+  if (props.initialSettings.themePreference) {
+    colorModeStore.value = apiToLocal(props.initialSettings.themePreference)
   }
-}
+  isMounted.value = true
+})
 
 async function updateTheme(value: AcceptableValue) {
   if (typeof value !== 'string') return
@@ -105,12 +106,8 @@ const themeOptions = [
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <div v-if="isLoading" class="flex items-center justify-center py-8">
-        <Loader2 class="text-muted-foreground size-6 animate-spin" />
-      </div>
-
       <div
-        v-else-if="errorMessage"
+        v-if="errorMessage"
         class="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
       >
         {{ errorMessage }}
@@ -125,7 +122,7 @@ const themeOptions = [
             </p>
           </div>
           <Select
-            :model-value="colorModeStore"
+            :model-value="displayValue"
             :disabled="isSaving"
             @update:model-value="updateTheme"
           >
