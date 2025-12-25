@@ -90,6 +90,7 @@ export interface UpdateTransactionInput {
   amount?: number
   isDone?: boolean
   categoryId?: string | null
+  planId?: string
 }
 
 /**
@@ -283,6 +284,7 @@ export async function updateTransaction(
     amount?: number
     isDone?: boolean
     categoryId?: string | null
+    planId?: string
     updatedAt: Date
   } = {
     updatedAt: new Date(),
@@ -295,6 +297,7 @@ export async function updateTransaction(
   if (input.amount !== undefined) updateData.amount = input.amount
   if (input.isDone !== undefined) updateData.isDone = input.isDone
   if (input.categoryId !== undefined) updateData.categoryId = input.categoryId
+  if (input.planId !== undefined) updateData.planId = input.planId
 
   const result = await db
     .update(plannedTransaction)

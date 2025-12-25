@@ -25,6 +25,7 @@ import PlanTransactionFilters from './PlanTransactionFilters.vue'
 import PlanTransactionTable from './PlanTransactionTable.vue'
 import TransactionEditDialog from '@/components/transactions/TransactionEditDialog.vue'
 import TransactionCreateDialog from '@/components/transactions/TransactionCreateDialog.vue'
+import TransactionMoveDialog from '@/components/transactions/TransactionMoveDialog.vue'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -168,6 +169,10 @@ const selectedTransaction = ref<TransactionWithCategory | null>(null)
 // Create dialog state
 const createDialogOpen = ref(false)
 
+// Move dialog state
+const moveDialogOpen = ref(false)
+const transactionToMove = ref<TransactionWithCategory | null>(null)
+
 // API
 async function loadTransactions() {
   isLoading.value = true
@@ -229,6 +234,29 @@ function handleEdit(transaction: TransactionWithCategory) {
 function handleUpdated() {
   loadTransactions()
   loadBalance()
+}
+
+function handleMove(transaction: TransactionWithCategory) {
+  transactionToMove.value = transaction
+  moveDialogOpen.value = true
+}
+
+function handleMoved(_targetPlanId: string, targetPlanName: string) {
+  // Remove transaction from current list
+  transactions.value = transactions.value.filter(
+    (t) => t.id !== transactionToMove.value?.id,
+  )
+
+  // Show success toast
+  toast.success(
+    `"${transactionToMove.value?.name}" wurde zu "${targetPlanName}" verschoben`,
+  )
+
+  // Reload balance
+  loadBalance()
+
+  // Reset
+  transactionToMove.value = null
 }
 
 async function handleToggleDone(id: string, isDone: boolean) {
@@ -382,6 +410,7 @@ function handleFilterReset() {
       :sort-by="sortBy"
       :sort-dir="sortDir"
       @edit="handleEdit"
+      @move="handleMove"
       @deleted="handleDeleted"
       @error="handleError"
       @sort="handleSort"
@@ -394,6 +423,15 @@ function handleFilterReset() {
       :transaction="selectedTransaction"
       :categories="categories"
       @updated="handleUpdated"
+      @error="handleError"
+    />
+
+    <!-- Move Dialog -->
+    <TransactionMoveDialog
+      v-model:open="moveDialogOpen"
+      :transaction="transactionToMove"
+      :current-plan-id="plan.id"
+      @moved="handleMoved"
       @error="handleError"
     />
   </div>

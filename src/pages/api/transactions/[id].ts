@@ -5,6 +5,7 @@ import {
   getTransactionWithPlanStatus,
   updateTransaction,
 } from '@/lib/transactions'
+import { getPlanById } from '@/lib/plans'
 
 const updateTransactionSchema = z.object({
   name: z
@@ -24,6 +25,7 @@ const updateTransactionSchema = z.object({
   amount: z.number().int().min(0, 'Betrag muss positiv sein').optional(),
   isDone: z.boolean().optional(),
   categoryId: z.uuid().nullable().optional(),
+  planId: z.string().uuid().optional(),
 })
 
 export const PUT: APIRoute = async ({ params, request }) => {
@@ -71,6 +73,34 @@ export const PUT: APIRoute = async ({ params, request }) => {
       JSON.stringify({ error: parsed.error.issues[0].message }),
       { status: 400, headers: { 'Content-Type': 'application/json' } },
     )
+  }
+
+  // Validate target plan if moving to a different plan
+  if (parsed.data.planId) {
+    if (parsed.data.planId === existing.planId) {
+      return new Response(
+        JSON.stringify({ error: 'Transaktion ist bereits in diesem Plan' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    const targetPlan = await getPlanById(parsed.data.planId)
+    if (!targetPlan) {
+      return new Response(
+        JSON.stringify({ error: 'Zielplan nicht gefunden' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    if (targetPlan.isArchived) {
+      return new Response(
+        JSON.stringify({
+          error:
+            'Transaktion kann nicht zu einem archivierten Plan verschoben werden',
+        }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
   }
 
   const updated = await updateTransaction(id, parsed.data)

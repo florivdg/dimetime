@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/table'
 import {
   ArrowDown,
+  ArrowRightLeft,
   ArrowUp,
   ArrowUpDown,
   Loader2,
@@ -50,6 +51,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   edit: [transaction: TransactionWithCategory]
+  move: [transaction: TransactionWithCategory]
   deleted: []
   error: [message: string]
   sort: [column: 'name' | 'dueDate' | 'categoryName' | 'amount']
@@ -266,6 +268,14 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
             </div>
             <!-- Editable: show edit/delete buttons -->
             <div v-else class="flex justify-end gap-1">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                title="Verschieben"
+                @click="emit('move', transaction)"
+              >
+                <ArrowRightLeft class="size-4" />
+              </Button>
               <Button
                 size="icon-sm"
                 variant="ghost"
