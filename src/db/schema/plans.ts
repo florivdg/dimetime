@@ -107,3 +107,57 @@ export const plannedTransactionRelations = relations(
     }),
   }),
 )
+
+// Transaction Presets
+export const transactionPreset = sqliteTable(
+  'transaction_preset',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    note: text('note'),
+    type: text('type', { enum: ['income', 'expense'] })
+      .notNull()
+      .default('expense'),
+    amount: integer('amount').notNull().default(0), // Cents
+    recurrence: text('recurrence', {
+      enum: ['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'],
+    })
+      .notNull()
+      .default('einmalig'),
+    endDate: text('end_date'), // YYYY-MM-DD, nullable
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    categoryId: text('category_id').references(() => category.id, {
+      onDelete: 'set null',
+    }),
+    lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('transactionPreset_userId_idx').on(table.userId),
+    index('transactionPreset_categoryId_idx').on(table.categoryId),
+    index('transactionPreset_type_idx').on(table.type),
+    index('transactionPreset_recurrence_idx').on(table.recurrence),
+  ],
+)
+
+// Relations
+export const transactionPresetRelations = relations(
+  transactionPreset,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [transactionPreset.userId],
+      references: [user.id],
+    }),
+    category: one(category, {
+      fields: [transactionPreset.categoryId],
+      references: [category.id],
+    }),
+  }),
+)

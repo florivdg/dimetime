@@ -57,3 +57,18 @@ export function getPlanDisplayName(
     year: 'numeric',
   }).format(new Date(date))
 }
+
+/**
+ * Format recurrence type to German display string
+ * @param recurrence - Recurrence type
+ * @returns Formatted recurrence string
+ */
+export function formatRecurrence(recurrence: string): string {
+  const map: Record<string, string> = {
+    einmalig: 'Einmalig',
+    monatlich: 'Monatlich',
+    vierteljährlich: 'Vierteljährlich',
+    jährlich: 'Jährlich',
+  }
+  return map[recurrence] || recurrence
+}

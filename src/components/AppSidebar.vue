@@ -2,6 +2,7 @@
 import type { SidebarProps } from '@/components/ui/sidebar'
 
 import {
+  BookTemplate,
   CalendarDays,
   Home,
   LifeBuoy,
@@ -74,6 +75,7 @@ const data = computed(() => ({
         !isActiveSection('/categories') &&
         !isActiveSection('/plans') &&
         !isActiveSection('/transactions') &&
+        !isActiveSection('/presets') &&
         !isActiveSection('/import'),
     },
     {
@@ -95,6 +97,12 @@ const data = computed(() => ({
       url: '/categories',
       icon: Tags,
       isActive: isActiveSection('/categories'),
+    },
+    {
+      title: 'Vorlagen',
+      url: '/presets',
+      icon: BookTemplate,
+      isActive: isActiveSection('/presets'),
     },
     {
       title: 'Import',
