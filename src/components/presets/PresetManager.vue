@@ -43,7 +43,6 @@ const presets = ref<PresetWithTags[]>(props.initialPresets)
 const pagination = ref(props.initialPagination)
 const isLoading = ref(false)
 const error = ref('')
-const isSyncingFromUrl = ref(false)
 
 const { state: urlState, reset: resetFilters } = useUrlState({
   search: { type: 'string', default: '', urlKey: 'q', debounce: 300 },
@@ -85,13 +84,7 @@ const hasActiveFilters = computed(
 // Watch for URL state changes and reload presets
 watch(
   urlState,
-  async (newState, oldState) => {
-    // Prevent infinite loops when syncing from URL
-    if (isSyncingFromUrl.value) {
-      isSyncingFromUrl.value = false
-      return
-    }
-
+  async () => {
     await loadPresets()
   },
   { deep: true },
@@ -149,11 +142,8 @@ function handlePageChange(page: number) {
   urlState.page = page
 }
 
-async function handleReset() {
-  isSyncingFromUrl.value = true
+function handleReset() {
   resetFilters()
-  isSyncingFromUrl.value = false
-  await loadPresets()
 }
 
 function showError(message: string) {
@@ -270,7 +260,7 @@ function showError(message: string) {
       :items-per-page="pagination.limit"
       :sibling-count="1"
       show-edges
-      :default-page="pagination.page"
+      :page="pagination.page"
       @update:page="handlePageChange"
     >
       <PaginationContent v-slot="{ items }" class="flex items-center gap-1">

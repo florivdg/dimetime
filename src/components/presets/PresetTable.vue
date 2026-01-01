@@ -96,8 +96,12 @@ function handleSort(column: string) {
 
 function isExpired(preset: PresetWithTags): boolean {
   if (!preset.endDate) return false
-  const today = new Date().toISOString().split('T')[0]
-  return preset.endDate < today
+  const now = new Date()
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    '0',
+  )}-${String(now.getDate()).padStart(2, '0')}`
+  return preset.endDate < localDate
 }
 
 function formatDate(dateString: string | null): string {

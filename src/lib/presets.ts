@@ -75,6 +75,13 @@ export interface ApplyPresetInput {
   dueDate?: string // Optional override for transaction due date
 }
 
+function getLocalDateString(date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 /**
  * Get paginated presets with optional filtering and sorting
  */
@@ -115,7 +122,7 @@ export async function getPresets(
 
   if (!includeExpired) {
     // Filter out expired presets: endDate is null OR endDate >= today
-    const today = new Date().toISOString().split('T')[0]
+    const today = getLocalDateString()
     conditions.push(
       sql`(${transactionPreset.endDate} IS NULL OR ${transactionPreset.endDate} >= ${today})`,
     )
@@ -320,6 +327,6 @@ export async function applyPresetToPlan(
 export function isPresetExpired(preset: TransactionPreset): boolean {
   if (!preset.endDate) return false
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = getLocalDateString()
   return preset.endDate < today
 }
