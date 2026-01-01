@@ -88,35 +88,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   try {
-    const { count } = await db.transaction(async (tx) => {
-      const now = new Date()
-      let createdCount = 0
+    const now = new Date()
 
-      for (const source of sourceTransactions) {
-        // Adjust the dueDate to the target plan's month
-        const adjustedDueDate = adjustDueDateToMonth(
-          source.dueDate,
-          targetPlan.date,
-        )
+    const valuesToInsert = sourceTransactions.map((source) => ({
+      name: source.name,
+      note: source.note,
+      type: source.type,
+      dueDate: adjustDueDateToMonth(source.dueDate, targetPlan.date),
+      amount: source.amount,
+      isDone: false,
+      planId: parsed.data.targetPlanId,
+      categoryId: source.categoryId,
+      createdAt: now,
+      updatedAt: now,
+    }))
 
-        await tx.insert(plannedTransaction).values({
-          name: source.name,
-          note: source.note,
-          type: source.type,
-          dueDate: adjustedDueDate,
-          amount: source.amount,
-          isDone: false,
-          planId: parsed.data.targetPlanId,
-          categoryId: source.categoryId,
-          createdAt: now,
-          updatedAt: now,
-        })
+    await db.insert(plannedTransaction).values(valuesToInsert)
 
-        createdCount += 1
-      }
-
-      return { count: createdCount }
-    })
+    const count = valuesToInsert.length
 
     return new Response(
       JSON.stringify({
