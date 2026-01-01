@@ -58,6 +58,8 @@ watch(open, async (isOpen) => {
 
 async function loadPresets() {
   isLoading.value = true
+  presets.value = []
+  selectedPresetIds.value = new Set()
   try {
     const response = await fetch(`/api/plans/${props.planId}/matching-presets`)
     if (!response.ok) throw new Error('Fehler beim Laden der Vorlagen')
@@ -70,6 +72,8 @@ async function loadPresets() {
       presets.value.filter((p) => p.isMatching).map((p) => p.id),
     )
   } catch {
+    presets.value = []
+    selectedPresetIds.value = new Set()
     emit('error', 'Vorlagen konnten nicht geladen werden.')
   } finally {
     isLoading.value = false

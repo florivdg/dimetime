@@ -4,8 +4,8 @@ import { applyMultiplePresetsToPlan, getPresetById } from '@/lib/presets'
 import { getPlanById } from '@/lib/plans'
 
 const bulkApplySchema = z.object({
-  planId: z.string().uuid(),
-  presetIds: z.array(z.string().uuid()).min(1),
+  planId: z.uuid(),
+  presetIds: z.array(z.uuid()).min(1),
   dueDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)

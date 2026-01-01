@@ -3,12 +3,12 @@ import { z } from 'zod'
 import { db } from '@/db/database'
 import { plannedTransaction, plan } from '@/db/schema/plans'
 import { eq, inArray } from 'drizzle-orm'
-import { createTransaction, adjustDueDateToMonth } from '@/lib/transactions'
+import { adjustDueDateToMonth } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
 
 const bulkCopySchema = z.object({
-  targetPlanId: z.string().uuid(),
-  transactionIds: z.array(z.string().uuid()).min(1),
+  targetPlanId: z.uuid(),
+  transactionIds: z.array(z.uuid()).min(1),
 })
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -37,6 +37,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       { status: 400, headers: { 'Content-Type': 'application/json' } },
     )
   }
+
+  const transactionIds = Array.from(new Set(parsed.data.transactionIds))
 
   // Validate target plan
   const targetPlan = await getPlanById(parsed.data.targetPlanId)
@@ -67,7 +69,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     })
     .from(plannedTransaction)
     .innerJoin(plan, eq(plannedTransaction.planId, plan.id))
-    .where(inArray(plannedTransaction.id, parsed.data.transactionIds))
+    .where(inArray(plannedTransaction.id, transactionIds))
 
   if (sourceTransactions.length === 0) {
     return new Response(
@@ -76,34 +78,50 @@ export const POST: APIRoute = async ({ request, locals }) => {
     )
   }
 
+  if (sourceTransactions.length !== transactionIds.length) {
+    return new Response(
+      JSON.stringify({
+        error: 'Einige der ausgewählten Transaktionen wurden nicht gefunden',
+      }),
+      { status: 404, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
   try {
-    const createdTransactions = []
+    const { count } = await db.transaction(async (tx) => {
+      const now = new Date()
+      let createdCount = 0
 
-    for (const source of sourceTransactions) {
-      // Adjust the dueDate to the target plan's month
-      const adjustedDueDate = adjustDueDateToMonth(
-        source.dueDate,
-        targetPlan.date,
-      )
+      for (const source of sourceTransactions) {
+        // Adjust the dueDate to the target plan's month
+        const adjustedDueDate = adjustDueDateToMonth(
+          source.dueDate,
+          targetPlan.date,
+        )
 
-      const newTransaction = await createTransaction({
-        name: source.name,
-        note: source.note,
-        type: source.type,
-        dueDate: adjustedDueDate,
-        amount: source.amount,
-        isDone: false,
-        planId: parsed.data.targetPlanId,
-        categoryId: source.categoryId,
-      })
+        await tx.insert(plannedTransaction).values({
+          name: source.name,
+          note: source.note,
+          type: source.type,
+          dueDate: adjustedDueDate,
+          amount: source.amount,
+          isDone: false,
+          planId: parsed.data.targetPlanId,
+          categoryId: source.categoryId,
+          createdAt: now,
+          updatedAt: now,
+        })
 
-      createdTransactions.push(newTransaction)
-    }
+        createdCount += 1
+      }
+
+      return { count: createdCount }
+    })
 
     return new Response(
       JSON.stringify({
         success: true,
-        count: createdTransactions.length,
+        count,
       }),
       { status: 201, headers: { 'Content-Type': 'application/json' } },
     )
