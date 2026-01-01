@@ -48,6 +48,7 @@ const editType = ref<'income' | 'expense'>('expense')
 const editRecurrence = ref<
   'einmalig' | 'monatlich' | 'vierteljährlich' | 'jährlich'
 >('einmalig')
+const editStartMonth = ref('')
 const editEndDate = ref('')
 const editCategoryId = ref<string | null>(null)
 
@@ -61,6 +62,7 @@ watch(
       editAmount.value = newPreset.amount / 100 // Convert cents to euros
       editType.value = newPreset.type
       editRecurrence.value = newPreset.recurrence
+      editStartMonth.value = newPreset.startMonth || ''
       editEndDate.value = newPreset.endDate || ''
       editCategoryId.value = newPreset.categoryId
     }
@@ -87,6 +89,7 @@ async function handleSubmit() {
         amount: Math.round(editAmount.value * 100),
         type: editType.value,
         recurrence: editRecurrence.value,
+        startMonth: editStartMonth.value || null,
         endDate: editEndDate.value || null,
         categoryId: editCategoryId.value,
       }),
@@ -205,6 +208,14 @@ async function handleSubmit() {
               <SelectItem value="jährlich">Jährlich</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <div class="space-y-2">
+          <Label for="edit-start-month">Startmonat</Label>
+          <Input id="edit-start-month" v-model="editStartMonth" type="month" />
+          <p class="text-muted-foreground text-xs">
+            Ab welchem Monat soll diese Vorlage gelten?
+          </p>
         </div>
 
         <div class="space-y-2">

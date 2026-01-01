@@ -126,6 +126,7 @@ export const transactionPreset = sqliteTable(
     })
       .notNull()
       .default('einmalig'),
+    startMonth: text('start_month'), // YYYY-MM format, defines when recurrence starts
     endDate: text('end_date'), // YYYY-MM-DD, nullable
     userId: text('user_id')
       .notNull()

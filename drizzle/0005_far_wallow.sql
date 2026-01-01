@@ -1,0 +1,1 @@
+ALTER TABLE `transaction_preset` ADD `start_month` text;

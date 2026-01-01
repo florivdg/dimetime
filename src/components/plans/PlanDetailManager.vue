@@ -26,14 +26,22 @@ import PlanTransactionTable from './PlanTransactionTable.vue'
 import TransactionEditDialog from '@/components/transactions/TransactionEditDialog.vue'
 import TransactionCreateDialog from '@/components/transactions/TransactionCreateDialog.vue'
 import TransactionMoveDialog from '@/components/transactions/TransactionMoveDialog.vue'
+import FillFromPresetsDialog from '@/components/presets/FillFromPresetsDialog.vue'
+import CopyFromPlanDialog from '@/components/transactions/CopyFromPlanDialog.vue'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Lock, Plus } from 'lucide-vue-next'
+import { Copy, FileStack, Lock, MoreVertical, Plus } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
@@ -172,6 +180,12 @@ const createDialogOpen = ref(false)
 // Move dialog state
 const moveDialogOpen = ref(false)
 const transactionToMove = ref<TransactionWithCategory | null>(null)
+
+// Fill from presets dialog state
+const fillFromPresetsDialogOpen = ref(false)
+
+// Copy from plan dialog state
+const copyFromPlanDialogOpen = ref(false)
 
 // API
 async function loadTransactions() {
@@ -339,6 +353,24 @@ function handleSort(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
   }
 }
 
+function handleFillFromPresets() {
+  fillFromPresetsDialogOpen.value = true
+}
+
+function handlePresetsApplied() {
+  loadTransactions()
+  loadBalance()
+}
+
+function handleCopyFromPlan() {
+  copyFromPlanDialogOpen.value = true
+}
+
+function handleTransactionsCopied() {
+  loadTransactions()
+  loadBalance()
+}
+
 function handleFilterReset() {
   // Reset both urlState and filters ref
   resetUrlState()
@@ -376,7 +408,7 @@ function handleFilterReset() {
             @reset="handleFilterReset"
           />
         </div>
-        <!-- Disabled button for archived plans -->
+        <!-- Disabled buttons for archived plans -->
         <TooltipProvider v-if="plan.isArchived">
           <Tooltip>
             <TooltipTrigger as-child>
@@ -390,15 +422,34 @@ function handleFilterReset() {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <!-- Create dialog for active plans -->
-        <TransactionCreateDialog
-          v-else
-          v-model:open="createDialogOpen"
-          :plan-id="plan.id"
-          :categories="categories"
-          @created="handleCreated"
-          @error="handleError"
-        />
+        <!-- Action buttons for active plans -->
+        <div v-else class="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button variant="outline" size="icon">
+                <MoreVertical class="size-4" />
+                <span class="sr-only">Weitere Aktionen</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem @click="handleFillFromPresets">
+                <FileStack class="size-4" />
+                Vorlagen anwenden
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="handleCopyFromPlan">
+                <Copy class="size-4" />
+                Transaktionen kopieren
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <TransactionCreateDialog
+            v-model:open="createDialogOpen"
+            :plan-id="plan.id"
+            :categories="categories"
+            @created="handleCreated"
+            @error="handleError"
+          />
+        </div>
       </div>
     </div>
 
@@ -409,12 +460,14 @@ function handleFilterReset() {
       :search-query="filters.search"
       :sort-by="sortBy"
       :sort-dir="sortDir"
+      :is-archived="plan.isArchived"
       @edit="handleEdit"
       @move="handleMove"
       @deleted="handleDeleted"
       @error="handleError"
       @sort="handleSort"
       @toggle-done="handleToggleDone"
+      @fill-from-presets="handleFillFromPresets"
     />
 
     <!-- Edit Dialog -->
@@ -432,6 +485,24 @@ function handleFilterReset() {
       :transaction="transactionToMove"
       :current-plan-id="plan.id"
       @moved="handleMoved"
+      @error="handleError"
+    />
+
+    <!-- Fill from Presets Dialog -->
+    <FillFromPresetsDialog
+      v-model:open="fillFromPresetsDialogOpen"
+      :plan-id="plan.id"
+      :plan-date="plan.date"
+      @applied="handlePresetsApplied"
+      @error="handleError"
+    />
+
+    <!-- Copy from Plan Dialog -->
+    <CopyFromPlanDialog
+      v-model:open="copyFromPlanDialogOpen"
+      :plan-id="plan.id"
+      :plan-date="plan.date"
+      @copied="handleTransactionsCopied"
       @error="handleError"
     />
   </div>

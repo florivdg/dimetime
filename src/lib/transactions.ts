@@ -376,3 +376,24 @@ export async function getPlanBalance(planId: string): Promise<PlanBalance> {
     net: income - expense,
   }
 }
+
+/**
+ * Adjusts a dueDate to a new plan month while keeping the day.
+ * Clamps day to the last day of the month if needed.
+ * @param sourceDueDate - Source date in YYYY-MM-DD format
+ * @param targetPlanDate - Target plan date in YYYY-MM-DD format
+ * @returns Adjusted date in YYYY-MM-DD format
+ */
+export function adjustDueDateToMonth(
+  sourceDueDate: string,
+  targetPlanDate: string,
+): string {
+  const sourceDay = parseInt(sourceDueDate.split('-')[2], 10)
+  const [targetYear, targetMonth] = targetPlanDate.split('-').map(Number)
+
+  // Get last day of target month
+  const lastDayOfMonth = new Date(targetYear, targetMonth, 0).getDate()
+  const adjustedDay = Math.min(sourceDay, lastDayOfMonth)
+
+  return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(adjustedDay).padStart(2, '0')}`
+}

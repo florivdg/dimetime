@@ -47,8 +47,14 @@ const newType = ref<'income' | 'expense'>('expense')
 const newRecurrence = ref<
   'einmalig' | 'monatlich' | 'vierteljährlich' | 'jährlich'
 >('monatlich')
+const newStartMonth = ref(getCurrentMonth())
 const newEndDate = ref('')
 const newCategoryId = ref<string | null>(null)
+
+function getCurrentMonth(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
 
 function resetForm() {
   newName.value = ''
@@ -56,6 +62,7 @@ function resetForm() {
   newAmount.value = 0
   newType.value = 'expense'
   newRecurrence.value = 'monatlich'
+  newStartMonth.value = getCurrentMonth()
   newEndDate.value = ''
   newCategoryId.value = null
 }
@@ -79,6 +86,7 @@ async function handleSubmit() {
         amount: Math.round(newAmount.value * 100),
         type: newType.value,
         recurrence: newRecurrence.value,
+        startMonth: newStartMonth.value || null,
         endDate: newEndDate.value || null,
         categoryId: newCategoryId.value,
       }),
@@ -204,6 +212,19 @@ async function handleSubmit() {
               <SelectItem value="jährlich">Jährlich</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <div class="space-y-2">
+          <Label for="new-start-month">Startmonat</Label>
+          <Input
+            id="new-start-month"
+            v-model="newStartMonth"
+            type="month"
+            required
+          />
+          <p class="text-muted-foreground text-xs">
+            Ab welchem Monat soll diese Vorlage gelten?
+          </p>
         </div>
 
         <div class="space-y-2">

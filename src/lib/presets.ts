@@ -54,6 +54,7 @@ export interface CreatePresetInput {
   type?: 'income' | 'expense'
   amount: number
   recurrence?: 'einmalig' | 'monatlich' | 'vierteljährlich' | 'jährlich'
+  startMonth?: string | null // YYYY-MM format
   endDate?: string | null
   categoryId?: string | null
 }
@@ -65,6 +66,7 @@ export interface UpdatePresetInput {
   type?: 'income' | 'expense'
   amount?: number
   recurrence?: 'einmalig' | 'monatlich' | 'vierteljährlich' | 'jährlich'
+  startMonth?: string | null // YYYY-MM format
   endDate?: string | null
   categoryId?: string | null
 }
@@ -205,6 +207,11 @@ export async function getPresetById(
   return results[0]
 }
 
+function getCurrentMonth(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
 /**
  * Create a new preset
  */
@@ -222,6 +229,7 @@ export async function createPreset(
       type: input.type || 'expense',
       amount: input.amount,
       recurrence: input.recurrence || 'einmalig',
+      startMonth: input.startMonth || getCurrentMonth(),
       endDate: input.endDate || null,
       categoryId: input.categoryId || null,
       userId,
@@ -247,6 +255,7 @@ export async function updatePreset(
   if (input.type !== undefined) updateData.type = input.type
   if (input.amount !== undefined) updateData.amount = input.amount
   if (input.recurrence !== undefined) updateData.recurrence = input.recurrence
+  if (input.startMonth !== undefined) updateData.startMonth = input.startMonth
   if (input.endDate !== undefined) updateData.endDate = input.endDate
   if (input.categoryId !== undefined) updateData.categoryId = input.categoryId
 
@@ -329,4 +338,100 @@ export function isPresetExpired(preset: TransactionPreset): boolean {
 
   const today = getLocalDateString()
   return preset.endDate < today
+}
+
+/**
+ * Check if a preset matches a plan month based on recurrence rules
+ * @param preset - The preset to check
+ * @param planMonth - Plan month in YYYY-MM format
+ * @returns true if preset matches the plan month
+ */
+export function presetMatchesPlanMonth(
+  preset: TransactionPreset,
+  planMonth: string,
+): boolean {
+  const startMonth = preset.startMonth
+  if (!startMonth) return true // No startMonth = always matches (legacy presets)
+
+  // Check if expired
+  if (preset.endDate) {
+    const endMonth = preset.endDate.substring(0, 7) // YYYY-MM from YYYY-MM-DD
+    if (planMonth > endMonth) return false
+  }
+
+  // Check if plan is before start month
+  if (planMonth < startMonth) return false
+
+  switch (preset.recurrence) {
+    case 'einmalig':
+      return planMonth === startMonth
+
+    case 'monatlich':
+      return planMonth >= startMonth
+
+    case 'vierteljährlich': {
+      // Calculate months between startMonth and planMonth
+      const [startYear, startMonthNum] = startMonth.split('-').map(Number)
+      const [planYear, planMonthNum] = planMonth.split('-').map(Number)
+      const monthsDiff =
+        (planYear - startYear) * 12 + (planMonthNum - startMonthNum)
+      return monthsDiff >= 0 && monthsDiff % 3 === 0
+    }
+
+    case 'jährlich': {
+      // Same month of the year, on or after start
+      const startMonthNum = parseInt(startMonth.split('-')[1], 10)
+      const planMonthNum = parseInt(planMonth.split('-')[1], 10)
+      return planMonthNum === startMonthNum && planMonth >= startMonth
+    }
+
+    default:
+      return false
+  }
+}
+
+/**
+ * Get all presets with match status for a specific plan month
+ */
+export async function getPresetsWithMatchStatus(
+  userId: string,
+  planMonth: string,
+): Promise<(PresetWithTags & { isMatching: boolean })[]> {
+  const { presets } = await getPresets(userId, {
+    includeExpired: false,
+    limit: -1,
+    sortBy: 'name',
+    sortDir: 'asc',
+  })
+
+  return presets.map((preset) => ({
+    ...preset,
+    isMatching: presetMatchesPlanMonth(preset, planMonth),
+  }))
+}
+
+/**
+ * Apply multiple presets to a plan at once
+ * @returns Array of created transactions and count
+ */
+export async function applyMultiplePresetsToPlan(
+  presetIds: string[],
+  input: ApplyPresetInput,
+): Promise<{ transactions: unknown[]; count: number }> {
+  const transactions: unknown[] = []
+
+  for (const presetId of presetIds) {
+    try {
+      const transaction = await applyPresetToPlan(presetId, input)
+      transactions.push(transaction)
+    } catch (error) {
+      // Log error but continue with other presets
+      console.error(`Failed to apply preset ${presetId}:`, error)
+    }
+  }
+
+  return {
+    transactions,
+    count: transactions.length,
+  }
 }
