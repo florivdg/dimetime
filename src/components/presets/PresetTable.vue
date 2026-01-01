@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import type { Category } from '@/lib/categories'
 import type { PresetWithTags } from '@/lib/presets'
 import { formatAmount, formatRecurrence } from '@/lib/format'
@@ -23,7 +23,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ArrowDown, ArrowUp, Clock, Edit2, Play, Trash2 } from 'lucide-vue-next'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Clock,
+  Edit2,
+  Play,
+  Trash2,
+} from 'lucide-vue-next'
 import PresetEditDialog from './PresetEditDialog.vue'
 import PresetApplyDialog from './PresetApplyDialog.vue'
 
@@ -144,12 +152,10 @@ function formatLastUsed(timestamp: Date | string | number | null): string {
   }).format(date)
 }
 
-const SortIcon = computed(() => {
-  return (column: string) => {
-    if (props.sortBy !== column) return null
-    return props.sortDir === 'asc' ? ArrowUp : ArrowDown
-  }
-})
+function getSortIcon(column: string) {
+  if (props.sortBy !== column) return ArrowUpDown
+  return props.sortDir === 'asc' ? ArrowUp : ArrowDown
+}
 </script>
 
 <template>
@@ -169,50 +175,41 @@ const SortIcon = computed(() => {
               <Button
                 variant="ghost"
                 size="sm"
-                class="h-8 px-2"
+                class="-ml-3"
                 @click="handleSort('name')"
               >
                 Name
-                <component
-                  :is="SortIcon('name')"
-                  v-if="SortIcon('name')"
-                  class="ml-1 size-4"
-                />
+                <component :is="getSortIcon('name')" class="ml-2 size-4" />
               </Button>
             </TableHead>
-            <TableHead>
+            <TableHead class="w-36">
               <Button
                 variant="ghost"
                 size="sm"
-                class="h-8 px-2"
+                class="-ml-3"
                 @click="handleSort('amount')"
               >
                 Betrag
-                <component
-                  :is="SortIcon('amount')"
-                  v-if="SortIcon('amount')"
-                  class="ml-1 size-4"
-                />
+                <component :is="getSortIcon('amount')" class="ml-2 size-4" />
               </Button>
             </TableHead>
             <TableHead>Kategorie</TableHead>
             <TableHead>Wiederholung</TableHead>
-            <TableHead>
+            <TableHead class="w-40">
               <Button
                 variant="ghost"
                 size="sm"
-                class="h-8 px-2"
+                class="-ml-3"
                 @click="handleSort('lastUsedAt')"
               >
                 Zuletzt verwendet
                 <component
-                  :is="SortIcon('lastUsedAt')"
-                  v-if="SortIcon('lastUsedAt')"
-                  class="ml-1 size-4"
+                  :is="getSortIcon('lastUsedAt')"
+                  class="ml-2 size-4"
                 />
               </Button>
             </TableHead>
-            <TableHead class="text-right">Aktionen</TableHead>
+            <TableHead class="w-24 text-right">Aktionen</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -234,20 +231,23 @@ const SortIcon = computed(() => {
                 </Badge>
               </div>
             </TableCell>
-            <TableCell>
+            <TableCell class="w-36">
               <span
                 :class="
-                  preset.type === 'income' ? 'text-green-600' : 'text-red-600'
+                  preset.type === 'income'
+                    ? 'text-lime-600 dark:text-lime-400'
+                    : 'text-rose-600 dark:text-rose-400'
                 "
               >
-                {{ formatAmount(preset.amount) }}
+                {{ preset.type === 'income' ? '+' : '-'
+                }}{{ formatAmount(preset.amount) }}
               </span>
             </TableCell>
             <TableCell>
               <div v-if="preset.categoryName" class="flex items-center gap-2">
-                <div
+                <span
                   v-if="preset.categoryColor"
-                  class="size-3 rounded-full"
+                  class="size-3 shrink-0 rounded-full"
                   :style="{ backgroundColor: preset.categoryColor }"
                 />
                 {{ preset.categoryName }}
