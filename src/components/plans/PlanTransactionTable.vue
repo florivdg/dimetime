@@ -27,6 +27,7 @@ import {
   ArrowRightLeft,
   ArrowUp,
   ArrowUpDown,
+  FileStack,
   Loader2,
   Lock,
   Pencil,
@@ -47,6 +48,7 @@ const props = defineProps<{
   searchQuery: string
   sortBy: 'name' | 'dueDate' | 'categoryName' | 'amount'
   sortDir: 'asc' | 'desc'
+  isArchived?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +58,7 @@ const emit = defineEmits<{
   error: [message: string]
   sort: [column: 'name' | 'dueDate' | 'categoryName' | 'amount']
   toggleDone: [id: string, isDone: boolean]
+  fillFromPresets: []
 }>()
 
 async function deleteTransaction(id: string) {
@@ -106,7 +109,11 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
     class="py-8 text-center"
   >
     <Receipt class="text-muted-foreground mx-auto mb-4 size-12" />
-    <p class="text-muted-foreground">Keine Transaktionen vorhanden.</p>
+    <p class="text-muted-foreground mb-4">Keine Transaktionen vorhanden.</p>
+    <Button v-if="!props.isArchived" @click="emit('fillFromPresets')">
+      <FileStack class="size-4" />
+      Mit Vorlagen füllen
+    </Button>
   </div>
 
   <!-- No results -->

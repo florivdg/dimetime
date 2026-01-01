@@ -10,6 +10,11 @@ const updateSchema = z.object({
   recurrence: z
     .enum(['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'])
     .optional(),
+  startMonth: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .nullable()
+    .optional(),
   endDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
