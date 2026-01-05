@@ -82,44 +82,32 @@ labels:
 
 ## Database Backups
 
-DimeTime uses SQLite with WAL (Write-Ahead Logging) mode. The database consists of three files:
+DimeTime uses SQLite with WAL (Write-Ahead Logging) mode. A backup script is provided that creates atomic backups without requiring downtime.
 
-- `sqlite.db` - Main database file
-- `sqlite.db-wal` - Write-ahead log
-- `sqlite.db-shm` - Shared memory file
+### Creating a Backup
 
-### Backup Strategy
+The `backup-db.sh` script uses SQLite's `.backup` command via a temporary Alpine container (since the app container is distroless). This is safe to run while the application is running.
 
-**Important:** Always back up all three files together for consistency.
+```bash
+# Download the backup script
+curl -o backup-db.sh https://raw.githubusercontent.com/florivdg/dimetime/main/scripts/backup-db.sh
+chmod +x backup-db.sh
 
-1. **Locate the data volume:**
+# Create a backup (saved to ./backups/)
+./backup-db.sh
 
-   ```bash
-   docker volume inspect dimetime_dimetime-data
-   ```
+# Or specify a custom backup directory
+./backup-db.sh /mnt/backups
+```
 
-2. **Create a backup:**
+Backups are saved as `dimetime-YYYYMMDD-HHMMSS.db`.
 
-   ```bash
-   # Stop the container for consistent backup
-   docker compose stop
+### Automated Backups
 
-   # Copy the database files
-   docker run --rm \
-     -v dimetime_dimetime-data:/data \
-     -v $(pwd)/backups:/backup \
-     alpine tar czf /backup/dimetime-$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
-
-   # Restart the container
-   docker compose start
-   ```
-
-3. **Automated backups (cron example):**
-
-   ```bash
-   # Add to crontab -e
-   0 3 * * * cd /opt/dimetime && ./backup.sh
-   ```
+```bash
+# Add to crontab -e
+0 3 * * * cd /opt/dimetime && ./backup-db.sh /mnt/backups
+```
 
 ### Restore from Backup
 
@@ -129,7 +117,7 @@ docker compose stop
 docker run --rm \
   -v dimetime_dimetime-data:/data \
   -v $(pwd)/backups:/backup \
-  alpine sh -c "rm -rf /data/* && tar xzf /backup/dimetime-YYYYMMDD-HHMMSS.tar.gz -C /data"
+  alpine sh -c "rm -rf /data/* && cp /backup/dimetime-YYYYMMDD-HHMMSS.db /data/sqlite.db"
 
 docker compose start
 ```
