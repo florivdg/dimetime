@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { getAllSettings } from '@/lib/settings'
 import { defineMiddleware } from 'astro:middleware'
 
 export const onRequest = defineMiddleware(async (context, next) => {
@@ -27,35 +28,27 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return next()
   }
 
-  // Allow 2FA setup page (auth required, 2FA not required)
-  if (pathname === '/2fa/setup') {
-    const session = await auth.api.getSession({
-      headers: context.request.headers,
-    })
-    if (!session) {
-      return context.redirect('/login')
-    }
-    context.locals.user = session.user
-    context.locals.session = session.session
-    return next()
-  }
+  // All remaining routes require authentication - get session ONCE
+  const session = await auth.api.getSession({
+    headers: context.request.headers,
+  })
 
-  // Protect all other API routes (check BEFORE general page protection)
-  if (pathname.startsWith('/api/')) {
-    const session = await auth.api.getSession({
-      headers: context.request.headers,
-    })
-
-    if (!session) {
+  // Handle unauthenticated requests
+  if (!session) {
+    if (pathname.startsWith('/api/')) {
       return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    const redirectTo = encodeURIComponent(pathname + context.url.search)
+    return context.redirect(`/login?redirectTo=${redirectTo}`)
+  }
 
-    // Block API access for users without 2FA enabled
-    const user = session.user as { twoFactorEnabled?: boolean }
-    if (!user.twoFactorEnabled) {
+  // Check 2FA requirement (except for /2fa/setup which is where they set it up)
+  const user = session.user as { twoFactorEnabled?: boolean }
+  if (!user.twoFactorEnabled && pathname !== '/2fa/setup') {
+    if (pathname.startsWith('/api/')) {
       return new Response(
         JSON.stringify({ error: '2FA-Einrichtung erforderlich' }),
         {
@@ -64,29 +57,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
         },
       )
     }
-
-    context.locals.user = session.user
-    context.locals.session = session.session
-    return next()
-  }
-
-  // Protect all pages (fallback for everything else)
-  const session = await auth.api.getSession({
-    headers: context.request.headers,
-  })
-
-  if (!session) {
-    const redirectTo = encodeURIComponent(pathname + context.url.search)
-    return context.redirect(`/login?redirectTo=${redirectTo}`)
-  }
-
-  // Enforce 2FA setup for authenticated users
-  const user = session.user as { twoFactorEnabled?: boolean }
-  if (!user.twoFactorEnabled) {
     return context.redirect('/2fa/setup')
   }
 
+  // Set locals for all authenticated routes - ONCE
   context.locals.user = session.user
   context.locals.session = session.session
+  context.locals.userSettings = await getAllSettings(session.user.id)
   return next()
 })

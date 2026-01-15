@@ -63,7 +63,6 @@ const isAdvancedOpen = ref(false)
 const advancedFilterCount = computed(() => {
   let count = 0
   if (filters.value.type !== null) count++
-  if (filters.value.isDone !== null) count++
   if (filters.value.dateFrom !== '') count++
   if (filters.value.dateTo !== '') count++
   if (filters.value.amountMin !== '') count++
@@ -75,6 +74,7 @@ const hasActiveFilters = computed(() => {
   return (
     filters.value.search !== '' ||
     filters.value.categoryId !== null ||
+    filters.value.isDone !== null ||
     advancedFilterCount.value > 0
   )
 })
@@ -105,9 +105,9 @@ function resetFilters() {
 
 <template>
   <Collapsible v-model:open="isAdvancedOpen" class="space-y-4">
-    <!-- Row 1: Search, Category, and Advanced Toggle -->
+    <!-- Row 1: Search, Category, Status, and Advanced Toggle -->
     <div class="flex flex-wrap items-center gap-4">
-      <div class="min-w-[200px] flex-1">
+      <div class="min-w-30 flex-1">
         <Label for="filter-search" class="sr-only">Suchen</Label>
         <div class="relative">
           <Search
@@ -117,13 +117,13 @@ function resetFilters() {
             id="filter-search"
             v-model="filters.search"
             type="search"
-            placeholder="Transaktion suchen..."
+            placeholder="Suchen..."
             class="pl-9"
           />
         </div>
       </div>
 
-      <div class="w-[180px]">
+      <div class="w-45">
         <Label for="filter-category" class="sr-only">Kategorie</Label>
         <Select v-model="filters.categoryId">
           <SelectTrigger id="filter-category">
@@ -136,6 +136,36 @@ function resetFilters() {
             </SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div class="bg-background flex rounded-md border">
+        <Button
+          variant="ghost"
+          size="sm"
+          class="rounded-r-none border-r"
+          :class="{ 'bg-accent': filters.isDone === null }"
+          @click="setStatus(null)"
+        >
+          Alle
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="rounded-none border-r"
+          :class="{ 'bg-accent': filters.isDone === false }"
+          @click="setStatus(false)"
+        >
+          Offen
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="rounded-l-none"
+          :class="{ 'bg-accent': filters.isDone === true }"
+          @click="setStatus(true)"
+        >
+          Erledigt
+        </Button>
       </div>
 
       <CollapsibleTrigger as-child>
@@ -169,7 +199,7 @@ function resetFilters() {
     <!-- Advanced Filters (Collapsible) -->
     <CollapsibleContent>
       <div class="bg-muted/50 space-y-4 rounded-lg border p-4">
-        <!-- Type and Status -->
+        <!-- Type and Zero Value -->
         <div class="flex flex-wrap gap-4">
           <div>
             <Label class="text-muted-foreground mb-1.5 block text-xs"
@@ -207,41 +237,6 @@ function resetFilters() {
           </div>
 
           <div>
-            <Label class="text-muted-foreground mb-1.5 block text-xs"
-              >Status</Label
-            >
-            <div class="bg-background flex rounded-md border">
-              <Button
-                variant="ghost"
-                size="sm"
-                class="rounded-r-none border-r"
-                :class="{ 'bg-accent': filters.isDone === null }"
-                @click="setStatus(null)"
-              >
-                Alle
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                class="rounded-none border-r"
-                :class="{ 'bg-accent': filters.isDone === false }"
-                @click="setStatus(false)"
-              >
-                Offen
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                class="rounded-l-none"
-                :class="{ 'bg-accent': filters.isDone === true }"
-                @click="setStatus(true)"
-              >
-                Erledigt
-              </Button>
-            </div>
-          </div>
-
-          <div>
             <Label class="text-muted-foreground mb-1.5 block text-xs">
               Nullwerte
             </Label>
@@ -273,7 +268,7 @@ function resetFilters() {
                 id="filter-date-from"
                 v-model="filters.dateFrom"
                 type="date"
-                class="bg-background w-[150px]"
+                class="bg-background w-37.5"
               />
             </div>
             <div>
@@ -284,7 +279,7 @@ function resetFilters() {
                 id="filter-date-to"
                 v-model="filters.dateTo"
                 type="date"
-                class="bg-background w-[150px]"
+                class="bg-background w-37.5"
               />
             </div>
           </div>
@@ -303,7 +298,7 @@ function resetFilters() {
                 step="0.01"
                 min="0"
                 placeholder="0,00"
-                class="bg-background w-[120px]"
+                class="bg-background w-30"
               />
             </div>
             <div>
@@ -319,7 +314,7 @@ function resetFilters() {
                 step="0.01"
                 min="0"
                 placeholder="0,00"
-                class="bg-background w-[120px]"
+                class="bg-background w-30"
               />
             </div>
           </div>

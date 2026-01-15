@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { authClient } from '@/lib/auth-client'
 import { getSafeRedirectUrl } from '@/lib/redirect'
+import { syncSettingsToLocalStorage } from '@/lib/sync-settings'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -50,6 +51,7 @@ async function verifyTotp() {
       return
     }
 
+    await syncSettingsToLocalStorage()
     window.location.href = getSafeRedirectUrl(props.redirectTo)
   } catch {
     errorMessage.value = 'Ein Fehler ist aufgetreten'
@@ -78,6 +80,7 @@ async function verifyBackupCode() {
       return
     }
 
+    await syncSettingsToLocalStorage()
     window.location.href = getSafeRedirectUrl(props.redirectTo)
   } catch {
     errorMessage.value = 'Ein Fehler ist aufgetreten'
