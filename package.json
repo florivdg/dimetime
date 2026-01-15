@@ -14,15 +14,15 @@
   "dependencies": {
     "@astrojs/check": "^0.9.6",
     "@astrojs/node": "^9.5.1",
-    "@astrojs/vue": "^5.1.3",
-    "@better-auth/passkey": "^1.4.10",
+    "@astrojs/vue": "5.1.4",
+    "@better-auth/passkey": "^1.4.13",
     "@lowlighter/qrcode": "^2.0.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/vue-table": "^8.21.3",
     "@unovis/vue": "^1.6.2",
     "@vueuse/core": "^14.1.0",
-    "astro": "5.16.6",
-    "better-auth": "^1.4.10",
+    "astro": "5.16.9",
+    "better-auth": "^1.4.13",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
@@ -38,12 +38,15 @@
     "zod": "4.3.5"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.5",
+    "@types/bun": "^1.3.6",
     "drizzle-kit": "^0.31.8",
-    "oxlint": "^1.37.0",
-    "oxlint-tsgolint": "^0.10.1",
-    "prettier": "^3.7.4",
+    "oxlint": "^1.39.0",
+    "oxlint-tsgolint": "^0.11.1",
+    "prettier": "^3.8.0",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.7.2"
-  }
+  },
+  "trustedDependencies": [
+    "maplibre-gl"
+  ]
 }
