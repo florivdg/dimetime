@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { authClient } from '@/lib/auth-client'
 import { cn } from '@/lib/utils'
 import { getSafeRedirectUrl } from '@/lib/redirect'
+import { syncSettingsToLocalStorage } from '@/lib/sync-settings'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -58,7 +59,8 @@ async function handlePasskeyLogin() {
   try {
     await authClient.signIn.passkey({
       fetchOptions: {
-        onSuccess: () => {
+        onSuccess: async () => {
+          await syncSettingsToLocalStorage()
           window.location.href = getSafeRedirectUrl(props.redirectTo)
         },
         onError: () => {
@@ -84,7 +86,8 @@ onMounted(async () => {
       authClient.signIn.passkey({
         autoFill: true,
         fetchOptions: {
-          onSuccess: () => {
+          onSuccess: async () => {
+            await syncSettingsToLocalStorage()
             window.location.href = getSafeRedirectUrl(props.redirectTo)
           },
         },
@@ -104,9 +107,10 @@ const onSubmit = form.handleSubmit(async (values) => {
         password: values.password,
       },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
           // When 2FA is required, twoFactorClient's onTwoFactorRedirect handles the redirect
           // This callback only fires for users without 2FA (or after 2FA is verified)
+          await syncSettingsToLocalStorage()
           window.location.href = getSafeRedirectUrl(props.redirectTo)
         },
         onError: (ctx) => {

@@ -3,13 +3,24 @@ import '@/styles/global.css'
 import { Font } from 'astro:assets'
 import 'vue-sonner/style.css'
 import { Toaster } from '@/components/ui/sonner'
+import { apiToLocalTheme } from '@/lib/sync-settings'
+
+const serverTheme = Astro.locals.userSettings?.themePreference ?? null
+const localStorageTheme = serverTheme ? apiToLocalTheme(serverTheme) : null
 ---
 
 <html lang="de">
   <head>
-    <script is:inline>
+    <script is:inline define:vars={{ localStorageTheme }}>
       ;(function () {
-        const stored = localStorage.getItem('vueuse-color-scheme')
+        let stored = localStorage.getItem('vueuse-color-scheme')
+
+        // Server theme takes precedence - sync to localStorage
+        if (localStorageTheme) {
+          localStorage.setItem('vueuse-color-scheme', localStorageTheme)
+          stored = localStorageTheme
+        }
+
         let isDark = true // default to dark
         if (stored === 'auto') {
           isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
