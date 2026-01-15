@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.2.0...v0.3.0)
+
+### 🚀 Enhancements
+
+- **settings:** Sync user settings to localStorage after authentication ([#4](https://github.com/florivdg/dimetime/issues/4))
+- **filters:** Enhance transaction filters with status options and UI adjustments ([2a4af0b](https://github.com/florivdg/dimetime/commit/2a4af0b))
+
+### 📖 Documentation
+
+- **deployment:** Update backup instructions and add backup script ([cfaf3a2](https://github.com/florivdg/dimetime/commit/cfaf3a2))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.2.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.1.0...v0.2.0)
