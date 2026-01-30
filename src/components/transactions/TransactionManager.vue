@@ -32,6 +32,9 @@ import {
 } from '@/components/ui/pagination'
 import { Button } from '@/components/ui/button'
 import { Receipt, Search, X } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
+import PresetCreateDialog from '@/components/presets/PresetCreateDialog.vue'
+import type { PresetInitialValues } from '@/components/presets/PresetCreateDialog.vue'
 import TransactionTable from './TransactionTable.vue'
 
 const props = defineProps<{
@@ -160,6 +163,25 @@ const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
 const pagination = ref(props.initialPagination)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
+
+// Preset dialog state
+const presetDialogOpen = ref(false)
+const presetInitialValues = ref<PresetInitialValues | undefined>(undefined)
+
+function handleSaveAsPreset(transaction: TransactionWithCategory) {
+  presetInitialValues.value = {
+    name: transaction.name,
+    note: transaction.note,
+    amount: transaction.amount,
+    type: transaction.type,
+    categoryId: transaction.categoryId,
+  }
+  presetDialogOpen.value = true
+}
+
+function handlePresetCreated() {
+  toast.success('Vorlage erstellt')
+}
 
 const hasActiveFilters = computed(
   () =>
@@ -315,6 +337,7 @@ function resetFilters() {
         @deleted="handleDeleted"
         @error="handleError"
         @sort="handleSort"
+        @save-as-preset="handleSaveAsPreset"
       />
 
       <!-- Pagination -->
@@ -346,6 +369,14 @@ function resetFilters() {
           </PaginationContent>
         </Pagination>
       </div>
+      <!-- Preset Create Dialog (no trigger, controlled via v-model) -->
+      <PresetCreateDialog
+        v-model:open="presetDialogOpen"
+        :categories="categories"
+        :initial-values="presetInitialValues"
+        @created="handlePresetCreated"
+        @error="handleError"
+      />
     </CardContent>
   </Card>
 </template>

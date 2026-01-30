@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, X } from 'lucide-vue-next'
+import { Loader2, Plus, X } from 'lucide-vue-next'
 import PresetCreateDialog from './PresetCreateDialog.vue'
 import PresetTable from './PresetTable.vue'
 
@@ -177,7 +177,12 @@ function showError(message: string) {
         :categories="categories"
         @created="loadPresets"
         @error="showError"
-      />
+      >
+        <Button>
+          <Plus class="size-4" />
+          Neue Vorlage
+        </Button>
+      </PresetCreateDialog>
     </div>
 
     <div class="flex flex-wrap items-center gap-2">

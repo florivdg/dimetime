@@ -14,8 +14,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -42,10 +48,12 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  BookmarkPlus,
   Check,
   Loader2,
   Lock,
   Minus,
+  MoreVertical,
   Pencil,
   Plus,
   Receipt,
@@ -74,7 +82,17 @@ const emit = defineEmits<{
   deleted: []
   error: [message: string]
   sort: [column: 'name' | 'dueDate' | 'categoryName' | 'amount']
+  saveAsPreset: [transaction: TransactionWithCategory]
 }>()
+
+// Delete dialog state
+const deleteDialogOpen = ref(false)
+const transactionToDelete = ref<TransactionWithCategory | null>(null)
+
+function openDeleteDialog(transaction: TransactionWithCategory) {
+  transactionToDelete.value = transaction
+  deleteDialogOpen.value = true
+}
 
 // Edit input refs
 const { setEditInputRef, focusEditInputAsync } = useEditInputRefs()
@@ -419,45 +437,61 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
                 <span class="sr-only">Abbrechen</span>
               </Button>
             </div>
-            <!-- Normal mode: show edit/delete buttons -->
-            <div v-else class="flex justify-end gap-1">
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                title="Bearbeiten"
-                @click="startEditing(transaction)"
-              >
-                <Pencil class="size-4" />
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger as-child>
-                  <Button size="icon-sm" variant="ghost" title="Löschen">
-                    <Trash2 class="size-4" />
+            <!-- Normal mode: show dropdown menu -->
+            <div v-else class="flex justify-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <Button size="icon-sm" variant="ghost">
+                    <MoreVertical class="size-4" />
+                    <span class="sr-only">Aktionen</span>
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Transaktion löschen?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Möchten Sie die Transaktion "{{ transaction.name }}"
-                      wirklich löschen? Diese Aktion kann nicht rückgängig
-                      gemacht werden.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                    <AlertDialogAction
-                      @click="deleteTransaction(transaction.id)"
-                    >
-                      Löschen
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem @click="startEditing(transaction)">
+                    <Pencil class="size-4" />
+                    Bearbeiten
+                  </DropdownMenuItem>
+                  <DropdownMenuItem @click="emit('saveAsPreset', transaction)">
+                    <BookmarkPlus class="size-4" />
+                    Als Vorlage speichern
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    class="text-destructive focus:text-destructive"
+                    @click="openDeleteDialog(transaction)"
+                  >
+                    <Trash2 class="size-4" />
+                    Löschen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </TableCell>
         </TableRow>
       </TableBody>
     </Table>
   </div>
+
+  <!-- Delete confirmation dialog -->
+  <AlertDialog v-model:open="deleteDialogOpen">
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Transaktion löschen?</AlertDialogTitle>
+        <AlertDialogDescription>
+          Möchten Sie die Transaktion "{{ transactionToDelete?.name }}" wirklich
+          löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+        <AlertDialogAction
+          @click="
+            transactionToDelete && deleteTransaction(transactionToDelete.id)
+          "
+        >
+          Löschen
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>

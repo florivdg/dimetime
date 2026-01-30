@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { Category } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,8 +28,17 @@ import {
 } from '@/components/ui/select'
 import { Loader2, Minus, Plus } from 'lucide-vue-next'
 
+export interface PresetInitialValues {
+  name: string
+  note: string | null
+  amount: number // in cents
+  type: 'income' | 'expense'
+  categoryId: string | null
+}
+
 const props = defineProps<{
   categories: Category[]
+  initialValues?: PresetInitialValues
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
@@ -66,6 +75,21 @@ function resetForm() {
   newEndDate.value = ''
   newCategoryId.value = null
 }
+
+watch(open, (isOpen) => {
+  if (isOpen && props.initialValues) {
+    newName.value = props.initialValues.name
+    newNote.value = props.initialValues.note ?? ''
+    newAmount.value = props.initialValues.amount / 100
+    newType.value = props.initialValues.type
+    newCategoryId.value = props.initialValues.categoryId
+    newRecurrence.value = 'monatlich'
+    newStartMonth.value = getCurrentMonth()
+    newEndDate.value = ''
+  } else if (isOpen) {
+    resetForm()
+  }
+})
 
 function toggleType() {
   newType.value = newType.value === 'income' ? 'expense' : 'income'
@@ -115,17 +139,20 @@ async function handleSubmit() {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogTrigger as-child>
-      <Button>
-        <Plus class="size-4" />
-        Neue Vorlage
-      </Button>
+    <DialogTrigger v-if="$slots.default" as-child>
+      <slot />
     </DialogTrigger>
     <DialogContent class="sm:max-w-md">
       <DialogHeader>
-        <DialogTitle>Neue Vorlage</DialogTitle>
+        <DialogTitle>
+          {{ initialValues ? 'Vorlage aus Transaktion' : 'Neue Vorlage' }}
+        </DialogTitle>
         <DialogDescription>
-          Erstellen Sie eine Vorlage für wiederkehrende Transaktionen.
+          {{
+            initialValues
+              ? 'Erstellen Sie eine Vorlage basierend auf einer bestehenden Transaktion.'
+              : 'Erstellen Sie eine Vorlage für wiederkehrende Transaktionen.'
+          }}
         </DialogDescription>
       </DialogHeader>
       <form class="space-y-4" @submit.prevent="handleSubmit">

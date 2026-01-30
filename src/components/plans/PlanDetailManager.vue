@@ -26,6 +26,8 @@ import PlanTransactionTable from './PlanTransactionTable.vue'
 import TransactionEditDialog from '@/components/transactions/TransactionEditDialog.vue'
 import TransactionCreateDialog from '@/components/transactions/TransactionCreateDialog.vue'
 import TransactionMoveDialog from '@/components/transactions/TransactionMoveDialog.vue'
+import PresetCreateDialog from '@/components/presets/PresetCreateDialog.vue'
+import type { PresetInitialValues } from '@/components/presets/PresetCreateDialog.vue'
 import FillFromPresetsDialog from '@/components/presets/FillFromPresetsDialog.vue'
 import CopyFromPlanDialog from '@/components/transactions/CopyFromPlanDialog.vue'
 import { Button } from '@/components/ui/button'
@@ -183,6 +185,10 @@ const transactionToMove = ref<TransactionWithCategory | null>(null)
 
 // Fill from presets dialog state
 const fillFromPresetsDialogOpen = ref(false)
+
+// Preset dialog state
+const presetDialogOpen = ref(false)
+const presetInitialValues = ref<PresetInitialValues | undefined>(undefined)
 
 // Copy from plan dialog state
 const copyFromPlanDialogOpen = ref(false)
@@ -353,6 +359,21 @@ function handleSort(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
   }
 }
 
+function handleSaveAsPreset(transaction: TransactionWithCategory) {
+  presetInitialValues.value = {
+    name: transaction.name,
+    note: transaction.note,
+    amount: transaction.amount,
+    type: transaction.type,
+    categoryId: transaction.categoryId,
+  }
+  presetDialogOpen.value = true
+}
+
+function handlePresetCreated() {
+  toast.success('Vorlage erstellt')
+}
+
 function handleFillFromPresets() {
   fillFromPresetsDialogOpen.value = true
 }
@@ -468,6 +489,7 @@ function handleFilterReset() {
       @sort="handleSort"
       @toggle-done="handleToggleDone"
       @fill-from-presets="handleFillFromPresets"
+      @save-as-preset="handleSaveAsPreset"
     />
 
     <!-- Edit Dialog -->
@@ -503,6 +525,15 @@ function handleFilterReset() {
       :plan-id="plan.id"
       :plan-date="plan.date"
       @copied="handleTransactionsCopied"
+      @error="handleError"
+    />
+
+    <!-- Preset Create Dialog (no trigger, controlled via v-model) -->
+    <PresetCreateDialog
+      v-model:open="presetDialogOpen"
+      :categories="categories"
+      :initial-values="presetInitialValues"
+      @created="handlePresetCreated"
       @error="handleError"
     />
   </div>
