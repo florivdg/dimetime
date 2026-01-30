@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.3.0...v0.4.0)
+
+### 🚀 Enhancements
+
+- **presets:** Add functionality to save transactions as presets and manage preset creation ([4c3dc30](https://github.com/florivdg/dimetime/commit/4c3dc30))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.3.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.2.0...v0.3.0)
