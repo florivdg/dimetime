@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.4.0...v0.5.0)
+
+### 🚀 Enhancements
+
+- **presets:** Add dayOfMonth field for custom due dates ([5eaf37b](https://github.com/florivdg/dimetime/commit/5eaf37b))
+
+### 🎨 Styles
+
+- **presets:** Use compact 2-column grid layout in create/edit dialogs ([cc3efb6](https://github.com/florivdg/dimetime/commit/cc3efb6))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.4.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.3.0...v0.4.0)
