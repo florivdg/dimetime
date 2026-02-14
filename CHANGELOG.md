@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.1
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.5.0...v0.5.1)
+
+### 🚀 Enhancements
+
+- **config:** Enhance security settings with allowed domains and hosts ([3d06eea](https://github.com/florivdg/dimetime/commit/3d06eea))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.5.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.4.0...v0.5.0)
