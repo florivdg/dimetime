@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   InputGroup,
   InputGroupAddon,
@@ -59,6 +60,7 @@ const newRecurrence = ref<
 const newStartMonth = ref(getCurrentMonth())
 const newEndDate = ref('')
 const newCategoryId = ref<string | null>(null)
+const newDayOfMonth = ref<number | null>(null)
 
 function getCurrentMonth(): string {
   const now = new Date()
@@ -74,6 +76,7 @@ function resetForm() {
   newStartMonth.value = getCurrentMonth()
   newEndDate.value = ''
   newCategoryId.value = null
+  newDayOfMonth.value = null
 }
 
 watch(open, (isOpen) => {
@@ -113,6 +116,7 @@ async function handleSubmit() {
         startMonth: newStartMonth.value || null,
         endDate: newEndDate.value || null,
         categoryId: newCategoryId.value,
+        dayOfMonth: newDayOfMonth.value,
       }),
     })
 
@@ -142,7 +146,7 @@ async function handleSubmit() {
     <DialogTrigger v-if="$slots.default" as-child>
       <slot />
     </DialogTrigger>
-    <DialogContent class="sm:max-w-md">
+    <DialogContent class="sm:max-w-lg">
       <DialogHeader>
         <DialogTitle>
           {{ initialValues ? 'Vorlage aus Transaktion' : 'Neue Vorlage' }}
@@ -168,95 +172,110 @@ async function handleSubmit() {
 
         <div class="space-y-2">
           <Label for="new-note">Notiz (optional)</Label>
-          <textarea
+          <Textarea
             id="new-note"
             v-model="newNote"
             placeholder="Zusätzliche Notizen..."
-            class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
 
-        <div class="space-y-2">
-          <Label>Betrag</Label>
-          <InputGroup>
-            <InputGroupAddon>
-              <InputGroupButton
-                type="button"
-                :class="
-                  newType === 'income'
-                    ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
-                    : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
-                "
-                @click="toggleType"
-              >
-                <Plus v-if="newType === 'income'" class="size-4" />
-                <Minus v-else class="size-4" />
-              </InputGroupButton>
-            </InputGroupAddon>
-            <InputGroupInput
-              v-model.number="newAmount"
+        <div class="grid grid-cols-2 gap-4">
+          <div class="space-y-2">
+            <Label>Betrag</Label>
+            <InputGroup>
+              <InputGroupAddon>
+                <InputGroupButton
+                  type="button"
+                  :class="
+                    newType === 'income'
+                      ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
+                      : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
+                  "
+                  @click="toggleType"
+                >
+                  <Plus v-if="newType === 'income'" class="size-4" />
+                  <Minus v-else class="size-4" />
+                </InputGroupButton>
+              </InputGroupAddon>
+              <InputGroupInput
+                v-model.number="newAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0,00"
+              />
+            </InputGroup>
+          </div>
+
+          <div class="space-y-2">
+            <Label for="new-category">Kategorie (optional)</Label>
+            <Select v-model="newCategoryId">
+              <SelectTrigger id="new-category">
+                <SelectValue placeholder="Kategorie wählen" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem :value="null">Keine Kategorie</SelectItem>
+                <SelectItem
+                  v-for="cat in categories"
+                  :key="cat.id"
+                  :value="cat.id"
+                >
+                  {{ cat.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="space-y-2">
+            <Label for="new-recurrence">Wiederholung</Label>
+            <Select v-model="newRecurrence">
+              <SelectTrigger id="new-recurrence">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="einmalig">Einmalig</SelectItem>
+                <SelectItem value="monatlich">Monatlich</SelectItem>
+                <SelectItem value="vierteljährlich">Vierteljährlich</SelectItem>
+                <SelectItem value="jährlich">Jährlich</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div class="space-y-2">
+            <Label for="new-day-of-month">Fälligkeitstag (optional)</Label>
+            <Input
+              id="new-day-of-month"
+              :model-value="newDayOfMonth ?? undefined"
               type="number"
-              step="0.01"
-              min="0"
-              placeholder="0,00"
+              min="1"
+              max="31"
+              placeholder="z.B. 15"
+              @update:model-value="
+                (v: string | number) =>
+                  (newDayOfMonth =
+                    v === '' || v === undefined ? null : Number(v))
+              "
             />
-          </InputGroup>
-          <p class="text-muted-foreground text-xs">
-            {{ newType === 'income' ? 'Einnahme' : 'Ausgabe' }} - Klicken Sie
-            auf das Symbol, um zu wechseln.
-          </p>
+          </div>
         </div>
 
-        <div class="space-y-2">
-          <Label for="new-category">Kategorie (optional)</Label>
-          <Select v-model="newCategoryId">
-            <SelectTrigger id="new-category">
-              <SelectValue placeholder="Kategorie wählen" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem :value="null">Keine Kategorie</SelectItem>
-              <SelectItem
-                v-for="cat in categories"
-                :key="cat.id"
-                :value="cat.id"
-              >
-                {{ cat.name }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="space-y-2">
+            <Label for="new-start-month">Startmonat</Label>
+            <Input
+              id="new-start-month"
+              v-model="newStartMonth"
+              type="month"
+              required
+            />
+          </div>
 
-        <div class="space-y-2">
-          <Label for="new-recurrence">Wiederholung</Label>
-          <Select v-model="newRecurrence">
-            <SelectTrigger id="new-recurrence">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="einmalig">Einmalig</SelectItem>
-              <SelectItem value="monatlich">Monatlich</SelectItem>
-              <SelectItem value="vierteljährlich">Vierteljährlich</SelectItem>
-              <SelectItem value="jährlich">Jährlich</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div class="space-y-2">
-          <Label for="new-start-month">Startmonat</Label>
-          <Input
-            id="new-start-month"
-            v-model="newStartMonth"
-            type="month"
-            required
-          />
-          <p class="text-muted-foreground text-xs">
-            Ab welchem Monat soll diese Vorlage gelten?
-          </p>
-        </div>
-
-        <div class="space-y-2">
-          <Label for="new-end-date">Enddatum (optional)</Label>
-          <Input id="new-end-date" v-model="newEndDate" type="date" />
+          <div class="space-y-2">
+            <Label for="new-end-date">Enddatum (optional)</Label>
+            <Input id="new-end-date" v-model="newEndDate" type="date" />
+          </div>
         </div>
 
         <DialogFooter>
