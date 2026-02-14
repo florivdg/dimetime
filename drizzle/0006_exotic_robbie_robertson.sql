@@ -1,0 +1,1 @@
+ALTER TABLE `transaction_preset` ADD `day_of_month` integer;

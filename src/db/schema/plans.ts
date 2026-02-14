@@ -134,6 +134,7 @@ export const transactionPreset = sqliteTable(
     categoryId: text('category_id').references(() => category.id, {
       onDelete: 'set null',
     }),
+    dayOfMonth: integer('day_of_month'), // 1-31, nullable; overrides plan date when applying
     lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })

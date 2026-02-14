@@ -255,7 +255,10 @@ function getSortIcon(column: string) {
               <span v-else class="text-muted-foreground">—</span>
             </TableCell>
             <TableCell>
-              {{ formatRecurrence(preset.recurrence) }}
+              {{ formatRecurrence(preset.recurrence)
+              }}<template v-if="preset.dayOfMonth">
+                (am {{ preset.dayOfMonth }}.)</template
+              >
             </TableCell>
             <TableCell>
               {{ formatLastUsed(preset.lastUsedAt) }}

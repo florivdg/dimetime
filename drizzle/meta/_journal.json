@@ -43,6 +43,13 @@
       "when": 1767263020233,
       "tag": "0005_far_wallow",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1771057875535,
+      "tag": "0006_exotic_robbie_robertson",
+      "breakpoints": true
     }
   ]
 }

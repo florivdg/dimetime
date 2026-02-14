@@ -57,6 +57,7 @@ export interface CreatePresetInput {
   startMonth?: string | null // YYYY-MM format
   endDate?: string | null
   categoryId?: string | null
+  dayOfMonth?: number | null // 1-31
 }
 
 // Update input type
@@ -69,6 +70,7 @@ export interface UpdatePresetInput {
   startMonth?: string | null // YYYY-MM format
   endDate?: string | null
   categoryId?: string | null
+  dayOfMonth?: number | null // 1-31
 }
 
 // Apply preset input type
@@ -232,6 +234,7 @@ export async function createPreset(
       startMonth: input.startMonth || getCurrentMonth(),
       endDate: input.endDate || null,
       categoryId: input.categoryId || null,
+      dayOfMonth: input.dayOfMonth ?? null,
       userId,
       createdAt: now,
       updatedAt: now,
@@ -258,6 +261,7 @@ export async function updatePreset(
   if (input.startMonth !== undefined) updateData.startMonth = input.startMonth
   if (input.endDate !== undefined) updateData.endDate = input.endDate
   if (input.categoryId !== undefined) updateData.categoryId = input.categoryId
+  if (input.dayOfMonth !== undefined) updateData.dayOfMonth = input.dayOfMonth
 
   updateData.updatedAt = new Date()
 
@@ -304,8 +308,21 @@ export async function applyPresetToPlan(
     throw new Error('Plan ist archiviert')
   }
 
-  // Determine due date (use override or plan date)
-  const dueDate = input.dueDate || plan.date
+  // Determine due date:
+  // 1. Explicit override from input
+  // 2. Preset's dayOfMonth (clamped to last valid day of the plan's month)
+  // 3. Fall back to plan date
+  let dueDate: string
+  if (input.dueDate) {
+    dueDate = input.dueDate
+  } else if (preset.dayOfMonth) {
+    const [year, month] = plan.date.split('-').map(Number)
+    const lastDayOfMonth = new Date(year, month, 0).getDate()
+    const day = Math.min(preset.dayOfMonth, lastDayOfMonth)
+    dueDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  } else {
+    dueDate = plan.date
+  }
 
   // Create transaction from preset
   const transactionInput: CreateTransactionInput = {
