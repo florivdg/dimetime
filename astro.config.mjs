@@ -15,8 +15,18 @@ export default defineConfig({
 
   output: 'server',
 
+  security: {
+    allowedDomains: [
+      { hostname: 'dimetime.flori.cloud' },
+      { hostname: 'dimetime.local' },
+    ],
+  },
+
   vite: {
     plugins: [tailwindcss()],
+    server: {
+      allowedHosts: ['dimetime.local'],
+    },
   },
 
   experimental: {
