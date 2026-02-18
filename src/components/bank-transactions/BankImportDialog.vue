@@ -20,10 +20,17 @@ import {
   StepperItem,
   StepperSeparator,
   StepperTrigger,
-  StepperIndicator,
-  StepperTitle,
 } from '@/components/ui/stepper'
-import { ArrowLeft, Check, Loader2, Upload } from 'lucide-vue-next'
+import {
+  ArrowLeft,
+  Check,
+  CircleCheck,
+  Eye,
+  FileUp,
+  Landmark,
+  Loader2,
+  Upload,
+} from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import ImportSourceStep from './ImportSourceStep.vue'
 import ImportFileStep from './ImportFileStep.vue'
@@ -38,7 +45,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   imported: []
-  sourceCreated: [source: ImportSource]
 }>()
 
 // State
@@ -50,31 +56,21 @@ const commitResult = ref<BankImportCommitResult | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 const importTypes = ref<ImportTypeDescriptor[]>([])
-const localSources = ref<ImportSource[]>([...props.sources])
-
-// Watch for external sources changes
-watch(
-  () => props.sources,
-  (newSources) => {
-    localSources.value = [...newSources]
-  },
-)
 
 const steps = [
-  { number: 1, title: 'Quelle' },
-  { number: 2, title: 'Datei' },
-  { number: 3, title: 'Vorschau' },
-  { number: 4, title: 'Ergebnis' },
+  { number: 1, title: 'Quelle', icon: Landmark },
+  { number: 2, title: 'Datei', icon: FileUp },
+  { number: 3, title: 'Vorschau', icon: Eye },
+  { number: 4, title: 'Ergebnis', icon: CircleCheck },
 ]
 
 const selectedSource = computed(() =>
-  localSources.value.find((s) => s.id === selectedSourceId.value),
+  props.sources.find((s) => s.id === selectedSourceId.value),
 )
 
 const canGoToStep2 = computed(() => !!selectedSourceId.value)
 const canGoToStep3 = computed(() => !!selectedFile.value)
 
-// Load import types when dialog opens
 watch(open, async (isOpen) => {
   if (isOpen) {
     resetState()
@@ -105,30 +101,41 @@ function resetState() {
   commitResult.value = null
   isLoading.value = false
   errorMessage.value = null
-  localSources.value = [...props.sources]
 }
 
-function handleSourceCreated(source: ImportSource) {
-  localSources.value = [source, ...localSources.value]
-  emit('sourceCreated', source)
+function handleStepChange(newStep: number | undefined) {
+  if (newStep === undefined || isLoading.value) return
+
+  // Backward navigation (always allowed except from step 4)
+  if (newStep < currentStep.value) {
+    if (currentStep.value === 4) return
+    if (currentStep.value === 3) {
+      previewResult.value = null
+      errorMessage.value = null
+    }
+    currentStep.value = newStep
+    return
+  }
+
+  // Forward navigation via stepper click
+  if (newStep === 2 && currentStep.value === 1 && canGoToStep2.value) {
+    currentStep.value = 2
+    return
+  }
+  if (newStep === 3 && currentStep.value === 2 && canGoToStep3.value) {
+    runPreview()
+    return
+  }
+  // Step 4 only reachable via commit button — ignore click
 }
 
 function goBack() {
-  if (currentStep.value === 2) {
-    currentStep.value = 1
-  } else if (currentStep.value === 3) {
-    currentStep.value = 2
-    previewResult.value = null
-    errorMessage.value = null
-  }
+  if (currentStep.value > 1 && currentStep.value < 4)
+    handleStepChange(currentStep.value - 1)
 }
 
 function goNext() {
-  if (currentStep.value === 1 && canGoToStep2.value) {
-    currentStep.value = 2
-  } else if (currentStep.value === 2 && canGoToStep3.value) {
-    runPreview()
-  }
+  handleStepChange(currentStep.value + 1)
 }
 
 async function postImportForm(
@@ -215,50 +222,42 @@ function closeDialog() {
 
       <!-- Stepper -->
       <Stepper
-        v-model="currentStep"
-        class="mx-auto flex w-full max-w-md justify-center"
+        :model-value="currentStep"
+        :linear="false"
+        class="mx-auto flex w-full max-w-md items-start gap-2"
+        @update:model-value="handleStepChange"
       >
         <StepperItem
-          v-for="(step, index) in steps"
+          v-for="step in steps"
           :key="step.number"
           v-slot="{ state }"
+          class="relative flex w-full flex-col items-center justify-center"
           :step="step.number"
-          :disabled="true"
-          class="flex flex-1 flex-col items-center"
+          :disabled="step.number === 4 || isLoading"
         >
-          <StepperTrigger class="flex flex-col items-center gap-1" as="div">
-            <StepperIndicator
-              class="size-8 rounded-full border-2 text-xs transition-colors"
-              :class="{
-                'border-lime-500 bg-lime-500 text-white': state === 'active',
-                'border-lime-500 bg-lime-500/20 text-lime-600 dark:text-lime-400':
-                  state === 'completed',
-                'border-muted bg-muted text-muted-foreground':
-                  state === 'inactive',
-              }"
-            >
-              <Check v-if="state === 'completed'" class="size-4" />
-              <span v-else>{{ step.number }}</span>
-            </StepperIndicator>
-            <StepperTitle
-              class="text-xs font-medium"
-              :class="{
-                'text-foreground': state === 'active',
-                'text-lime-600 dark:text-lime-400': state === 'completed',
-                'text-muted-foreground': state === 'inactive',
-              }"
-            >
-              {{ step.title }}
-            </StepperTitle>
-          </StepperTrigger>
           <StepperSeparator
-            v-if="index < steps.length - 1"
-            class="mt-1.5 h-0.5 flex-1"
-            :class="{
-              'bg-lime-500': state === 'completed',
-              'bg-muted': state !== 'completed',
-            }"
+            v-if="step.number !== steps[steps.length - 1]?.number"
+            class="bg-muted group-data-[state=completed]:bg-primary absolute top-5 right-[calc(-50%+10px)] left-[calc(50%+20px)] block h-0.5 shrink-0 rounded-full"
           />
+
+          <StepperTrigger as-child>
+            <Button
+              :variant="
+                state === 'completed' || state === 'active'
+                  ? 'default'
+                  : 'outline'
+              "
+              size="icon"
+              class="z-10 shrink-0 rounded-full"
+              :class="[
+                state === 'active' &&
+                  'ring-ring ring-offset-background ring-2 ring-offset-2',
+              ]"
+            >
+              <Check v-if="state === 'completed'" class="size-5" />
+              <component :is="step.icon" v-else class="size-5" />
+            </Button>
+          </StepperTrigger>
         </StepperItem>
       </Stepper>
 
@@ -268,9 +267,7 @@ function closeDialog() {
         <ImportSourceStep
           v-if="currentStep === 1"
           v-model="selectedSourceId"
-          :sources="localSources"
-          :import-types="importTypes"
-          @source-created="handleSourceCreated"
+          :sources="sources"
         />
 
         <!-- Step 2: File -->
