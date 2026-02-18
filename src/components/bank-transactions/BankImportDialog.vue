@@ -68,7 +68,7 @@ const selectedSource = computed(() =>
   props.sources.find((s) => s.id === selectedSourceId.value),
 )
 
-const canGoToStep2 = computed(() => !!selectedSourceId.value)
+const canGoToStep2 = computed(() => Boolean(selectedSource.value?.isActive))
 const canGoToStep3 = computed(() => !!selectedFile.value)
 
 watch(open, async (isOpen) => {
