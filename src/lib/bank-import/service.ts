@@ -13,6 +13,7 @@ import type {
 } from '@/lib/bank-import/types'
 import { monthFromIsoDate } from '@/lib/bank-import/normalize'
 import { dedupeRowsInFile, hashFileSha256 } from '@/lib/bank-import/dedupe'
+import { notFoundError, validationError } from '@/lib/bank-import/api-helpers'
 import { ING_CSV_IMPORT_TYPE, parseIngCsvFile } from './parsers/ing-csv'
 import {
   EASYBANK_XLSX_IMPORT_TYPE,
@@ -117,7 +118,7 @@ function getImportTypeDescriptorByPreset(preset: string): ImportTypeDescriptor {
     (type) => type.preset === preset,
   )
   if (!descriptor) {
-    throw new Error(`Import-Typ wird nicht unterstützt: ${preset}`)
+    throw validationError(`Import-Typ wird nicht unterstützt: ${preset}`)
   }
   return descriptor
 }
@@ -134,7 +135,7 @@ async function parseWithPreset(
     return parseEasybankXlsxFile(fileName, bytes)
   }
 
-  throw new Error(`Kein Parser für Import-Typ ${preset} gefunden.`)
+  throw validationError(`Kein Parser für Import-Typ ${preset} gefunden.`)
 }
 
 async function resolveAssignments(
@@ -188,10 +189,10 @@ async function getSourceById(sourceId: string): Promise<ImportSourceRow> {
     where: eq(importSource.id, sourceId),
   })
   if (!source) {
-    throw new Error('Import-Quelle wurde nicht gefunden.')
+    throw notFoundError('Import-Quelle wurde nicht gefunden.')
   }
   if (!source.isActive) {
-    throw new Error('Import-Quelle ist deaktiviert.')
+    throw validationError('Import-Quelle ist deaktiviert.')
   }
   return source
 }
@@ -205,7 +206,7 @@ async function prepareImportData(
   const fileName = file.name || 'upload'
   const fileType = detectFileType(fileName, file.type)
   if (!fileType) {
-    throw new Error(
+    throw validationError(
       'Dateityp wird nicht unterstützt. Erlaubt sind CSV oder XLSX.',
     )
   }
@@ -215,7 +216,7 @@ async function prepareImportData(
     fileName.toLowerCase().endsWith(extension),
   )
   if (!hasExpectedExtension) {
-    throw new Error(
+    throw validationError(
       `Falscher Dateityp für ${descriptor.name}. Erwartet: ${expectedExtensions.join(', ')}.`,
     )
   }
@@ -578,11 +579,13 @@ export async function commitBankImport(input: {
                 `excluded.${bankTransaction.lastSeenImportId.name}`,
               ),
               importSeenCount: sql.raw(
-                `excluded.${bankTransaction.importSeenCount.name}`,
+                `"bank_transaction"."${bankTransaction.importSeenCount.name}" + 1`,
               ),
-              planId: sql.raw(`excluded.${bankTransaction.planId.name}`),
               planAssignment: sql.raw(
-                `excluded.${bankTransaction.planAssignment.name}`,
+                `CASE WHEN "bank_transaction"."${bankTransaction.planAssignment.name}" = 'manual' OR "bank_transaction"."${bankTransaction.planId.name}" IS NOT NULL THEN "bank_transaction"."${bankTransaction.planAssignment.name}" ELSE excluded."${bankTransaction.planAssignment.name}" END`,
+              ),
+              planId: sql.raw(
+                `CASE WHEN "bank_transaction"."${bankTransaction.planAssignment.name}" = 'manual' OR "bank_transaction"."${bankTransaction.planId.name}" IS NOT NULL THEN "bank_transaction"."${bankTransaction.planId.name}" ELSE excluded."${bankTransaction.planId.name}" END`,
               ),
               updatedAt: sql.raw(`excluded.${bankTransaction.updatedAt.name}`),
             },

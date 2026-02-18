@@ -1,10 +1,10 @@
 import type { APIRoute } from 'astro'
 import { previewBankImport } from '@/lib/bank-import/service'
 import {
+  asImportApiError,
   jsonError,
   jsonResponse,
   parseImportFormData,
-  statusCodeForMessage,
 } from '@/lib/bank-import/api-helpers'
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -19,10 +19,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     })
     return jsonResponse(result)
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Unbekannter Fehler bei der Import-Vorschau'
-    return jsonError(message, statusCodeForMessage(message))
+    const mapped = asImportApiError(error)
+    return jsonError(mapped.message, mapped.status)
   }
 }

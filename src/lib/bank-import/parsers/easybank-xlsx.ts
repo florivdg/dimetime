@@ -4,6 +4,7 @@ import type {
   ImportTypeDescriptor,
   ParsedImportFile,
 } from '@/lib/bank-import/types'
+import { ImportApiError, validationError } from '@/lib/bank-import/api-helpers'
 import {
   extractCardLast4,
   normalizeText,
@@ -47,7 +48,7 @@ function findHeaderRow(rows: unknown[][]): {
     return { headerRowIndex: i, headerCells }
   }
 
-  throw new Error(
+  throw validationError(
     'EasyBank-XLSX konnte nicht gelesen werden: Kopfzeile nicht gefunden.',
   )
 }
@@ -94,15 +95,24 @@ export async function parseEasybankXlsxFile(
   bytes: Uint8Array,
 ): Promise<ParsedImportFile> {
   if (!fileName.toLowerCase().endsWith('.xlsx')) {
-    throw new Error(
+    throw validationError(
       'Ungültiger Dateityp für easybank-Import. Erwartet wird eine XLSX-Datei.',
     )
   }
 
-  const workbook = XLSX.read(bytes, { type: 'array' })
+  let workbook: XLSX.WorkBook
+  try {
+    workbook = XLSX.read(bytes, { type: 'array' })
+  } catch (error) {
+    if (error instanceof ImportApiError) throw error
+    throw validationError(
+      'EasyBank-XLSX konnte nicht gelesen werden: Datei ist beschädigt oder hat ein ungültiges Format.',
+    )
+  }
+
   const firstSheetName = workbook.SheetNames[0]
   if (!firstSheetName) {
-    throw new Error('EasyBank-XLSX enthält kein Tabellenblatt.')
+    throw validationError('EasyBank-XLSX enthält kein Tabellenblatt.')
   }
 
   const sheet = workbook.Sheets[firstSheetName]
@@ -137,7 +147,7 @@ export async function parseEasybankXlsxFile(
     typeIndex === undefined ||
     statusIndex === undefined
   ) {
-    throw new Error(
+    throw validationError(
       'EasyBank-XLSX konnte nicht gelesen werden: Pflichtspalten fehlen in der Kopfzeile.',
     )
   }

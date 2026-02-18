@@ -1,15 +1,37 @@
-export function statusCodeForMessage(message: string): number {
-  if (message.includes('nicht gefunden')) return 404
-  if (
-    message.includes('Ungültig') ||
-    message.includes('erwartet') ||
-    message.includes('deaktiviert') ||
-    message.includes('nicht unterstützt') ||
-    message.includes('fehlt')
-  ) {
-    return 400
+export class ImportApiError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ImportApiError'
+    this.status = status
   }
-  return 500
+}
+
+export function validationError(message: string): ImportApiError {
+  return new ImportApiError(400, message)
+}
+
+export function notFoundError(message: string): ImportApiError {
+  return new ImportApiError(404, message)
+}
+
+export function asImportApiError(error: unknown): {
+  status: number
+  message: string
+} {
+  if (error instanceof ImportApiError) {
+    return { status: error.status, message: error.message }
+  }
+
+  if (error instanceof Error) {
+    return {
+      status: 500,
+      message: error.message || 'Unbekannter interner Fehler',
+    }
+  }
+
+  return { status: 500, message: 'Unbekannter interner Fehler' }
 }
 
 export function jsonResponse(data: unknown, status = 200): Response {
