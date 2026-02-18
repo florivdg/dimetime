@@ -2,6 +2,7 @@ import type {
   ImportTypeDescriptor,
   ParsedImportFile,
 } from '@/lib/bank-import/types'
+import { validationError } from '@/lib/bank-import/api-helpers'
 import {
   normalizeCurrency,
   normalizeText,
@@ -9,17 +10,28 @@ import {
   parseGermanMoney,
 } from '@/lib/bank-import/normalize'
 
-const ING_HEADER = [
-  'Buchung',
-  'Wertstellungsdatum',
-  'Auftraggeber/Empfänger',
-  'Buchungstext',
-  'Verwendungszweck',
-  'Saldo',
-  'Währung',
-  'Betrag',
-  'Währung',
-]
+const REQUIRED_ING_HEADERS = [
+  'buchung',
+  'wertstellungsdatum',
+  'auftraggeberempfaenger',
+  'buchungstext',
+  'verwendungszweck',
+  'saldo',
+  'betrag',
+] as const
+
+const REQUIRED_ING_HEADER_LABELS: Record<
+  (typeof REQUIRED_ING_HEADERS)[number],
+  string
+> = {
+  buchung: 'Buchung',
+  wertstellungsdatum: 'Wertstellungsdatum',
+  auftraggeberempfaenger: 'Auftraggeber/Empfänger',
+  buchungstext: 'Buchungstext',
+  verwendungszweck: 'Verwendungszweck',
+  saldo: 'Saldo',
+  betrag: 'Betrag',
+}
 
 export const ING_CSV_IMPORT_TYPE: ImportTypeDescriptor = {
   preset: 'ing_csv_v1',
@@ -67,37 +79,109 @@ function parseSemicolonLine(line: string): string[] {
   return result
 }
 
+function repairMojibake(text: string): string {
+  return text
+    .replaceAll('Ã„', 'Ä')
+    .replaceAll('Ã–', 'Ö')
+    .replaceAll('Ãœ', 'Ü')
+    .replaceAll('Ã¤', 'ä')
+    .replaceAll('Ã¶', 'ö')
+    .replaceAll('Ã¼', 'ü')
+    .replaceAll('ÃŸ', 'ß')
+}
+
+function normalizeHeader(value: string): string {
+  const normalized = normalizeText(value)
+  if (!normalized) return ''
+
+  return repairMojibake(normalized)
+    .toLowerCase()
+    .replaceAll('ä', 'ae')
+    .replaceAll('ö', 'oe')
+    .replaceAll('ü', 'ue')
+    .replaceAll('ß', 'ss')
+    .replace(/[^a-z0-9]+/g, '')
+}
+
+function buildHeaderIndex(headerColumns: string[]): Record<string, number[]> {
+  const map: Record<string, number[]> = {}
+
+  headerColumns.forEach((header, index) => {
+    const key = normalizeHeader(header)
+    if (!key) return
+    map[key] = map[key] ? [...map[key], index] : [index]
+  })
+
+  return map
+}
+
+function findHeaderRow(lines: string[]): {
+  headerLineIndex: number
+  headerColumns: string[]
+} {
+  for (let i = 0; i < lines.length; i += 1) {
+    const rawLine = lines[i]
+    if (!rawLine || rawLine.trim().length === 0) continue
+
+    const columns = parseSemicolonLine(rawLine).map((column) => column.trim())
+    if (columns.length === 0) continue
+
+    const normalized = columns.map(normalizeHeader)
+    const hasAllRequired = REQUIRED_ING_HEADERS.every((required) =>
+      normalized.includes(required),
+    )
+    if (!hasAllRequired) continue
+
+    return {
+      headerLineIndex: i,
+      headerColumns: columns,
+    }
+  }
+
+  throw validationError(
+    'ING-CSV konnte nicht gelesen werden: Kopfzeile mit Pflichtspalten nicht gefunden.',
+  )
+}
+
 export async function parseIngCsvFile(
   fileName: string,
   bytes: Uint8Array,
 ): Promise<ParsedImportFile> {
   if (!fileName.toLowerCase().endsWith('.csv')) {
-    throw new Error(
+    throw validationError(
       'Ungültiger Dateityp für ING-Import. Erwartet wird eine CSV-Datei.',
     )
   }
 
   const content = new TextDecoder('iso-8859-1').decode(bytes)
   const lines = content.split(/\r?\n/)
-  const headerLineIndex = lines.findIndex((line) =>
-    line.trim().startsWith('Buchung;Wertstellungsdatum;'),
-  )
+  const { headerLineIndex, headerColumns } = findHeaderRow(lines)
+  const headerMap = buildHeaderIndex(headerColumns)
 
-  if (headerLineIndex < 0) {
-    throw new Error(
-      'ING-CSV konnte nicht gelesen werden: Kopfzeile nicht gefunden.',
+  const missingRequired = REQUIRED_ING_HEADERS.filter(
+    (required) => (headerMap[required] ?? []).length === 0,
+  )
+  if (missingRequired.length > 0) {
+    throw validationError(
+      `ING-CSV konnte nicht gelesen werden: Pflichtspalten fehlen (${missingRequired.map((key) => REQUIRED_ING_HEADER_LABELS[key]).join(', ')}).`,
     )
   }
 
-  const headerColumns = parseSemicolonLine(lines[headerLineIndex]).map(
-    (column) => column.trim(),
-  )
+  const bookingDateIndex = headerMap.buchung?.[0] as number
+  const valueDateIndex = headerMap.wertstellungsdatum?.[0] as number
+  const counterpartyIndex = headerMap.auftraggeberempfaenger?.[0] as number
+  const bookingTextIndex = headerMap.buchungstext?.[0] as number
+  const purposeIndex = headerMap.verwendungszweck?.[0] as number
+  const balanceIndex = headerMap.saldo?.[0] as number
+  const amountIndex = headerMap.betrag?.[0] as number
+  const currencyIndexes = headerMap.waehrung ?? []
 
-  if (headerColumns.length < ING_HEADER.length) {
-    throw new Error(
-      'ING-CSV konnte nicht gelesen werden: Kopfzeile hat zu wenige Spalten.',
-    )
-  }
+  const balanceCurrencyIndex = currencyIndexes.find(
+    (index) => index > balanceIndex && index < amountIndex,
+  )
+  const amountCurrencyIndex =
+    currencyIndexes.find((index) => index > amountIndex) ??
+    currencyIndexes.find((index) => index !== balanceCurrencyIndex)
 
   const warnings: string[] = []
   const rows: ParsedImportFile['rows'] = []
@@ -109,10 +193,22 @@ export async function parseIngCsvFile(
     const values = parseSemicolonLine(line)
     if (values.every((value) => !normalizeText(value))) continue
 
-    const bookingDate = parseGermanDateToIso(values[0] ?? '')
-    const valueDate = parseGermanDateToIso(values[1] ?? '')
+    const bookingDate = parseGermanDateToIso(values[bookingDateIndex] ?? '')
+    const valueDate = parseGermanDateToIso(values[valueDateIndex] ?? '')
 
-    const amount = parseGermanMoney(values[7], values[8] || values[6] || 'EUR')
+    const amountCurrency =
+      amountCurrencyIndex === undefined
+        ? null
+        : normalizeText(values[amountCurrencyIndex])
+    const balanceCurrency =
+      balanceCurrencyIndex === undefined
+        ? null
+        : normalizeText(values[balanceCurrencyIndex])
+
+    const amount = parseGermanMoney(
+      values[amountIndex],
+      amountCurrency || balanceCurrency || 'EUR',
+    )
     if (!bookingDate || !amount) {
       warnings.push(
         `Zeile ${i + 1} konnte nicht importiert werden und wurde übersprungen.`,
@@ -120,7 +216,10 @@ export async function parseIngCsvFile(
       continue
     }
 
-    const balance = parseGermanMoney(values[5], values[6] || 'EUR')
+    const balance = parseGermanMoney(
+      values[balanceIndex],
+      balanceCurrency || amountCurrency || 'EUR',
+    )
 
     rows.push({
       externalTransactionId: null,
@@ -130,10 +229,10 @@ export async function parseIngCsvFile(
       currency: normalizeCurrency(amount.currency, 'EUR'),
       originalAmountCents: null,
       originalCurrency: null,
-      counterparty: normalizeText(values[2]),
-      bookingText: normalizeText(values[3]),
+      counterparty: normalizeText(values[counterpartyIndex]),
+      bookingText: normalizeText(values[bookingTextIndex]),
       description: null,
-      purpose: normalizeText(values[4]),
+      purpose: normalizeText(values[purposeIndex]),
       status: 'booked',
       balanceAfterCents: balance?.amountCents ?? null,
       balanceCurrency: balance?.currency ?? null,
@@ -141,15 +240,21 @@ export async function parseIngCsvFile(
       cardLast4: null,
       cardholder: null,
       rawData: {
-        buchung: normalizeText(values[0]),
-        wertstellungsdatum: normalizeText(values[1]),
-        auftraggeberEmpfaenger: normalizeText(values[2]),
-        buchungstext: normalizeText(values[3]),
-        verwendungszweck: normalizeText(values[4]),
-        saldo: normalizeText(values[5]),
-        saldoWaehrung: normalizeText(values[6]),
-        betrag: normalizeText(values[7]),
-        betragWaehrung: normalizeText(values[8]),
+        buchung: normalizeText(values[bookingDateIndex]),
+        wertstellungsdatum: normalizeText(values[valueDateIndex]),
+        auftraggeberEmpfaenger: normalizeText(values[counterpartyIndex]),
+        buchungstext: normalizeText(values[bookingTextIndex]),
+        verwendungszweck: normalizeText(values[purposeIndex]),
+        saldo: normalizeText(values[balanceIndex]),
+        saldoWaehrung:
+          balanceCurrencyIndex === undefined
+            ? null
+            : normalizeText(values[balanceCurrencyIndex]),
+        betrag: normalizeText(values[amountIndex]),
+        betragWaehrung:
+          amountCurrencyIndex === undefined
+            ? null
+            : normalizeText(values[amountCurrencyIndex]),
       },
     })
   }
