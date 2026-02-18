@@ -12,7 +12,6 @@ import {
   Receipt,
   Settings,
   Tags,
-  Upload,
 } from 'lucide-vue-next'
 import { computed } from 'vue'
 
@@ -79,8 +78,7 @@ const data = computed(() => ({
         !isActiveSection('/transactions') &&
         !isActiveSection('/bank-transactions') &&
         !isActiveSection('/import-sources') &&
-        !isActiveSection('/presets') &&
-        !isActiveSection('/import'),
+        !isActiveSection('/presets'),
     },
     {
       title: 'Pläne',
@@ -119,12 +117,6 @@ const data = computed(() => ({
       url: '/presets',
       icon: BookTemplate,
       isActive: isActiveSection('/presets'),
-    },
-    {
-      title: 'Import',
-      url: '/import',
-      icon: Upload,
-      isActive: isActiveSection('/import'),
     },
     {
       title: 'Einstellungen',

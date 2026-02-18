@@ -20,7 +20,7 @@ DimeTime helps you plan and track your personal finances with:
 - Transaction filtering by category, type, date range, and amount
 - Passkey (WebAuthn) authentication for passwordless login
 - Email/password authentication
-- Data import wizard for bulk transaction import
+- Bank statement import for transaction synchronization
 - Responsive design for desktop and mobile
 
 ## Tech Stack
