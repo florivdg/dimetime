@@ -81,10 +81,6 @@ function handleImported() {
   loadTransactions()
   loadSources()
 }
-
-function handleSourceCreated(source: ImportSource) {
-  sources.value = [source, ...sources.value]
-}
 </script>
 
 <template>
@@ -224,7 +220,6 @@ function handleSourceCreated(source: ImportSource) {
         v-model:open="importDialogOpen"
         :sources="sources"
         @imported="handleImported"
-        @source-created="handleSourceCreated"
       />
     </CardContent>
   </Card>
