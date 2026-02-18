@@ -108,6 +108,173 @@ export const plannedTransactionRelations = relations(
   }),
 )
 
+// Bank Import Sources
+export const importSource = sqliteTable(
+  'import_source',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    preset: text('preset', {
+      enum: ['ing_csv_v1', 'easybank_xlsx_v1'],
+    }).notNull(),
+    sourceKind: text('source_kind', {
+      enum: ['bank_account', 'credit_card', 'other'],
+    }).notNull(),
+    bankName: text('bank_name'),
+    accountLabel: text('account_label'),
+    accountIdentifier: text('account_identifier'),
+    defaultPlanAssignment: text('default_plan_assignment', {
+      enum: ['auto_month', 'none'],
+    })
+      .notNull()
+      .default('auto_month'),
+    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('importSource_preset_idx').on(table.preset),
+    index('importSource_isActive_idx').on(table.isActive),
+  ],
+)
+
+// Statement Import Runs
+export const statementImport = sqliteTable(
+  'statement_import',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => importSource.id, { onDelete: 'cascade' }),
+    fileName: text('file_name').notNull(),
+    fileSha256: text('file_sha256').notNull(),
+    fileType: text('file_type', { enum: ['csv', 'xlsx'] }).notNull(),
+    phase: text('phase', { enum: ['preview', 'commit'] }).notNull(),
+    status: text('status', { enum: ['success', 'failed'] }).notNull(),
+    previewCount: integer('preview_count').notNull().default(0),
+    importedCount: integer('imported_count').notNull().default(0),
+    updatedCount: integer('updated_count').notNull().default(0),
+    skippedCount: integer('skipped_count').notNull().default(0),
+    errorMessage: text('error_message'),
+    triggeredByUserId: text('triggered_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('statementImport_sourceId_idx').on(table.sourceId),
+    index('statementImport_fileSha256_idx').on(table.fileSha256),
+    index('statementImport_createdAt_idx').on(table.createdAt),
+  ],
+)
+
+// Imported Bank/Credit-Card Transactions
+export const bankTransaction = sqliteTable(
+  'bank_transaction',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => importSource.id, { onDelete: 'cascade' }),
+    firstSeenImportId: text('first_seen_import_id').references(
+      () => statementImport.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    lastSeenImportId: text('last_seen_import_id').references(
+      () => statementImport.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    externalTransactionId: text('external_transaction_id'),
+    dedupeKey: text('dedupe_key').notNull(),
+    bookingDate: text('booking_date').notNull(), // YYYY-MM-DD
+    valueDate: text('value_date'), // YYYY-MM-DD
+    amountCents: integer('amount_cents').notNull(),
+    currency: text('currency').notNull().default('EUR'),
+    originalAmountCents: integer('original_amount_cents'),
+    originalCurrency: text('original_currency'),
+    counterparty: text('counterparty'),
+    bookingText: text('booking_text'),
+    description: text('description'),
+    purpose: text('purpose'),
+    status: text('status', { enum: ['booked', 'pending', 'unknown'] })
+      .notNull()
+      .default('unknown'),
+    balanceAfterCents: integer('balance_after_cents'),
+    balanceCurrency: text('balance_currency'),
+    country: text('country'),
+    cardLast4: text('card_last4'),
+    cardholder: text('cardholder'),
+    rawDataJson: text('raw_data_json').notNull(),
+    planId: text('plan_id').references(() => plan.id, { onDelete: 'set null' }),
+    planAssignment: text('plan_assignment', {
+      enum: ['auto_month', 'manual', 'none'],
+    })
+      .notNull()
+      .default('none'),
+    importSeenCount: integer('import_seen_count').notNull().default(1),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('bankTransaction_sourceId_dedupeKey_idx').on(
+      table.sourceId,
+      table.dedupeKey,
+    ),
+    index('bankTransaction_bookingDate_idx').on(table.bookingDate),
+    index('bankTransaction_planId_idx').on(table.planId),
+    index('bankTransaction_status_idx').on(table.status),
+    index('bankTransaction_externalTransactionId_idx').on(
+      table.externalTransactionId,
+    ),
+  ],
+)
+
+// Link between imported and planned transactions (future automatic matching)
+export const transactionReconciliation = sqliteTable(
+  'transaction_reconciliation',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    bankTransactionId: text('bank_transaction_id')
+      .notNull()
+      .references(() => bankTransaction.id, { onDelete: 'cascade' }),
+    plannedTransactionId: text('planned_transaction_id')
+      .notNull()
+      .references(() => plannedTransaction.id, { onDelete: 'cascade' }),
+    matchType: text('match_type', { enum: ['manual', 'auto'] })
+      .notNull()
+      .default('manual'),
+    confidence: integer('confidence'),
+    matchedAt: integer('matched_at', { mode: 'timestamp_ms' }).notNull(),
+    matchedByUserId: text('matched_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+  },
+  (table) => [
+    uniqueIndex('transactionReconciliation_bankTransactionId_idx').on(
+      table.bankTransactionId,
+    ),
+    uniqueIndex('transactionReconciliation_plannedTransactionId_idx').on(
+      table.plannedTransactionId,
+    ),
+  ],
+)
+
 // Transaction Presets
 export const transactionPreset = sqliteTable(
   'transaction_preset',
@@ -160,6 +327,65 @@ export const transactionPresetRelations = relations(
     category: one(category, {
       fields: [transactionPreset.categoryId],
       references: [category.id],
+    }),
+  }),
+)
+
+export const importSourceRelations = relations(importSource, ({ many }) => ({
+  statementImports: many(statementImport),
+  bankTransactions: many(bankTransaction),
+}))
+
+export const statementImportRelations = relations(
+  statementImport,
+  ({ one }) => ({
+    source: one(importSource, {
+      fields: [statementImport.sourceId],
+      references: [importSource.id],
+    }),
+    triggeredByUser: one(user, {
+      fields: [statementImport.triggeredByUserId],
+      references: [user.id],
+    }),
+  }),
+)
+
+export const bankTransactionRelations = relations(
+  bankTransaction,
+  ({ one }) => ({
+    source: one(importSource, {
+      fields: [bankTransaction.sourceId],
+      references: [importSource.id],
+    }),
+    firstSeenImport: one(statementImport, {
+      fields: [bankTransaction.firstSeenImportId],
+      references: [statementImport.id],
+    }),
+    lastSeenImport: one(statementImport, {
+      fields: [bankTransaction.lastSeenImportId],
+      references: [statementImport.id],
+    }),
+    plan: one(plan, {
+      fields: [bankTransaction.planId],
+      references: [plan.id],
+    }),
+  }),
+)
+
+export const transactionReconciliationRelations = relations(
+  transactionReconciliation,
+  ({ one }) => ({
+    bankTransaction: one(bankTransaction, {
+      fields: [transactionReconciliation.bankTransactionId],
+      references: [bankTransaction.id],
+    }),
+    plannedTransaction: one(plannedTransaction, {
+      fields: [transactionReconciliation.plannedTransactionId],
+      references: [plannedTransaction.id],
+    }),
+    matchedByUser: one(user, {
+      fields: [transactionReconciliation.matchedByUserId],
+      references: [user.id],
     }),
   }),
 )

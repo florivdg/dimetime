@@ -50,6 +50,13 @@
       "when": 1771057875535,
       "tag": "0006_exotic_robbie_robertson",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1771434985936,
+      "tag": "0007_even_mandarin",
+      "breakpoints": true
     }
   ]
 }

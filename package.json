@@ -35,6 +35,7 @@
     "vee-validate": "5.0.0-beta.0",
     "vue": "^3.5.28",
     "vue-sonner": "^2.0.9",
+    "xlsx": "^0.18.5",
     "zod": "4.3.6"
   },
   "devDependencies": {

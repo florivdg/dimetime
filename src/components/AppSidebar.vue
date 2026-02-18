@@ -4,7 +4,9 @@ import type { SidebarProps } from '@/components/ui/sidebar'
 import {
   BookTemplate,
   CalendarDays,
+  Database,
   Home,
+  Landmark,
   LifeBuoy,
   PiggyBank,
   Receipt,
@@ -75,6 +77,8 @@ const data = computed(() => ({
         !isActiveSection('/categories') &&
         !isActiveSection('/plans') &&
         !isActiveSection('/transactions') &&
+        !isActiveSection('/bank-transactions') &&
+        !isActiveSection('/import-sources') &&
         !isActiveSection('/presets') &&
         !isActiveSection('/import'),
     },
@@ -91,6 +95,18 @@ const data = computed(() => ({
       url: '/transactions',
       icon: Receipt,
       isActive: isActiveSection('/transactions'),
+    },
+    {
+      title: 'Kontoauszüge',
+      url: '/bank-transactions',
+      icon: Landmark,
+      isActive: isActiveSection('/bank-transactions'),
+    },
+    {
+      title: 'Import-Quellen',
+      url: '/import-sources',
+      icon: Database,
+      isActive: isActiveSection('/import-sources'),
     },
     {
       title: 'Kategorien',
