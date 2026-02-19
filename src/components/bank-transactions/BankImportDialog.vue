@@ -212,6 +212,7 @@ async function runCommit() {
   } catch (error) {
     errorMessage.value =
       error instanceof Error ? error.message : 'Unbekannter Fehler beim Import'
+    currentStep.value = 3
     toast.error(errorMessage.value)
   } finally {
     isLoading.value = false
