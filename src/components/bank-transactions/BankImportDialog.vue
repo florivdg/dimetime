@@ -108,7 +108,7 @@ function handleStepChange(newStep: number | undefined) {
 
   // Backward navigation (always allowed except from step 4)
   if (newStep < currentStep.value) {
-    if (currentStep.value === 4) return
+    if (currentStep.value >= 4) return
     if (currentStep.value === 3) {
       previewResult.value = null
       errorMessage.value = null
@@ -192,6 +192,7 @@ async function runCommit() {
       selectedFile.value,
     )) as BankImportCommitResult
     commitResult.value = data
+    currentStep.value = 5
     toast.success(
       `Import erfolgreich: ${data.inserted} eingefügt, ${data.updated} aktualisiert`,
     )
@@ -233,7 +234,7 @@ function closeDialog() {
           v-slot="{ state }"
           class="relative flex w-full flex-col items-center justify-center"
           :step="step.number"
-          :disabled="step.number === 4 || isLoading"
+          :disabled="(step.number === 4 && currentStep < 5) || isLoading"
         >
           <StepperSeparator
             v-if="step.number !== steps[steps.length - 1]?.number"
@@ -294,7 +295,7 @@ function closeDialog() {
 
         <!-- Step 4: Result -->
         <ImportResultStep
-          v-else-if="currentStep === 4"
+          v-else-if="currentStep >= 4"
           :result="commitResult"
           :is-loading="isLoading"
           :error="errorMessage"
@@ -336,7 +337,7 @@ function closeDialog() {
         </Button>
 
         <!-- Close (result step) -->
-        <Button v-if="currentStep === 4 && !isLoading" @click="closeDialog">
+        <Button v-if="currentStep >= 4 && !isLoading" @click="closeDialog">
           Schließen
         </Button>
       </DialogFooter>
