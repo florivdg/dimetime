@@ -78,6 +78,18 @@ watch(open, async (isOpen) => {
   }
 })
 
+watch(selectedSourceId, () => {
+  if (currentStep.value === 1 && canGoToStep2.value) {
+    currentStep.value = 2
+  }
+})
+
+watch(selectedFile, (file) => {
+  if (file && currentStep.value === 2) {
+    goNext()
+  }
+})
+
 async function loadImportTypes() {
   try {
     const response = await fetch('/api/import-types')
@@ -313,25 +325,8 @@ function closeDialog() {
           {{ currentStep === 1 ? 'Abbrechen' : 'Zurück' }}
         </Button>
 
-        <!-- Next / Preview / Commit -->
-        <Button
-          v-if="currentStep === 1"
-          :disabled="!canGoToStep2"
-          @click="goNext"
-        >
-          Weiter
-        </Button>
-        <Button
-          v-else-if="currentStep === 2"
-          :disabled="!canGoToStep3"
-          @click="goNext"
-        >
-          Vorschau
-        </Button>
-        <Button
-          v-else-if="currentStep === 3 && previewResult"
-          @click="runCommit"
-        >
+        <!-- Commit -->
+        <Button v-if="currentStep === 3 && previewResult" @click="runCommit">
           <Upload class="mr-2 size-4" />
           Import bestätigen
         </Button>
