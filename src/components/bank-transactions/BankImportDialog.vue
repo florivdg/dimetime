@@ -212,7 +212,7 @@ function closeDialog() {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogScrollContent class="sm:max-w-[740px]">
+    <DialogScrollContent class="sm:max-w-185">
       <DialogHeader>
         <DialogTitle>Kontoauszug importieren</DialogTitle>
         <DialogDescription>
@@ -262,7 +262,7 @@ function closeDialog() {
       </Stepper>
 
       <!-- Step Content -->
-      <div class="min-h-[180px]">
+      <div class="min-h-45 overflow-hidden">
         <!-- Step 1: Source -->
         <ImportSourceStep
           v-if="currentStep === 1"

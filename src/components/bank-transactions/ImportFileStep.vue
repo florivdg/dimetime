@@ -67,7 +67,7 @@ function clearFile() {
     </div>
 
     <div
-      class="border-muted hover:border-primary/50 relative flex items-center gap-4 rounded-lg border-2 border-dashed p-6 transition-colors"
+      class="border-muted hover:border-primary/50 relative flex items-center gap-4 overflow-hidden rounded-lg border-2 border-dashed p-6 transition-colors"
       :class="{
         'border-lime-500 bg-lime-500/5': file,
       }"
@@ -93,7 +93,7 @@ function clearFile() {
           </p>
         </template>
       </div>
-      <div class="flex gap-2">
+      <div class="flex shrink-0 gap-2">
         <Button
           v-if="file"
           type="button"
