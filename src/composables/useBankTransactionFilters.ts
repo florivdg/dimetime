@@ -27,49 +27,65 @@ export function useBankTransactionFilters() {
   const search = computed({
     get: () => state.search,
     set: (v: string) => {
+      if (state.search === v) return
       state.search = v
+      state.page = 1
     },
   })
   const sourceId = computed({
     get: () => state.sourceId,
     set: (v: string) => {
+      if (state.sourceId === v) return
       state.sourceId = v
+      state.page = 1
     },
   })
   const status = computed({
     get: () => state.status,
     set: (v: string) => {
+      if (state.status === v) return
       state.status = v
+      state.page = 1
     },
   })
   const planId = computed({
     get: () => state.planId,
     set: (v: string) => {
+      if (state.planId === v) return
       state.planId = v
+      state.page = 1
     },
   })
   const dateFrom = computed({
     get: () => state.dateFrom,
     set: (v: string) => {
+      if (state.dateFrom === v) return
       state.dateFrom = v
+      state.page = 1
     },
   })
   const dateTo = computed({
     get: () => state.dateTo,
     set: (v: string) => {
+      if (state.dateTo === v) return
       state.dateTo = v
+      state.page = 1
     },
   })
   const sortBy = computed({
     get: () => state.sortBy,
     set: (v: 'bookingDate' | 'amountCents' | 'createdAt') => {
+      if (state.sortBy === v) return
       state.sortBy = v
+      state.page = 1
     },
   })
   const sortDir = computed({
     get: () => state.sortDir,
     set: (v: 'asc' | 'desc') => {
+      if (state.sortDir === v) return
       state.sortDir = v
+      state.page = 1
     },
   })
   const page = computed({
