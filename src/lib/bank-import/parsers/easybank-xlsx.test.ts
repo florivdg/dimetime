@@ -61,8 +61,8 @@ describe('parseEasybankXlsxFile', () => {
       expect(result.rows[0]?.status).toBe('booked')
       expect(result.rows[1]?.status).toBe('booked')
 
-      // noch nicht abgerechnet → pending
-      expect(result.rows[4]?.status).toBe('pending')
+      // noch nicht abgerechnet → booked
+      expect(result.rows[4]?.status).toBe('booked')
 
       // vorgemerkt → pending
       expect(result.rows[6]?.status).toBe('pending')

@@ -66,18 +66,10 @@ function buildHeaderIndex(headerCells: string[]): Record<string, number[]> {
 
 function parseStatus(statusRaw: string | null): BankTransactionStatus {
   const status = (statusRaw ?? '').toLowerCase()
-  if (
-    status.includes('vorgemerkt') ||
-    status.includes('noch nicht abgerechnet')
-  ) {
+  if (status.includes('vorgemerkt')) {
     return 'pending'
   }
-  if (
-    status.length === 0 ||
-    status === '-' ||
-    status.includes('gebucht') ||
-    status.includes('abgerechnet')
-  ) {
+  if (status.length === 0 || status === '-' || status.includes('abgerechnet')) {
     return 'booked'
   }
   return 'unknown'
