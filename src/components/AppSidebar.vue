@@ -4,7 +4,6 @@ import type { SidebarProps } from '@/components/ui/sidebar'
 import {
   BookTemplate,
   CalendarDays,
-  Database,
   Home,
   Landmark,
   LifeBuoy,
@@ -77,7 +76,6 @@ const data = computed(() => ({
         !isActiveSection('/plans') &&
         !isActiveSection('/transactions') &&
         !isActiveSection('/bank-transactions') &&
-        !isActiveSection('/import-sources') &&
         !isActiveSection('/presets'),
     },
     {
@@ -98,13 +96,10 @@ const data = computed(() => ({
       title: 'Kontoauszüge',
       url: '/bank-transactions',
       icon: Landmark,
-      isActive: isActiveSection('/bank-transactions'),
-    },
-    {
-      title: 'Import-Quellen',
-      url: '/import-sources',
-      icon: Database,
-      isActive: isActiveSection('/import-sources'),
+      isActive:
+        isActiveSection('/bank-transactions') ||
+        isActiveSection('/import-sources'),
+      items: [{ title: 'Import-Quellen', url: '/import-sources' }],
     },
     {
       title: 'Kategorien',
