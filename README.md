@@ -2,7 +2,7 @@
 
 > **Work in Progress** - This project is under active development.
 
-A German-language personal financial planner web application for managing budgets, tracking transactions, and organizing expenses by category.
+A German-language personal financial planner web application for managing budgets, tracking transactions, importing bank statements, and organizing expenses by category. Includes transaction presets with recurrence support and mandatory two-factor authentication.
 
 ## Overview
 
@@ -10,7 +10,10 @@ DimeTime helps you plan and track your personal finances with:
 
 - **Monthly budget plans** - Create financial plans for specific periods
 - **Transaction tracking** - Record income and expenses with due dates
+- **Transaction presets** - Reusable templates with recurrence options, bulk-apply to plans
 - **Category management** - Organize transactions with color-coded categories
+- **Bank statement import** - Multi-step import wizard supporting ING CSV and Easybank XLSX formats, with deduplication
+- **Bank transaction reconciliation** - Link imported bank transactions to planned budget entries
 - **Dashboard analytics** - Visualize spending patterns and balance overview
 
 ## Features
@@ -18,9 +21,15 @@ DimeTime helps you plan and track your personal finances with:
 - Dashboard with balance overview, monthly spending charts, and category breakdown
 - Plan management with archiving and search functionality
 - Transaction filtering by category, type, date range, and amount
+- Cross-plan transaction view for filtering transactions across all plans
+- Transaction presets with recurrence and bulk-apply support
+- Bank statement import with multi-step wizard and duplicate detection
+- Bank transaction reconciliation against planned entries
 - Passkey (WebAuthn) authentication for passwordless login
 - Email/password authentication
-- Bank statement import for transaction synchronization
+- Mandatory TOTP-based two-factor authentication (2FA)
+- Account management with passkey management and password change
+- Light/dark theme settings
 - Responsive design for desktop and mobile
 
 ## Tech Stack
@@ -28,9 +37,13 @@ DimeTime helps you plan and track your personal finances with:
 - **Astro 5** - SSR framework with Node adapter
 - **Vue 3** - Interactive components with Composition API
 - **SQLite** - Database with Drizzle ORM
-- **Better Auth** - Authentication with passkey support
+- **Better Auth** - Authentication with passkey and 2FA support
 - **Tailwind CSS 4** - Styling with CSS-first syntax
 - **Reka UI** - Headless component primitives (shadcn-vue style)
+- **TanStack Table** - Table management
+- **Unovis** - Data visualization / charts
+- **VeeValidate + Zod** - Form validation
+- **VueUse** - Vue composables
 
 ## Getting Started
 
@@ -95,6 +108,7 @@ bun --bun run dev
 | `bun run build`             | Build for production            |
 | `bun --bun run preview`     | Preview production build        |
 | `bun run db:migrate`        | Run database migrations         |
+| `bun run test`              | Run tests                       |
 | `bun run lint --type-aware` | Run linter                      |
 | `bun run astro check`       | TypeScript and Astro validation |
 
@@ -128,15 +142,30 @@ docker pull ghcr.io/<owner>/dimetime:1.0.0
 
 ```
 src/
-├── pages/          # Astro file-based routing
-├── components/     # Vue components
-│   ├── ui/         # shadcn-vue style components
-│   ├── plans/      # Plan management
-│   ├── transactions/
-│   ├── categories/
-│   └── dashboard/
-├── db/schema/      # Drizzle schema definitions
-├── lib/            # Utilities and auth config
-└── middleware.ts   # Route protection
-scripts/            # CLI tools (migrations, user management)
+├── pages/                  # Astro file-based routing
+│   ├── 2fa/                # Two-factor setup & verification
+│   ├── bank-transactions/  # Bank transaction views
+│   ├── categories/         # Category management
+│   ├── import-sources/     # Import source configuration
+│   ├── plans/              # Plan listing & detail
+│   ├── presets/            # Preset management
+│   ├── transactions/       # Cross-plan transaction view
+│   └── api/                # REST API endpoints
+├── components/             # Vue components
+│   ├── ui/                 # shadcn-vue style components
+│   ├── bank-transactions/  # Import wizard & transaction table
+│   ├── categories/         # Category CRUD
+│   ├── dashboard/          # Dashboard cards & charts
+│   ├── import-sources/     # Import source CRUD
+│   ├── plans/              # Plan management & transaction filters
+│   ├── presets/            # Preset CRUD & bulk-apply
+│   ├── settings/           # Theme & user settings
+│   └── transactions/       # Transaction CRUD & table
+├── composables/            # Vue composables (filters, URL state, etc.)
+├── db/schema/              # Drizzle schema definitions
+├── lib/                    # Utilities and auth config
+│   └── bank-import/        # Bank import service
+│       └── parsers/        # ING CSV & Easybank XLSX parsers
+└── middleware.ts           # Route protection
+scripts/                    # CLI tools (migrations, user management)
 ```
