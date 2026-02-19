@@ -24,6 +24,19 @@ export type NewImportSource = typeof importSource.$inferInsert
 export type BankTransaction = typeof bankTransaction.$inferSelect
 export type TransactionReconciliation =
   typeof transactionReconciliation.$inferSelect
+export type ManualReconciliationResult =
+  | {
+      status: 'created'
+      reconciliation: TransactionReconciliation
+    }
+  | {
+      status: 'bank_conflict'
+      reconciliation: TransactionReconciliation
+    }
+  | {
+      status: 'planned_conflict'
+      reconciliation: TransactionReconciliation
+    }
 
 export interface CreateImportSourceInput {
   name: string
@@ -294,6 +307,55 @@ export async function createManualReconciliation(input: {
     .returning()
 
   return created
+}
+
+export async function createManualReconciliationSafely(input: {
+  bankTransactionId: string
+  plannedTransactionId: string
+  matchedByUserId?: string | null
+}): Promise<ManualReconciliationResult> {
+  const [created] = await db
+    .insert(transactionReconciliation)
+    .values({
+      bankTransactionId: input.bankTransactionId,
+      plannedTransactionId: input.plannedTransactionId,
+      matchType: 'manual',
+      confidence: null,
+      matchedAt: new Date(),
+      matchedByUserId: input.matchedByUserId ?? null,
+    })
+    .onConflictDoNothing()
+    .returning()
+
+  if (created) {
+    return {
+      status: 'created',
+      reconciliation: created,
+    }
+  }
+
+  const [existingBankMatch, existingPlannedMatch] = await Promise.all([
+    getReconciliationByBankTransactionId(input.bankTransactionId),
+    getReconciliationByPlannedTransactionId(input.plannedTransactionId),
+  ])
+
+  if (existingBankMatch) {
+    return {
+      status: 'bank_conflict',
+      reconciliation: existingBankMatch,
+    }
+  }
+
+  if (existingPlannedMatch) {
+    return {
+      status: 'planned_conflict',
+      reconciliation: existingPlannedMatch,
+    }
+  }
+
+  throw new Error(
+    'Abgleich konnte wegen eines Konflikts nicht erstellt werden.',
+  )
 }
 
 export async function getReconciliationByBankTransactionId(

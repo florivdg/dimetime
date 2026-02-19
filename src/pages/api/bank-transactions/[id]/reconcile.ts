@@ -1,11 +1,9 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import {
-  createManualReconciliation,
+  createManualReconciliationSafely,
   getBankTransactionById,
   getPlannedTransactionById,
-  getReconciliationByBankTransactionId,
-  getReconciliationByPlannedTransactionId,
 } from '@/lib/bank-transactions'
 
 const reconcileSchema = z.object({
@@ -66,21 +64,29 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     )
   }
 
-  const [existingBankMatch, existingPlannedMatch] = await Promise.all([
-    getReconciliationByBankTransactionId(bankTransactionId),
-    getReconciliationByPlannedTransactionId(parsed.data.plannedTransactionId),
-  ])
+  try {
+    const result = await createManualReconciliationSafely({
+      bankTransactionId,
+      plannedTransactionId: parsed.data.plannedTransactionId,
+      matchedByUserId: locals.user?.id ?? null,
+    })
 
-  if (existingBankMatch) {
-    return new Response(
-      JSON.stringify({
-        error: 'Diese Banktransaktion wurde bereits abgeglichen.',
-      }),
-      { status: 409, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+    if (result.status === 'created') {
+      return new Response(JSON.stringify(result.reconciliation), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
 
-  if (existingPlannedMatch) {
+    if (result.status === 'bank_conflict') {
+      return new Response(
+        JSON.stringify({
+          error: 'Diese Banktransaktion wurde bereits abgeglichen.',
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
     return new Response(
       JSON.stringify({
         error:
@@ -88,19 +94,6 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       }),
       { status: 409, headers: { 'Content-Type': 'application/json' } },
     )
-  }
-
-  try {
-    const reconciliation = await createManualReconciliation({
-      bankTransactionId,
-      plannedTransactionId: parsed.data.plannedTransactionId,
-      matchedByUserId: locals.user?.id ?? null,
-    })
-
-    return new Response(JSON.stringify(reconciliation), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
   } catch (error) {
     console.error('Reconciliation fehlgeschlagen:', error)
     return new Response(
