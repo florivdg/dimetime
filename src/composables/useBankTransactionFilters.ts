@@ -6,6 +6,7 @@ export function useBankTransactionFilters() {
     search: { type: 'string', default: '', urlKey: 'q', debounce: 300 },
     sourceId: { type: 'string', default: 'all', urlKey: 'source' },
     status: { type: 'string', default: 'all', urlKey: 'status' },
+    planId: { type: 'string', default: 'all', urlKey: 'plan' },
     dateFrom: { type: 'string', default: '', urlKey: 'from' },
     dateTo: { type: 'string', default: '', urlKey: 'to' },
     sortBy: {
@@ -39,6 +40,12 @@ export function useBankTransactionFilters() {
     get: () => state.status,
     set: (v: string) => {
       state.status = v
+    },
+  })
+  const planId = computed({
+    get: () => state.planId,
+    set: (v: string) => {
+      state.planId = v
     },
   })
   const dateFrom = computed({
@@ -76,6 +83,7 @@ export function useBankTransactionFilters() {
     search,
     sourceId,
     status,
+    planId,
     dateFrom,
     dateTo,
     sortBy,

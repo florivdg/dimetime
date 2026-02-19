@@ -3,7 +3,7 @@ import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import BankTransactionManager from '@/components/bank-transactions/BankTransactionManager.vue'
 import { getBankTransactions, getImportSources } from '@/lib/bank-transactions'
-import { getSidebarPlans } from '@/lib/plans'
+import { getAllPlans, getSidebarPlans } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
 
 // Load initial data server-side
@@ -14,6 +14,7 @@ const { transactions, pagination } = await getBankTransactions({
   limit: 20,
 })
 const sources = await getImportSources()
+const plans = await getAllPlans()
 
 // Sidebar plan items
 const { currentMonth, latest } = await getSidebarPlans()
@@ -48,6 +49,7 @@ if (latest && latest.id !== currentMonth?.id) {
         initialTransactions={transactions}
         initialPagination={pagination}
         initialSources={sources}
+        initialPlans={plans}
       />
     </div>
   </Dashboard>

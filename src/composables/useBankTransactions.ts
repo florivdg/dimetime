@@ -3,6 +3,7 @@ import type {
   BankTransactionWithRelations,
   ImportSource,
 } from '@/lib/bank-transactions'
+import type { Plan } from '@/lib/plans'
 import type { useBankTransactionFilters } from '@/composables/useBankTransactionFilters'
 
 interface InitialData {
@@ -14,6 +15,7 @@ interface InitialData {
     totalPages: number
   }
   sources: ImportSource[]
+  plans: Plan[]
 }
 
 export function useBankTransactions(
@@ -25,6 +27,7 @@ export function useBankTransactions(
   )
   const pagination = ref(initialData.pagination)
   const sources = ref<ImportSource[]>(initialData.sources)
+  const plans = ref<Plan[]>(initialData.plans)
   const isLoading = ref(false)
   const errorMessage = ref<string | null>(null)
 
@@ -39,6 +42,9 @@ export function useBankTransactions(
       }
       if (filters.status.value !== 'all') {
         params.set('status', filters.status.value)
+      }
+      if (filters.planId.value !== 'all') {
+        params.set('planId', filters.planId.value)
       }
       if (filters.dateFrom.value) params.set('dateFrom', filters.dateFrom.value)
       if (filters.dateTo.value) params.set('dateTo', filters.dateTo.value)
@@ -72,6 +78,17 @@ export function useBankTransactions(
     }
   }
 
+  async function loadPlans() {
+    try {
+      const response = await fetch('/api/plans')
+      if (!response.ok) return
+      const data = await response.json()
+      plans.value = data.plans
+    } catch {
+      // Silently ignore
+    }
+  }
+
   // Watch filters for changes and auto-fetch
   watch(
     () => ({ ...filters.state }),
@@ -83,9 +100,11 @@ export function useBankTransactions(
     transactions,
     pagination,
     sources,
+    plans,
     isLoading,
     errorMessage,
     loadTransactions,
     loadSources,
+    loadPlans,
   }
 }

@@ -4,6 +4,8 @@ import type {
   BankTransactionWithRelations,
   ImportSource,
 } from '@/lib/bank-transactions'
+import type { Plan } from '@/lib/plans'
+import { getPlanDisplayName } from '@/lib/format'
 import { useBankTransactionFilters } from '@/composables/useBankTransactionFilters'
 import { useBankTransactions } from '@/composables/useBankTransactions'
 import {
@@ -45,6 +47,7 @@ const props = defineProps<{
     totalPages: number
   }
   initialSources: ImportSource[]
+  initialPlans: Plan[]
 }>()
 
 const filters = useBankTransactionFilters()
@@ -52,6 +55,7 @@ const {
   transactions,
   pagination,
   sources,
+  plans,
   isLoading,
   errorMessage,
   loadTransactions,
@@ -60,6 +64,7 @@ const {
   transactions: props.initialTransactions,
   pagination: props.initialPagination,
   sources: props.initialSources,
+  plans: props.initialPlans,
 })
 
 const importDialogOpen = ref(false)
@@ -149,6 +154,17 @@ function handleImported() {
             <SelectItem value="booked">Gebucht</SelectItem>
             <SelectItem value="pending">Ausstehend</SelectItem>
             <SelectItem value="unknown">Unbekannt</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select v-model="filters.planId.value">
+          <SelectTrigger class="w-[180px]">
+            <SelectValue placeholder="Plan" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Pläne</SelectItem>
+            <SelectItem v-for="p in plans" :key="p.id" :value="p.id">
+              {{ getPlanDisplayName(p.name, p.date) }}
+            </SelectItem>
           </SelectContent>
         </Select>
         <Input
