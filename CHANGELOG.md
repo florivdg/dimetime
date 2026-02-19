@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.6.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.5.1...v0.6.0)
+
+### 🚀 Enhancements
+
+- **bank-import:** Add bank import feature with CSV parsing, interactive stepper, and multi-source support
+- **bank-import:** Add plan filtering and assignment for imported transactions
+- **reconcile:** Make bank reconcile conflict-safe with deterministic 409
+- **command:** Implement command palette with context management
+- **popover:** Add Popover component and related subcomponents
+
+### 🩹 Fixes
+
+- **sidebar:** Remove unused import and simplify active section logic
+
+### 💅 Refactors
+
+- **bank-import:** Remove old import wizard and inline source creation
+
+### 📖 Documentation
+
+- **claude:** Clarify data access policy in authentication flow
+- **readme:** Update project description and enhance feature list
+- **deployment:** Update user creation instructions and clarify 2FA requirement
+
+### ✅ Tests
+
+- **reconciliation:** Update test descriptions to English for clarity
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.5.1
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.5.0...v0.5.1)
