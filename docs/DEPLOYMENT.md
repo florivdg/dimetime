@@ -39,10 +39,10 @@ This guide covers deploying DimeTime in a production environment using Docker an
 5. **Create your first user:**
 
    ```bash
-   docker compose exec dimetime bun run add-user.js
+   docker compose exec dimetime bun run add-user.js <email> <password> [name]
    ```
 
-   Follow the prompts to set up your admin account.
+   After their first login, the user will be required to set up TOTP-based two-factor authentication (2FA).
 
 ## Environment Variables
 
@@ -71,7 +71,7 @@ labels:
   - traefik.http.routers.dimetime.entrypoints=websecure
   - traefik.http.routers.dimetime.tls.certresolver=le
   - traefik.http.services.dimetime.loadbalancer.server.port=4321
-    - traefik.docker.network=traefik_system_traefik
+  - traefik.docker.network=traefik_system_traefik
 ```
 
 **Common adjustments:**
@@ -86,7 +86,7 @@ DimeTime uses SQLite with WAL (Write-Ahead Logging) mode. A backup script is pro
 
 ### Creating a Backup
 
-The `backup-db.sh` script uses SQLite's `.backup` command via a temporary Alpine container (since the app container is distroless). This is safe to run while the application is running.
+The `backup-db.sh` script uses SQLite's `.backup` command via a temporary Alpine container (since the app container is slim and does not include sqlite3). This is safe to run while the application is running.
 
 ```bash
 # Download the backup script
@@ -129,14 +129,13 @@ DimeTime includes a CLI tool for user management. New user registration is disab
 ### Add a New User
 
 ```bash
-docker compose exec dimetime bun run add-user.js
+docker compose exec dimetime bun run add-user.js <email> <password> [name]
 ```
 
-You will be prompted for:
+- Password must be at least 16 characters
+- Name is optional
 
-- Email address
-- Password (minimum 16 characters)
-- Name
+> **Note:** Two-factor authentication (2FA) is mandatory. New users will be prompted to set up TOTP-based 2FA after their first login.
 
 ### Reset a User's Password
 

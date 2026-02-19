@@ -48,6 +48,7 @@ bun run astro check        # Astro project check
 - Middleware (`src/middleware.ts`) protects all routes except `/login` and `/api/auth/*`
 - Better Auth handles sessions via `src/lib/auth.ts` (server) and `src/lib/auth-client.ts` (client)
 - Supports email/password + passkeys (WebAuthn)
+- **No per-user data scoping** — all authenticated users share access to all data. Do not introduce user-based authorization checks or data filtering.
 
 ### Component Patterns
 

@@ -5,12 +5,12 @@ import {
   BookTemplate,
   CalendarDays,
   Home,
+  Landmark,
   LifeBuoy,
   PiggyBank,
   Receipt,
   Settings,
   Tags,
-  Upload,
 } from 'lucide-vue-next'
 import { computed } from 'vue'
 
@@ -75,8 +75,8 @@ const data = computed(() => ({
         !isActiveSection('/categories') &&
         !isActiveSection('/plans') &&
         !isActiveSection('/transactions') &&
-        !isActiveSection('/presets') &&
-        !isActiveSection('/import'),
+        !isActiveSection('/bank-transactions') &&
+        !isActiveSection('/presets'),
     },
     {
       title: 'Pläne',
@@ -93,6 +93,15 @@ const data = computed(() => ({
       isActive: isActiveSection('/transactions'),
     },
     {
+      title: 'Kontoauszüge',
+      url: '/bank-transactions',
+      icon: Landmark,
+      isActive:
+        isActiveSection('/bank-transactions') ||
+        isActiveSection('/import-sources'),
+      items: [{ title: 'Import-Quellen', url: '/import-sources' }],
+    },
+    {
       title: 'Kategorien',
       url: '/categories',
       icon: Tags,
@@ -103,12 +112,6 @@ const data = computed(() => ({
       url: '/presets',
       icon: BookTemplate,
       isActive: isActiveSection('/presets'),
-    },
-    {
-      title: 'Import',
-      url: '/import',
-      icon: Upload,
-      isActive: isActiveSection('/import'),
     },
     {
       title: 'Einstellungen',
