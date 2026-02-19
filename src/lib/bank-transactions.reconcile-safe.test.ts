@@ -68,7 +68,7 @@ afterAll(() => {
 })
 
 describe('createManualReconciliationSafely', () => {
-  it('erstellt einen neuen Abgleich', async () => {
+  it('creates a new reconciliation', async () => {
     const result = await createManualReconciliationSafely({
       bankTransactionId: 'bank-1',
       plannedTransactionId: 'planned-1',
@@ -80,7 +80,7 @@ describe('createManualReconciliationSafely', () => {
     expect(result.reconciliation.plannedTransactionId).toBe('planned-1')
   })
 
-  it('liefert bank_conflict bei unique Konflikt auf bank_transaction_id', async () => {
+  it('returns bank_conflict on unique constraint violation for bank_transaction_id', async () => {
     insertReconciliation({
       id: 'existing-1',
       bankTransactionId: 'bank-1',
@@ -97,7 +97,7 @@ describe('createManualReconciliationSafely', () => {
     expect(result.reconciliation.id).toBe('existing-1')
   })
 
-  it('liefert planned_conflict bei unique Konflikt auf planned_transaction_id', async () => {
+  it('returns planned_conflict on unique constraint violation for planned_transaction_id', async () => {
     insertReconciliation({
       id: 'existing-2',
       bankTransactionId: 'bank-x',

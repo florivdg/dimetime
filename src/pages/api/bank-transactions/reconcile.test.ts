@@ -46,7 +46,7 @@ beforeEach(() => {
 })
 
 describe('POST /api/bank-transactions/[id]/reconcile', () => {
-  it('gibt 201 bei erfolgreichem Abgleich zurück', async () => {
+  it('returns 201 on successful reconciliation', async () => {
     const response = await POST({
       params: { id: 'bank-1' },
       request: buildRequest({ plannedTransactionId: crypto.randomUUID() }),
@@ -58,7 +58,7 @@ describe('POST /api/bank-transactions/[id]/reconcile', () => {
     expect(data.id).toBe('rec-1')
   })
 
-  it('gibt bei Bank-Konflikt deterministisch 409 zurück', async () => {
+  it('returns deterministic 409 on bank transaction conflict', async () => {
     createManualReconciliationSafelyImpl = async () => ({
       status: 'bank_conflict',
       reconciliation: { id: 'existing-rec' },
@@ -75,7 +75,7 @@ describe('POST /api/bank-transactions/[id]/reconcile', () => {
     expect(data.error).toBe('Diese Banktransaktion wurde bereits abgeglichen.')
   })
 
-  it('gibt bei Planned-Konflikt deterministisch 409 zurück', async () => {
+  it('returns deterministic 409 on planned transaction conflict', async () => {
     createManualReconciliationSafelyImpl = async () => ({
       status: 'planned_conflict',
       reconciliation: { id: 'existing-rec' },
