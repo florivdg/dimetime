@@ -1,0 +1,24 @@
+Umsatzanzeige;Datei erstellt am: 15.02.2026 18:30
+
+IBAN;DE89 3704 0044 0532 0130 00
+Kontoname;Girokonto
+Bank;ING
+Kunde;Max Mustermann
+Zeitraum;01.01.2026 - 15.02.2026
+Saldo;4.523,89;EUR
+
+Sortierung;Datum absteigend
+
+In der CSV-Datei finden Sie alle bereits gebuchten Umsätze.
+
+Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung
+14.02.2026;14.02.2026;REWE Markt GmbH;Lastschrift;REWE SAGT DANKE 12345678;4.523,89;EUR;-45,23;EUR
+13.02.2026;13.02.2026;Stadtwerke München;Lastschrift;Strom/Gas Abschlag Feb 2026 Kd-Nr 987654;4.569,12;EUR;-89,00;EUR
+12.02.2026;12.02.2026;Deutsche Telekom AG;Dauerauftrag/Terminueberweisung;Mobilfunk Vertrag 0171-1234567;4.658,12;EUR;-39,99;EUR
+10.02.2026;10.02.2026;Arbeitgeber GmbH;Gehalt/Rente;Gehalt Februar 2026 Personal-Nr 4711;4.698,11;EUR;3.250,00;EUR
+07.02.2026;07.02.2026;Maria Schmidt;Echtzeitüberweisung;Anteil Restaurantbesuch Freitag;1.448,11;EUR;250,00;EUR
+05.02.2026;05.02.2026;Finanzamt München;Überweisung;ESt-Vorauszahlung Q1/2026 St-Nr 123/456/78901;1.198,11;EUR;-350,00;EUR
+03.02.2026;03.02.2026;Amazon EU S.a.r.l.;Retouren;Rückerstattung Bestellung 302-1234567-8901234;1.548,11;EUR;120,00;EUR
+01.02.2026;01.02.2026;Allianz Versicherung AG;Lastschrift;Haftpflicht-Vers. VS-Nr 12-345678-9;1.428,11;EUR;-25,50;EUR
+28.01.2026;28.01.2026;Thomas Müller;Gutschrift;Miete Garage Januar 2026;1.453,61;EUR;150,00;EUR
+15.01.2026;15.01.2026;Vermieter Immobilien KG;Dauerauftrag/Terminueberweisung;Miete Wohnung Jan 2026 Obj 42;1.303,61;EUR;-850,00;EUR
