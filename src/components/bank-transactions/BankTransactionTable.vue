@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { BankTransactionWithRelations } from '@/lib/bank-transactions'
-import { formatAmount, formatDate, getPlanDisplayName } from '@/lib/format'
+import type { Plan } from '@/lib/plans'
+import { formatAmount, formatDate } from '@/lib/format'
+import PlanPicker from './PlanPicker.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +24,7 @@ import {
 
 const props = defineProps<{
   transactions: BankTransactionWithRelations[]
+  plans: Plan[]
   isLoading: boolean
   searchQuery: string
   sortBy: 'bookingDate' | 'amountCents' | 'createdAt'
@@ -31,6 +34,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   sort: [column: 'bookingDate' | 'amountCents' | 'createdAt']
+  'update:plan': [transactionId: string, planId: string | null]
 }>()
 
 function getSortIcon(column: 'bookingDate' | 'amountCents' | 'createdAt') {
@@ -159,14 +163,13 @@ function statusVariant(
 
           <!-- Plan -->
           <TableCell>
-            <a
-              v-if="tx.planId"
-              :href="`/plans/${tx.planId}`"
-              class="text-sm hover:underline"
-            >
-              {{ getPlanDisplayName(tx.planName, tx.planDate) }}
-            </a>
-            <span v-else class="text-muted-foreground">-</span>
+            <PlanPicker
+              :plans="plans"
+              :plan-id="tx.planId"
+              :plan-name="tx.planName"
+              :plan-date="tx.planDate"
+              @select="emit('update:plan', tx.id, $event)"
+            />
           </TableCell>
         </TableRow>
       </TableBody>

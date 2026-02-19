@@ -6,6 +6,7 @@ import type {
 } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
+import { toast } from 'vue-sonner'
 import { useBankTransactionFilters } from '@/composables/useBankTransactionFilters'
 import { useBankTransactions } from '@/composables/useBankTransactions'
 import {
@@ -60,6 +61,7 @@ const {
   errorMessage,
   loadTransactions,
   loadSources,
+  updateTransactionPlan,
 } = useBankTransactions(filters, {
   transactions: props.initialTransactions,
   pagination: props.initialPagination,
@@ -80,6 +82,15 @@ function handleSort(column: 'bookingDate' | 'amountCents' | 'createdAt') {
 
 function handlePageChange(page: number) {
   filters.page.value = page
+}
+
+async function handlePlanUpdate(transactionId: string, planId: string | null) {
+  const success = await updateTransactionPlan(transactionId, planId)
+  if (success) {
+    toast.success(planId ? 'Plan zugewiesen' : 'Plan entfernt')
+  } else {
+    toast.error('Plan konnte nicht aktualisiert werden.')
+  }
 }
 
 function handleImported() {
@@ -193,12 +204,14 @@ function handleImported() {
       <!-- Table -->
       <BankTransactionTable
         :transactions="transactions"
+        :plans="plans"
         :is-loading="isLoading"
         :search-query="filters.search.value"
         :sort-by="filters.sortBy.value"
         :sort-dir="filters.sortDir.value"
         :has-active-filters="filters.hasActiveFilters.value"
         @sort="handleSort"
+        @update:plan="handlePlanUpdate"
       />
 
       <!-- Pagination -->

@@ -89,6 +89,52 @@ export function useBankTransactions(
     }
   }
 
+  async function updateTransactionPlan(
+    id: string,
+    planId: string | null,
+  ): Promise<boolean> {
+    const tx = transactions.value.find((t) => t.id === id)
+    if (!tx) return false
+
+    const original = {
+      planId: tx.planId,
+      planName: tx.planName,
+      planDate: tx.planDate,
+      planAssignment: tx.planAssignment,
+    }
+
+    // Optimistic update
+    if (planId) {
+      const targetPlan = plans.value.find((p) => p.id === planId)
+      tx.planId = planId
+      tx.planName = targetPlan?.name ?? null
+      tx.planDate = targetPlan?.date ?? null
+      tx.planAssignment = 'manual'
+    } else {
+      tx.planId = null
+      tx.planName = null
+      tx.planDate = null
+      tx.planAssignment = 'none'
+    }
+
+    try {
+      const response = await fetch(`/api/bank-transactions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId }),
+      })
+      if (!response.ok) throw new Error('Update failed')
+      return true
+    } catch {
+      // Rollback
+      tx.planId = original.planId
+      tx.planName = original.planName
+      tx.planDate = original.planDate
+      tx.planAssignment = original.planAssignment
+      return false
+    }
+  }
+
   // Watch filters for changes and auto-fetch
   watch(
     () => ({ ...filters.state }),
@@ -106,5 +152,6 @@ export function useBankTransactions(
     loadTransactions,
     loadSources,
     loadPlans,
+    updateTransactionPlan,
   }
 }
