@@ -1,3 +1,4 @@
+import { parse as parseCsv } from '@std/csv'
 import type {
   ImportTypeDescriptor,
   ParsedImportFile,
@@ -48,37 +49,6 @@ export const ING_CSV_IMPORT_TYPE: ImportTypeDescriptor = {
   ],
 }
 
-function parseSemicolonLine(line: string): string[] {
-  const result: string[] = []
-  let current = ''
-  let inQuotes = false
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i]
-
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"'
-        i += 1
-      } else {
-        inQuotes = !inQuotes
-      }
-      continue
-    }
-
-    if (char === ';' && !inQuotes) {
-      result.push(current)
-      current = ''
-      continue
-    }
-
-    current += char
-  }
-
-  result.push(current)
-  return result
-}
-
 function repairMojibake(text: string): string {
   return text
     .replaceAll('Ã„', 'Ä')
@@ -115,15 +85,23 @@ function buildHeaderIndex(headerColumns: string[]): Record<string, number[]> {
   return map
 }
 
-function findHeaderRow(lines: string[]): {
+function parseRows(content: string): string[][] {
+  try {
+    const rows = parseCsv(content, { separator: ';' })
+    return rows.map((row) => row.map((cell) => normalizeText(cell) ?? ''))
+  } catch {
+    throw validationError(
+      'ING-CSV konnte nicht gelesen werden: Datei ist beschädigt oder hat ein ungültiges Format.',
+    )
+  }
+}
+
+function findHeaderRow(records: string[][]): {
   headerLineIndex: number
   headerColumns: string[]
 } {
-  for (let i = 0; i < lines.length; i += 1) {
-    const rawLine = lines[i]
-    if (!rawLine || rawLine.trim().length === 0) continue
-
-    const columns = parseSemicolonLine(rawLine).map((column) => column.trim())
+  for (let i = 0; i < records.length; i += 1) {
+    const columns = (records[i] ?? []).map((column) => column.trim())
     if (columns.length === 0) continue
 
     const normalized = columns.map(normalizeHeader)
@@ -154,8 +132,8 @@ export async function parseIngCsvFile(
   }
 
   const content = new TextDecoder('iso-8859-1').decode(bytes)
-  const lines = content.split(/\r?\n/)
-  const { headerLineIndex, headerColumns } = findHeaderRow(lines)
+  const records = parseRows(content)
+  const { headerLineIndex, headerColumns } = findHeaderRow(records)
   const headerMap = buildHeaderIndex(headerColumns)
 
   const missingRequired = REQUIRED_ING_HEADERS.filter(
@@ -186,11 +164,8 @@ export async function parseIngCsvFile(
   const warnings: string[] = []
   const rows: ParsedImportFile['rows'] = []
 
-  for (let i = headerLineIndex + 1; i < lines.length; i += 1) {
-    const line = lines[i]?.trim()
-    if (!line) continue
-
-    const values = parseSemicolonLine(line)
+  for (let i = headerLineIndex + 1; i < records.length; i += 1) {
+    const values = records[i] ?? []
     if (values.every((value) => !normalizeText(value))) continue
 
     const bookingDate = parseGermanDateToIso(values[bookingDateIndex] ?? '')
