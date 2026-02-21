@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test'
 type SafeResult =
   | { status: 'created'; reconciliation: Record<string, unknown> }
   | { status: 'bank_conflict'; reconciliation: Record<string, unknown> }
-  | { status: 'planned_conflict'; reconciliation: Record<string, unknown> }
 
 let getBankTransactionByIdImpl: (id: string) => Promise<unknown>
 let getPlannedTransactionByIdImpl: (id: string) => Promise<unknown>
@@ -75,10 +74,10 @@ describe('POST /api/bank-transactions/[id]/reconcile', () => {
     expect(data.error).toBe('Diese Banktransaktion wurde bereits abgeglichen.')
   })
 
-  it('returns deterministic 409 on planned transaction conflict', async () => {
+  it('allows multiple bank transactions for the same planned transaction', async () => {
     createManualReconciliationSafelyImpl = async () => ({
-      status: 'planned_conflict',
-      reconciliation: { id: 'existing-rec' },
+      status: 'created',
+      reconciliation: { id: 'rec-2' },
     })
 
     const response = await POST({
@@ -87,10 +86,8 @@ describe('POST /api/bank-transactions/[id]/reconcile', () => {
       locals: { user: { id: 'user-1' } },
     } as never)
 
-    expect(response.status).toBe(409)
-    const data = (await response.json()) as { error: string }
-    expect(data.error).toBe(
-      'Diese geplante Transaktion ist bereits mit einem Umsatz verknüpft.',
-    )
+    expect(response.status).toBe(201)
+    const data = (await response.json()) as { id: string }
+    expect(data.id).toBe('rec-2')
   })
 })

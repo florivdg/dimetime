@@ -78,19 +78,10 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       })
     }
 
-    if (result.status === 'bank_conflict') {
-      return new Response(
-        JSON.stringify({
-          error: 'Diese Banktransaktion wurde bereits abgeglichen.',
-        }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-
+    // result.status === 'bank_conflict'
     return new Response(
       JSON.stringify({
-        error:
-          'Diese geplante Transaktion ist bereits mit einem Umsatz verknüpft.',
+        error: 'Diese Banktransaktion wurde bereits abgeglichen.',
       }),
       { status: 409, headers: { 'Content-Type': 'application/json' } },
     )

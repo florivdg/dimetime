@@ -28,7 +28,7 @@ CREATE UNIQUE INDEX transactionReconciliation_bankTransactionId_idx
 ON transaction_reconciliation (bank_transaction_id)
 `)
 setupDb.run(`
-CREATE UNIQUE INDEX transactionReconciliation_plannedTransactionId_idx
+CREATE INDEX transactionReconciliation_plannedTransactionId_idx
 ON transaction_reconciliation (planned_transaction_id)
 `)
 setupDb.close()
@@ -97,7 +97,7 @@ describe('createManualReconciliationSafely', () => {
     expect(result.reconciliation.id).toBe('existing-1')
   })
 
-  it('returns planned_conflict on unique constraint violation for planned_transaction_id', async () => {
+  it('allows multiple bank transactions for the same planned transaction', async () => {
     insertReconciliation({
       id: 'existing-2',
       bankTransactionId: 'bank-x',
@@ -110,7 +110,7 @@ describe('createManualReconciliationSafely', () => {
       matchedByUserId: null,
     })
 
-    expect(result.status).toBe('planned_conflict')
-    expect(result.reconciliation.id).toBe('existing-2')
+    expect(result.status).toBe('created')
+    expect(result.reconciliation.plannedTransactionId).toBe('planned-1')
   })
 })

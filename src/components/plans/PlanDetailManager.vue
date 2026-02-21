@@ -4,8 +4,11 @@ import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
 import type { Plan } from '@/lib/plans'
 import type { PlanBalance } from '@/lib/transactions'
+import type { KassensturzSummary } from '@/lib/kassensturz'
 import type { FilterState } from './PlanTransactionFilters.vue'
 import { useUrlState } from '@/composables/useUrlState'
+import { formatAmount, formatDate, getPlanDisplayName } from '@/lib/format'
+import { ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-vue-next'
 
 interface UrlStateSchema extends Record<string, unknown> {
   search: string
@@ -20,7 +23,7 @@ interface UrlStateSchema extends Record<string, unknown> {
   sortBy: 'name' | 'dueDate' | 'categoryName' | 'amount'
   sortDir: 'asc' | 'desc'
 }
-import PlanBalanceHeader from './PlanBalanceHeader.vue'
+import KassensturzSummaryHeader from '@/components/kassensturz/KassensturzSummaryHeader.vue'
 import PlanTransactionFilters from './PlanTransactionFilters.vue'
 import PlanTransactionTable from './PlanTransactionTable.vue'
 import TransactionEditDialog from '@/components/transactions/TransactionEditDialog.vue'
@@ -43,6 +46,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import KassensturzManager from '@/components/kassensturz/KassensturzManager.vue'
 import { Copy, FileStack, Lock, MoreVertical, Plus } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
@@ -52,6 +57,19 @@ const props = defineProps<{
   initialBalance: PlanBalance
   categories: Category[]
 }>()
+
+const activeTab = ref('transaktionen')
+const displayName = computed(() =>
+  getPlanDisplayName(props.plan.name, props.plan.date),
+)
+const kassensturzSummary = ref<KassensturzSummary>({
+  plannedIncome: 0,
+  plannedExpense: 0,
+  plannedNet: 0,
+  actualIncome: 0,
+  actualExpense: 0,
+  actualNet: 0,
+})
 
 // URL-synced filter and sort state
 const { state: urlState, reset: resetUrlState } = useUrlState<UrlStateSchema>({
@@ -169,6 +187,7 @@ const sortDir = computed({
 // State
 const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
 const balance = ref<PlanBalance>(props.initialBalance)
+const net = computed(() => balance.value.income - balance.value.expense)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 
@@ -403,94 +422,187 @@ function handleFilterReset() {
 
 <template>
   <div class="space-y-6">
-    <!-- Balance Header -->
-    <PlanBalanceHeader
-      :plan-name="plan.name"
-      :plan-date="plan.date"
-      :income="balance.income"
-      :expense="balance.expense"
-    />
-
-    <!-- Error message -->
-    <div
-      v-if="errorMessage"
-      class="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
-    >
-      {{ errorMessage }}
-    </div>
-
-    <!-- Filters and Create Button -->
-    <div class="space-y-4">
+    <Tabs v-model="activeTab" default-value="transaktionen">
+      <!-- Header: Title left, Tabs right -->
       <div class="flex items-start justify-between gap-4">
-        <div class="flex-1">
-          <PlanTransactionFilters
-            v-model:filters="filters"
-            :categories="categories"
-            @reset="handleFilterReset"
-          />
+        <div>
+          <h1 class="text-2xl font-bold">{{ displayName }}</h1>
+          <p class="text-muted-foreground text-sm">
+            {{ formatDate(plan.date, 'long') }}
+          </p>
         </div>
-        <!-- Disabled buttons for archived plans -->
-        <TooltipProvider v-if="plan.isArchived">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <Button disabled>
-                <Lock class="mr-2 size-4" />
-                Neue Transaktion
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Plan ist archiviert - keine neuen Transaktionen möglich</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <!-- Action buttons for active plans -->
-        <div v-else class="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger as-child>
-              <Button variant="outline" size="icon">
-                <MoreVertical class="size-4" />
-                <span class="sr-only">Weitere Aktionen</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem @click="handleFillFromPresets">
-                <FileStack class="size-4" />
-                Vorlagen anwenden
-              </DropdownMenuItem>
-              <DropdownMenuItem @click="handleCopyFromPlan">
-                <Copy class="size-4" />
-                Transaktionen kopieren
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <TransactionCreateDialog
-            v-model:open="createDialogOpen"
-            :plan-id="plan.id"
-            :categories="categories"
-            @created="handleCreated"
-            @error="handleError"
-          />
+        <TabsList>
+          <TabsTrigger value="transaktionen">Transaktionen</TabsTrigger>
+          <TabsTrigger value="kassensturz">Kassensturz</TabsTrigger>
+        </TabsList>
+      </div>
+
+      <!-- Context-dependent Summary Cards -->
+      <div
+        v-if="activeTab === 'transaktionen'"
+        class="grid gap-4 sm:grid-cols-3"
+      >
+        <!-- Income -->
+        <div class="bg-card rounded-lg border p-4">
+          <div class="flex items-center gap-3">
+            <div class="rounded-full bg-lime-100 p-2 dark:bg-lime-900">
+              <ArrowUpCircle class="size-5 text-lime-600 dark:text-lime-400" />
+            </div>
+            <div>
+              <p class="text-muted-foreground text-sm">Einnahmen</p>
+              <p class="text-lg font-semibold text-lime-600 dark:text-lime-400">
+                {{ formatAmount(balance.income) }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Expenses -->
+        <div class="bg-card rounded-lg border p-4">
+          <div class="flex items-center gap-3">
+            <div class="rounded-full bg-rose-100 p-2 dark:bg-rose-900">
+              <ArrowDownCircle
+                class="size-5 text-rose-600 dark:text-rose-400"
+              />
+            </div>
+            <div>
+              <p class="text-muted-foreground text-sm">Ausgaben</p>
+              <p class="text-lg font-semibold text-rose-600 dark:text-rose-400">
+                {{ formatAmount(balance.expense) }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Balance -->
+        <div class="bg-card rounded-lg border p-4">
+          <div class="flex items-center gap-3">
+            <div
+              class="rounded-full p-2"
+              :class="
+                net >= 0
+                  ? 'bg-lime-100 dark:bg-lime-900'
+                  : 'bg-rose-100 dark:bg-rose-900'
+              "
+            >
+              <Wallet
+                class="size-5"
+                :class="
+                  net >= 0
+                    ? 'text-lime-600 dark:text-lime-400'
+                    : 'text-rose-600 dark:text-rose-400'
+                "
+              />
+            </div>
+            <div>
+              <p class="text-muted-foreground text-sm">Saldo</p>
+              <p
+                class="text-lg font-semibold"
+                :class="
+                  net >= 0
+                    ? 'text-lime-600 dark:text-lime-400'
+                    : 'text-rose-600 dark:text-rose-400'
+                "
+              >
+                {{ net >= 0 ? '+' : '' }}{{ formatAmount(net) }}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+      <KassensturzSummaryHeader v-else :summary="kassensturzSummary" />
 
-    <!-- Table -->
-    <PlanTransactionTable
-      :transactions="transactions"
-      :is-loading="isLoading"
-      :search-query="filters.search"
-      :sort-by="sortBy"
-      :sort-dir="sortDir"
-      :is-archived="plan.isArchived"
-      @edit="handleEdit"
-      @move="handleMove"
-      @deleted="handleDeleted"
-      @error="handleError"
-      @sort="handleSort"
-      @toggle-done="handleToggleDone"
-      @fill-from-presets="handleFillFromPresets"
-      @save-as-preset="handleSaveAsPreset"
-    />
+      <TabsContent value="transaktionen" class="space-y-6">
+        <!-- Error message -->
+        <div
+          v-if="errorMessage"
+          class="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
+        >
+          {{ errorMessage }}
+        </div>
+
+        <!-- Filters and Create Button -->
+        <div class="space-y-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex-1">
+              <PlanTransactionFilters
+                v-model:filters="filters"
+                :categories="categories"
+                @reset="handleFilterReset"
+              />
+            </div>
+            <!-- Disabled buttons for archived plans -->
+            <TooltipProvider v-if="plan.isArchived">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button disabled>
+                    <Lock class="mr-2 size-4" />
+                    Neue Transaktion
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Plan ist archiviert - keine neuen Transaktionen möglich</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <!-- Action buttons for active plans -->
+            <div v-else class="flex gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <Button variant="outline" size="icon">
+                    <MoreVertical class="size-4" />
+                    <span class="sr-only">Weitere Aktionen</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem @click="handleFillFromPresets">
+                    <FileStack class="size-4" />
+                    Vorlagen anwenden
+                  </DropdownMenuItem>
+                  <DropdownMenuItem @click="handleCopyFromPlan">
+                    <Copy class="size-4" />
+                    Transaktionen kopieren
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <TransactionCreateDialog
+                v-model:open="createDialogOpen"
+                :plan-id="plan.id"
+                :categories="categories"
+                @created="handleCreated"
+                @error="handleError"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <PlanTransactionTable
+          :transactions="transactions"
+          :is-loading="isLoading"
+          :search-query="filters.search"
+          :sort-by="sortBy"
+          :sort-dir="sortDir"
+          :is-archived="plan.isArchived"
+          @edit="handleEdit"
+          @move="handleMove"
+          @deleted="handleDeleted"
+          @error="handleError"
+          @sort="handleSort"
+          @toggle-done="handleToggleDone"
+          @fill-from-presets="handleFillFromPresets"
+          @save-as-preset="handleSaveAsPreset"
+        />
+      </TabsContent>
+
+      <TabsContent value="kassensturz">
+        <KassensturzManager
+          :plan="plan"
+          :categories="categories"
+          @summary-update="kassensturzSummary = $event"
+        />
+      </TabsContent>
+    </Tabs>
 
     <!-- Edit Dialog -->
     <TransactionEditDialog

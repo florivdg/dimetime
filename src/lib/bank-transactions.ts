@@ -33,10 +33,6 @@ export type ManualReconciliationResult =
       status: 'bank_conflict'
       reconciliation: TransactionReconciliation
     }
-  | {
-      status: 'planned_conflict'
-      reconciliation: TransactionReconciliation
-    }
 
 export interface CreateImportSourceInput {
   name: string
@@ -334,22 +330,14 @@ export async function createManualReconciliationSafely(input: {
     }
   }
 
-  const [existingBankMatch, existingPlannedMatch] = await Promise.all([
-    getReconciliationByBankTransactionId(input.bankTransactionId),
-    getReconciliationByPlannedTransactionId(input.plannedTransactionId),
-  ])
+  const existingBankMatch = await getReconciliationByBankTransactionId(
+    input.bankTransactionId,
+  )
 
   if (existingBankMatch) {
     return {
       status: 'bank_conflict',
       reconciliation: existingBankMatch,
-    }
-  }
-
-  if (existingPlannedMatch) {
-    return {
-      status: 'planned_conflict',
-      reconciliation: existingPlannedMatch,
     }
   }
 
@@ -370,6 +358,17 @@ export async function getReconciliationByPlannedTransactionId(
   plannedTransactionId: string,
 ): Promise<TransactionReconciliation | undefined> {
   return db.query.transactionReconciliation.findFirst({
+    where: eq(
+      transactionReconciliation.plannedTransactionId,
+      plannedTransactionId,
+    ),
+  })
+}
+
+export async function getReconciliationsByPlannedTransactionId(
+  plannedTransactionId: string,
+): Promise<TransactionReconciliation[]> {
+  return db.query.transactionReconciliation.findMany({
     where: eq(
       transactionReconciliation.plannedTransactionId,
       plannedTransactionId,
