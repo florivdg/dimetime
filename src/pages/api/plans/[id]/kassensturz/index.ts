@@ -1,28 +1,16 @@
 import type { APIRoute } from 'astro'
-import { getPlanById } from '@/lib/plans'
 import { getKassensturzData } from '@/lib/kassensturz'
+import { json, requirePlan } from './_helpers'
 
 export const GET: APIRoute = async ({ params }) => {
-  const planId = params.id
-  if (!planId) {
-    return new Response(JSON.stringify({ error: 'Plan-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const planResult = await requirePlan(params.id)
+  if ('response' in planResult) {
+    return planResult.response
   }
 
-  const plan = await getPlanById(planId)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const { planId } = planResult
 
   const data = await getKassensturzData(planId)
 
-  return new Response(JSON.stringify(data), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json(200, data)
 }

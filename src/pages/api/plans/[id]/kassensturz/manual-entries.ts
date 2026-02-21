@@ -1,11 +1,12 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
-import { getPlanById } from '@/lib/plans'
 import {
   createManualEntry,
-  updateManualEntry,
   deleteManualEntry,
+  getPlannedTransactionInPlan,
+  updateManualEntry,
 } from '@/lib/kassensturz'
+import { json, parseJson, requirePlan } from './_helpers'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name ist erforderlich'),
@@ -29,198 +30,101 @@ const deleteSchema = z.object({
 })
 
 export const POST: APIRoute = async ({ params, request, locals }) => {
-  const planId = params.id
-  if (!planId) {
-    return new Response(JSON.stringify({ error: 'Plan-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const planResult = await requirePlan(params.id, { writable: true })
+  if ('response' in planResult) {
+    return planResult.response
   }
+  const { planId } = planResult
 
-  const plan = await getPlanById(planId)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const parsedResult = await parseJson(request, createSchema)
+  if ('response' in parsedResult) {
+    return parsedResult.response
   }
-
-  if (plan.isArchived) {
-    return new Response(
-      JSON.stringify({
-        error: 'Plan ist archiviert - keine Änderungen möglich',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = createSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const parsed = parsedResult.data
 
   try {
+    if (parsed.plannedTransactionId) {
+      const plannedTx = await getPlannedTransactionInPlan(
+        planId,
+        parsed.plannedTransactionId,
+      )
+      if (!plannedTx) {
+        return json(404, { error: 'Geplante Transaktion nicht gefunden' })
+      }
+    }
+
     const entry = await createManualEntry({
       planId,
-      name: parsed.data.name,
-      note: parsed.data.note ?? null,
-      amountCents: parsed.data.amountCents,
-      type: parsed.data.type,
-      plannedTransactionId: parsed.data.plannedTransactionId ?? null,
+      name: parsed.name,
+      note: parsed.note ?? null,
+      amountCents: parsed.amountCents,
+      type: parsed.type,
+      plannedTransactionId: parsed.plannedTransactionId ?? null,
       userId: locals.user?.id ?? null,
     })
 
-    return new Response(JSON.stringify(entry), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return json(201, entry)
   } catch (error) {
     console.error('Manueller Eintrag erstellen fehlgeschlagen:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Eintrag konnte nicht erstellt werden',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    return json(500, {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Eintrag konnte nicht erstellt werden',
+    })
   }
 }
 
 export const PUT: APIRoute = async ({ params, request }) => {
-  const planId = params.id
-  if (!planId) {
-    return new Response(JSON.stringify({ error: 'Plan-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const planResult = await requirePlan(params.id, { writable: true })
+  if ('response' in planResult) {
+    return planResult.response
   }
+  const { planId } = planResult
 
-  const plan = await getPlanById(planId)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const parsedResult = await parseJson(request, updateSchema)
+  if ('response' in parsedResult) {
+    return parsedResult.response
   }
+  const parsed = parsedResult.data
 
-  if (plan.isArchived) {
-    return new Response(
-      JSON.stringify({
-        error: 'Plan ist archiviert - keine Änderungen möglich',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
+  const { entryId, ...updateData } = parsed
+
+  if (updateData.plannedTransactionId) {
+    const plannedTx = await getPlannedTransactionInPlan(
+      planId,
+      updateData.plannedTransactionId,
     )
+    if (!plannedTx) {
+      return json(404, { error: 'Geplante Transaktion nicht gefunden' })
+    }
   }
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = updateSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  const { entryId, ...updateData } = parsed.data
-
-  const updated = await updateManualEntry(entryId, updateData)
+  const updated = await updateManualEntry(planId, entryId, updateData)
   if (!updated) {
-    return new Response(JSON.stringify({ error: 'Eintrag nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return json(404, { error: 'Eintrag nicht gefunden' })
   }
 
-  return new Response(JSON.stringify(updated), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json(200, updated)
 }
 
 export const DELETE: APIRoute = async ({ params, request }) => {
-  const planId = params.id
-  if (!planId) {
-    return new Response(JSON.stringify({ error: 'Plan-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const planResult = await requirePlan(params.id, { writable: true })
+  if ('response' in planResult) {
+    return planResult.response
   }
+  const { planId } = planResult
 
-  const plan = await getPlanById(planId)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const parsedResult = await parseJson(request, deleteSchema)
+  if ('response' in parsedResult) {
+    return parsedResult.response
   }
+  const parsed = parsedResult.data
 
-  if (plan.isArchived) {
-    return new Response(
-      JSON.stringify({
-        error: 'Plan ist archiviert - keine Änderungen möglich',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = deleteSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  const deleted = await deleteManualEntry(parsed.data.entryId)
+  const deleted = await deleteManualEntry(planId, parsed.entryId)
   if (!deleted) {
-    return new Response(JSON.stringify({ error: 'Eintrag nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return json(404, { error: 'Eintrag nicht gefunden' })
   }
 
-  return new Response(JSON.stringify({ success: true }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json(200, { success: true })
 }

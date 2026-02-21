@@ -1,144 +1,98 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
-import { getPlanById } from '@/lib/plans'
 import {
   dismissBankTransaction,
+  getBankTransactionInPlan,
+  getDismissalByBankTransactionInPlan,
   undismissBankTransaction,
 } from '@/lib/kassensturz'
+import { json, parseJson, requirePlan } from './_helpers'
 
 const dismissSchema = z.object({
   bankTransactionId: z.uuid(),
   reason: z.string().optional(),
 })
 
+function isUniqueConstraintError(error: unknown) {
+  return (
+    error instanceof Error && /unique|constraint failed/i.test(error.message)
+  )
+}
+
 export const POST: APIRoute = async ({ params, request, locals }) => {
-  const planId = params.id
-  if (!planId) {
-    return new Response(JSON.stringify({ error: 'Plan-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const planResult = await requirePlan(params.id, { writable: true })
+  if ('response' in planResult) {
+    return planResult.response
   }
+  const { planId } = planResult
 
-  const plan = await getPlanById(planId)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const parsedResult = await parseJson(request, dismissSchema)
+  if ('response' in parsedResult) {
+    return parsedResult.response
   }
-
-  if (plan.isArchived) {
-    return new Response(
-      JSON.stringify({
-        error: 'Plan ist archiviert - keine Änderungen möglich',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = dismissSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const parsed = parsedResult.data
 
   try {
+    const [bankTx, existingDismissal] = await Promise.all([
+      getBankTransactionInPlan(planId, parsed.bankTransactionId),
+      getDismissalByBankTransactionInPlan(planId, parsed.bankTransactionId),
+    ])
+
+    if (!bankTx) {
+      return json(404, { error: 'Banktransaktion nicht gefunden' })
+    }
+
+    if (existingDismissal) {
+      return json(409, {
+        error: 'Diese Transaktion wurde bereits verworfen.',
+      })
+    }
+
     const dismissal = await dismissBankTransaction({
-      bankTransactionId: parsed.data.bankTransactionId,
+      bankTransactionId: parsed.bankTransactionId,
       planId,
-      reason: parsed.data.reason ?? null,
+      reason: parsed.reason ?? null,
       userId: locals.user?.id ?? null,
     })
 
-    return new Response(JSON.stringify(dismissal), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return json(201, dismissal)
   } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return json(409, {
+        error: 'Diese Transaktion wurde bereits verworfen.',
+      })
+    }
+
     console.error('Kassensturz Verwerfung fehlgeschlagen:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Transaktion konnte nicht verworfen werden',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    return json(500, {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Transaktion konnte nicht verworfen werden',
+    })
   }
 }
 
 export const DELETE: APIRoute = async ({ params, request }) => {
-  const planId = params.id
-  if (!planId) {
-    return new Response(JSON.stringify({ error: 'Plan-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const planResult = await requirePlan(params.id, { writable: true })
+  if ('response' in planResult) {
+    return planResult.response
   }
+  const { planId } = planResult
 
-  const plan = await getPlanById(planId)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  const parsedResult = await parseJson(
+    request,
+    z.object({ dismissalId: z.uuid() }),
+  )
+  if ('response' in parsedResult) {
+    return parsedResult.response
   }
+  const parsed = parsedResult.data
 
-  if (plan.isArchived) {
-    return new Response(
-      JSON.stringify({
-        error: 'Plan ist archiviert - keine Änderungen möglich',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = z.object({ dismissalId: z.uuid() }).safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  const deleted = await undismissBankTransaction(parsed.data.dismissalId)
+  const deleted = await undismissBankTransaction(planId, parsed.dismissalId)
   if (!deleted) {
-    return new Response(
-      JSON.stringify({ error: 'Verwerfung nicht gefunden' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
-    )
+    return json(404, { error: 'Verwerfung nicht gefunden' })
   }
 
-  return new Response(JSON.stringify({ success: true }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json(200, { success: true })
 }

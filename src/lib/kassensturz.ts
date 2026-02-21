@@ -7,7 +7,7 @@ import {
   transactionReconciliation,
   category,
 } from '@/db/schema/plans'
-import { eq, desc, inArray } from 'drizzle-orm'
+import { and, desc, eq, getTableColumns, inArray } from 'drizzle-orm'
 
 // Types
 export type KassensturzDismissal = typeof kassensturzDismissal.$inferSelect
@@ -78,6 +78,84 @@ export interface KassensturzData {
   unmatchedBankTransactions: KassensturzBankTransaction[]
   dismissals: KassensturzDismissedTransaction[]
   manualEntries: KassensturzManualEntry[]
+}
+
+export async function getBankTransactionInPlan(
+  planId: string,
+  bankTransactionId: string,
+) {
+  return db.query.bankTransaction.findFirst({
+    where: and(
+      eq(bankTransaction.id, bankTransactionId),
+      eq(bankTransaction.planId, planId),
+    ),
+  })
+}
+
+export async function getPlannedTransactionInPlan(
+  planId: string,
+  plannedTransactionId: string,
+) {
+  return db.query.plannedTransaction.findFirst({
+    where: and(
+      eq(plannedTransaction.id, plannedTransactionId),
+      eq(plannedTransaction.planId, planId),
+    ),
+  })
+}
+
+export async function getDismissalInPlan(planId: string, dismissalId: string) {
+  return db.query.kassensturzDismissal.findFirst({
+    where: and(
+      eq(kassensturzDismissal.id, dismissalId),
+      eq(kassensturzDismissal.planId, planId),
+    ),
+  })
+}
+
+export async function getDismissalByBankTransactionInPlan(
+  planId: string,
+  bankTransactionId: string,
+) {
+  return db.query.kassensturzDismissal.findFirst({
+    where: and(
+      eq(kassensturzDismissal.planId, planId),
+      eq(kassensturzDismissal.bankTransactionId, bankTransactionId),
+    ),
+  })
+}
+
+export async function getManualEntryInPlan(planId: string, entryId: string) {
+  return db.query.kassensturzManualEntry.findFirst({
+    where: and(
+      eq(kassensturzManualEntry.id, entryId),
+      eq(kassensturzManualEntry.planId, planId),
+    ),
+  })
+}
+
+export async function getReconciliationInPlan(
+  planId: string,
+  reconciliationId: string,
+) {
+  const [row] = await db
+    .select({
+      ...getTableColumns(transactionReconciliation),
+    })
+    .from(transactionReconciliation)
+    .innerJoin(
+      bankTransaction,
+      eq(transactionReconciliation.bankTransactionId, bankTransaction.id),
+    )
+    .where(
+      and(
+        eq(transactionReconciliation.id, reconciliationId),
+        eq(bankTransaction.planId, planId),
+      ),
+    )
+    .limit(1)
+
+  return row
 }
 
 export async function getKassensturzData(
@@ -317,7 +395,15 @@ export async function getKassensturzData(
   }
 }
 
-export async function removeReconciliation(reconciliationId: string) {
+export async function removeReconciliation(
+  planId: string,
+  reconciliationId: string,
+) {
+  const existing = await getReconciliationInPlan(planId, reconciliationId)
+  if (!existing) {
+    return undefined
+  }
+
   const [deleted] = await db
     .delete(transactionReconciliation)
     .where(eq(transactionReconciliation.id, reconciliationId))
@@ -347,7 +433,15 @@ export async function dismissBankTransaction(input: {
   return created
 }
 
-export async function undismissBankTransaction(dismissalId: string) {
+export async function undismissBankTransaction(
+  planId: string,
+  dismissalId: string,
+) {
+  const existing = await getDismissalInPlan(planId, dismissalId)
+  if (!existing) {
+    return undefined
+  }
+
   const [deleted] = await db
     .delete(kassensturzDismissal)
     .where(eq(kassensturzDismissal.id, dismissalId))
@@ -386,6 +480,7 @@ export async function createManualEntry(input: {
 }
 
 export async function updateManualEntry(
+  planId: string,
   id: string,
   input: {
     name?: string
@@ -395,6 +490,11 @@ export async function updateManualEntry(
     plannedTransactionId?: string | null
   },
 ) {
+  const existing = await getManualEntryInPlan(planId, id)
+  if (!existing) {
+    return undefined
+  }
+
   const updateData: Record<string, unknown> = {}
 
   if (input.name !== undefined) updateData.name = input.name
@@ -415,7 +515,12 @@ export async function updateManualEntry(
   return updated
 }
 
-export async function deleteManualEntry(id: string) {
+export async function deleteManualEntry(planId: string, id: string) {
+  const existing = await getManualEntryInPlan(planId, id)
+  if (!existing) {
+    return undefined
+  }
+
   const [deleted] = await db
     .delete(kassensturzManualEntry)
     .where(eq(kassensturzManualEntry.id, id))
