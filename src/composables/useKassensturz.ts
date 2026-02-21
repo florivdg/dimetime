@@ -35,6 +35,25 @@ export function useKassensturz(planId: string) {
     manualEntries.value.filter((e) => !e.plannedTransactionId),
   )
 
+  async function request(
+    path: string,
+    init: RequestInit,
+    fallbackError: string,
+  ) {
+    const response = await fetch(path, init)
+    if (!response.ok) {
+      let errorMessage = fallbackError
+      try {
+        const data = (await response.json()) as { error?: string }
+        errorMessage = data.error ?? fallbackError
+      } catch {
+        // ignore parse errors and keep fallback message
+      }
+      throw new Error(errorMessage)
+    }
+    return response
+  }
+
   async function load() {
     isLoading.value = true
     error.value = null
@@ -59,15 +78,15 @@ export function useKassensturz(planId: string) {
     bankTransactionId: string,
     plannedTransactionId: string,
   ) {
-    const response = await fetch(`/api/plans/${planId}/kassensturz/reconcile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bankTransactionId, plannedTransactionId }),
-    })
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error ?? 'Zuordnung fehlgeschlagen')
-    }
+    await request(
+      `/api/plans/${planId}/kassensturz/reconcile`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bankTransactionId, plannedTransactionId }),
+      },
+      'Zuordnung fehlgeschlagen',
+    )
     await load()
   }
 
@@ -75,36 +94,51 @@ export function useKassensturz(planId: string) {
     bankTransactionIds: string[],
     plannedTransactionId: string,
   ) {
+    let firstError: unknown = null
+
     for (const bankTxId of bankTransactionIds) {
-      const response = await fetch(
-        `/api/plans/${planId}/kassensturz/reconcile`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bankTransactionId: bankTxId,
-            plannedTransactionId,
-          }),
-        },
-      )
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error ?? 'Zuordnung fehlgeschlagen')
+      try {
+        await request(
+          `/api/plans/${planId}/kassensturz/reconcile`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bankTransactionId: bankTxId,
+              plannedTransactionId,
+            }),
+          },
+          'Zuordnung fehlgeschlagen',
+        )
+      } catch (error) {
+        firstError = error
+        break
       }
     }
-    await load()
+
+    try {
+      await load()
+    } catch (loadError) {
+      if (!firstError) {
+        firstError = loadError
+      }
+    }
+
+    if (firstError) {
+      throw firstError
+    }
   }
 
   async function removeMatch(reconciliationId: string) {
-    const response = await fetch(`/api/plans/${planId}/kassensturz/reconcile`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reconciliationId }),
-    })
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error ?? 'Zuordnung konnte nicht entfernt werden')
-    }
+    await request(
+      `/api/plans/${planId}/kassensturz/reconcile`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reconciliationId }),
+      },
+      'Zuordnung konnte nicht entfernt werden',
+    )
     await load()
   }
 
@@ -117,15 +151,18 @@ export function useKassensturz(planId: string) {
       idx !== -1 ? unmatchedBankTransactions.value.splice(idx, 1)[0] : null
 
     try {
-      const response = await fetch(`/api/plans/${planId}/kassensturz/dismiss`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bankTransactionId, reason }),
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error ?? 'Verwerfen fehlgeschlagen')
-      }
+      await request(
+        `/api/plans/${planId}/kassensturz/dismiss`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bankTransactionId,
+            reason,
+          }),
+        },
+        'Verwerfen fehlgeschlagen',
+      )
       await load()
     } catch (e) {
       // Rollback
@@ -137,15 +174,15 @@ export function useKassensturz(planId: string) {
   }
 
   async function undismiss(dismissalId: string) {
-    const response = await fetch(`/api/plans/${planId}/kassensturz/dismiss`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dismissalId }),
-    })
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error ?? 'Wiederherstellen fehlgeschlagen')
-    }
+    await request(
+      `/api/plans/${planId}/kassensturz/dismiss`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dismissalId }),
+      },
+      'Wiederherstellen fehlgeschlagen',
+    )
     await load()
   }
 
@@ -156,18 +193,15 @@ export function useKassensturz(planId: string) {
     type: 'income' | 'expense'
     plannedTransactionId?: string
   }) {
-    const response = await fetch(
+    await request(
       `/api/plans/${planId}/kassensturz/manual-entries`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       },
+      'Eintrag konnte nicht erstellt werden',
     )
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error ?? 'Eintrag konnte nicht erstellt werden')
-    }
     await load()
   }
 
@@ -179,34 +213,28 @@ export function useKassensturz(planId: string) {
     type?: 'income' | 'expense'
     plannedTransactionId?: string | null
   }) {
-    const response = await fetch(
+    await request(
       `/api/plans/${planId}/kassensturz/manual-entries`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       },
+      'Eintrag konnte nicht bearbeitet werden',
     )
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error ?? 'Eintrag konnte nicht bearbeitet werden')
-    }
     await load()
   }
 
   async function removeManualEntry(entryId: string) {
-    const response = await fetch(
+    await request(
       `/api/plans/${planId}/kassensturz/manual-entries`,
       {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entryId }),
       },
+      'Eintrag konnte nicht gelöscht werden',
     )
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error ?? 'Eintrag konnte nicht gelöscht werden')
-    }
     await load()
   }
 

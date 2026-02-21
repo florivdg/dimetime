@@ -598,7 +598,6 @@ function handleFilterReset() {
       <TabsContent value="kassensturz">
         <KassensturzManager
           :plan="plan"
-          :categories="categories"
           @summary-update="kassensturzSummary = $event"
         />
       </TabsContent>

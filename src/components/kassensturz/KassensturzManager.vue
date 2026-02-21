@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import type { Plan } from '@/lib/plans'
-import type { Category } from '@/lib/categories'
 import type {
   KassensturzManualEntry,
   KassensturzSummary,
@@ -19,7 +18,6 @@ import KassensturzExceptionsList from './KassensturzExceptionsList.vue'
 
 const props = defineProps<{
   plan: Plan
-  categories: Category[]
 }>()
 
 const emit = defineEmits<{
