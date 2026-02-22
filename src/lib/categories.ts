@@ -69,19 +69,6 @@ export async function getCategoryBySlug(
     where: eq(category.slug, slug),
   })
 }
-
-/**
- * Check if a slug is unique (optionally excluding a specific category ID for updates)
- */
-export async function isSlugUnique(
-  slug: string,
-  excludeId?: string,
-): Promise<boolean> {
-  const existing = await getCategoryBySlug(slug)
-  if (!existing) return true
-  return excludeId ? existing.id === excludeId : false
-}
-
 /**
  * Create a new category
  */
