@@ -1,18 +1,20 @@
-import { afterAll, beforeEach, describe, expect, it } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
 import { Database } from 'bun:sqlite'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import * as plansSchema from '@/db/schema/plans'
 
 const dbPath = join(
   tmpdir(),
   `dimetime-reconcile-safe-${crypto.randomUUID()}.sqlite`,
 )
 
-process.env.DB_FILE_NAME = dbPath
-
-const setupDb = new Database(dbPath)
-setupDb.run(`
+const sqlite = new Database(dbPath)
+sqlite.run('PRAGMA foreign_keys = OFF')
+sqlite.run('PRAGMA journal_mode = WAL')
+sqlite.run(`
 CREATE TABLE transaction_reconciliation (
   id TEXT PRIMARY KEY,
   bank_transaction_id TEXT NOT NULL,
@@ -23,15 +25,20 @@ CREATE TABLE transaction_reconciliation (
   matched_by_user_id TEXT
 )
 `)
-setupDb.run(`
+sqlite.run(`
 CREATE UNIQUE INDEX transactionReconciliation_bankTransactionId_idx
 ON transaction_reconciliation (bank_transaction_id)
 `)
-setupDb.run(`
+sqlite.run(`
 CREATE INDEX transactionReconciliation_plannedTransactionId_idx
 ON transaction_reconciliation (planned_transaction_id)
 `)
-setupDb.close()
+
+const testDb = drizzle({ client: sqlite, schema: { ...plansSchema } })
+
+void mock.module('@/db/database', () => ({
+  db: testDb,
+}))
 
 const { createManualReconciliationSafely } =
   await import('@/lib/bank-transactions')
@@ -41,27 +48,26 @@ function insertReconciliation(values: {
   bankTransactionId: string
   plannedTransactionId: string
 }) {
-  const db = new Database(dbPath)
-  db.query(
-    `INSERT INTO transaction_reconciliation
+  sqlite
+    .query(
+      `INSERT INTO transaction_reconciliation
       (id, bank_transaction_id, planned_transaction_id, match_type, confidence, matched_at, matched_by_user_id)
       VALUES (?, ?, ?, 'manual', NULL, ?, NULL)`,
-  ).run(
-    values.id,
-    values.bankTransactionId,
-    values.plannedTransactionId,
-    Date.now(),
-  )
-  db.close()
+    )
+    .run(
+      values.id,
+      values.bankTransactionId,
+      values.plannedTransactionId,
+      Date.now(),
+    )
 }
 
 beforeEach(() => {
-  const db = new Database(dbPath)
-  db.run('DELETE FROM transaction_reconciliation')
-  db.close()
+  sqlite.run('DELETE FROM transaction_reconciliation')
 })
 
 afterAll(() => {
+  sqlite.close()
   rmSync(dbPath, { force: true })
   rmSync(`${dbPath}-shm`, { force: true })
   rmSync(`${dbPath}-wal`, { force: true })
