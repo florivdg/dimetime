@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { Plan } from '@/lib/plans'
 import type {
+  KassensturzAutoSuggestion,
   KassensturzManualEntry,
   KassensturzSummary,
 } from '@/lib/kassensturz'
 import { useKassensturz } from '@/composables/useKassensturz'
 import { toast } from 'vue-sonner'
 import { Loader2 } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 import KassensturzPlannedItemsList from './KassensturzPlannedItemsList.vue'
 import KassensturzUnmatchedSection from './KassensturzUnmatchedSection.vue'
@@ -26,6 +36,7 @@ const emit = defineEmits<{
 
 const {
   isLoading,
+  autoRunInProgress,
   error,
   summary,
   plannedItems,
@@ -44,6 +55,7 @@ const {
   addManualEntry,
   editManualEntry,
   removeManualEntry,
+  runAutoReconcile,
 } = useKassensturz(props.plan.id)
 
 onMounted(() => {
@@ -199,6 +211,61 @@ async function handleReconcile(
     toast.error(e instanceof Error ? e.message : 'Zuordnung fehlgeschlagen')
   }
 }
+
+const suggestionDialogOpen = ref(false)
+const autoSuggestions = ref<KassensturzAutoSuggestion[]>([])
+
+const plannedItemNameById = computed(
+  () => new Map(plannedItems.value.map((item) => [item.id, item.name])),
+)
+const unmatchedLabelById = computed(
+  () =>
+    new Map(
+      unmatchedBankTransactions.value.map((tx) => [
+        tx.id,
+        tx.counterparty ||
+          tx.description ||
+          tx.purpose ||
+          tx.bookingText ||
+          'Unbekannter Umsatz',
+      ]),
+    ),
+)
+
+async function handleAutoReconcile() {
+  try {
+    const result = await runAutoReconcile(false)
+    const noMatchCount = result.stats.skippedNoCandidate
+    toast.success(
+      `${result.stats.matched} automatisch zugeordnet, ${result.stats.suggested} Vorschläge, ${noMatchCount} ohne Treffer`,
+    )
+
+    autoSuggestions.value = result.suggestions
+    suggestionDialogOpen.value = result.suggestions.length > 0
+  } catch (e) {
+    toast.error(
+      e instanceof Error ? e.message : 'Auto-Zuordnung fehlgeschlagen',
+    )
+  }
+}
+
+async function handleApplySuggestion(
+  bankTransactionId: string,
+  plannedTransactionId: string,
+) {
+  try {
+    await reconcile(bankTransactionId, plannedTransactionId)
+    autoSuggestions.value = autoSuggestions.value.filter(
+      (suggestion) => suggestion.bankTransactionId !== bankTransactionId,
+    )
+    if (autoSuggestions.value.length === 0) {
+      suggestionDialogOpen.value = false
+    }
+    toast.success('Vorschlag zugeordnet')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'Zuordnung fehlgeschlagen')
+  }
+}
 </script>
 
 <template>
@@ -270,8 +337,10 @@ async function handleReconcile(
             :transactions="unmatchedBankTransactions"
             :planned-items="plannedItems"
             :is-archived="plan.isArchived"
+            :auto-run-in-progress="autoRunInProgress"
             @dismiss="handleDismiss"
             @reconcile="handleReconcile"
+            @auto-reconcile="handleAutoReconcile"
           />
 
           <KassensturzDismissedSection
@@ -301,5 +370,67 @@ async function handleReconcile(
       @save="handleManualEntrySave"
       @update="handleManualEntryUpdate"
     />
+
+    <Dialog v-model:open="suggestionDialogOpen">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Auto-Zuordnung Vorschläge</DialogTitle>
+          <DialogDescription>
+            Prüfe die Vorschläge und ordne offene Umsätze bei Bedarf direkt zu.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="max-h-80 space-y-3 overflow-y-auto pr-1">
+          <div
+            v-for="suggestion in autoSuggestions"
+            :key="suggestion.bankTransactionId"
+            class="space-y-2 rounded-md border p-3"
+          >
+            <p class="text-sm font-medium">
+              {{
+                unmatchedLabelById.get(suggestion.bankTransactionId) ||
+                'Unbekannter Umsatz'
+              }}
+            </p>
+            <div
+              v-for="candidate in suggestion.candidates"
+              :key="candidate.plannedTransactionId"
+              class="flex items-center justify-between gap-2 rounded border p-2"
+            >
+              <div class="min-w-0">
+                <p class="truncate text-sm">
+                  {{
+                    plannedItemNameById.get(candidate.plannedTransactionId) ||
+                    'Unbekannter Posten'
+                  }}
+                </p>
+                <p class="text-muted-foreground text-xs">
+                  Konfidenz: {{ candidate.confidence }}%
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="plan.isArchived"
+                @click="
+                  handleApplySuggestion(
+                    suggestion.bankTransactionId,
+                    candidate.plannedTransactionId,
+                  )
+                "
+              >
+                Jetzt zuordnen
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="suggestionDialogOpen = false">
+            Schließen
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

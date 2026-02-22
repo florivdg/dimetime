@@ -23,6 +23,12 @@ let createManualReconciliationSafelyImpl: (input: {
   matchedByUserId?: string | null
 }) => Promise<SafeResult>
 let createManualReconciliationSafelyCalls = 0
+let learnFromManualReconciliationCalls = 0
+let learnFromManualReconciliationImpl: (input: {
+  planId: string
+  bankTransactionId: string
+  plannedTransactionId: string
+}) => Promise<unknown>
 
 async function unexpectedCall() {
   throw new Error('Unexpected mock call')
@@ -58,6 +64,17 @@ void mock.module('@/lib/bank-transactions', () => ({
   },
 }))
 
+void mock.module('@/lib/kassensturz-learning', () => ({
+  learnFromManualReconciliation: (input: {
+    planId: string
+    bankTransactionId: string
+    plannedTransactionId: string
+  }) => {
+    learnFromManualReconciliationCalls += 1
+    return learnFromManualReconciliationImpl(input)
+  },
+}))
+
 const { POST, DELETE } = await import('./reconcile')
 
 function buildRequest(method: 'POST' | 'DELETE', body: unknown): Request {
@@ -77,6 +94,8 @@ beforeEach(() => {
   getPlannedTransactionInPlanImpl = async () => ({ id: 'planned-1' })
   removeReconciliationImpl = async () => ({ id: 'rec-1' })
   createManualReconciliationSafelyCalls = 0
+  learnFromManualReconciliationCalls = 0
+  learnFromManualReconciliationImpl = async () => ({ id: 'rule-1' })
   createManualReconciliationSafelyImpl = async () => ({
     status: 'created',
     reconciliation: { id: 'rec-1' },
@@ -129,6 +148,30 @@ describe('POST /api/plans/[id]/kassensturz/reconcile', () => {
     } as never)
 
     expect(response.status).toBe(403)
+  })
+
+  it('learns from successful manual reconciliation', async () => {
+    const bankTransactionId = crypto.randomUUID()
+    const plannedTransactionId = crypto.randomUUID()
+
+    learnFromManualReconciliationImpl = async (input) => {
+      expect(input.planId).toBe('plan-1')
+      expect(input.bankTransactionId).toBe(bankTransactionId)
+      expect(input.plannedTransactionId).toBe(plannedTransactionId)
+      return { id: 'rule-1' }
+    }
+
+    const response = await POST({
+      params: { id: 'plan-1' },
+      request: buildRequest('POST', {
+        bankTransactionId,
+        plannedTransactionId,
+      }),
+      locals: { user: { id: 'user-1' } },
+    } as never)
+
+    expect(response.status).toBe(201)
+    expect(learnFromManualReconciliationCalls).toBe(1)
   })
 })
 

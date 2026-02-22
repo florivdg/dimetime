@@ -6,6 +6,7 @@ import {
   removeReconciliation,
 } from '@/lib/kassensturz'
 import { createManualReconciliationSafely } from '@/lib/bank-transactions'
+import { learnFromManualReconciliation } from '@/lib/kassensturz-learning'
 import { json, parseJson, requirePlan } from './_helpers'
 
 const reconcileSchema = z.object({
@@ -47,6 +48,19 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     })
 
     if (result.status === 'created') {
+      try {
+        await learnFromManualReconciliation({
+          planId,
+          bankTransactionId: parsed.bankTransactionId,
+          plannedTransactionId: parsed.plannedTransactionId,
+        })
+      } catch (learningError) {
+        console.error(
+          'Kassensturz Lernfunktion konnte nicht aktualisiert werden:',
+          learningError,
+        )
+      }
+
       return json(201, result.reconciliation)
     }
 

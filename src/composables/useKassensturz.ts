@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import type {
+  KassensturzAutoRunResult,
   KassensturzData,
   KassensturzPlannedItem,
   KassensturzBankTransaction,
@@ -10,7 +11,9 @@ import type {
 
 export function useKassensturz(planId: string) {
   const isLoading = ref(false)
+  const autoRunInProgress = ref(false)
   const error = ref<string | null>(null)
+  const lastAutoRunResult = ref<KassensturzAutoRunResult | null>(null)
 
   const summary = ref<KassensturzSummary>({
     plannedIncome: 0,
@@ -238,9 +241,32 @@ export function useKassensturz(planId: string) {
     await load()
   }
 
+  async function runAutoReconcile(dryRun = false) {
+    autoRunInProgress.value = true
+    try {
+      const response = await request(
+        `/api/plans/${planId}/kassensturz/auto-reconcile`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dryRun }),
+        },
+        'Auto-Zuordnung fehlgeschlagen',
+      )
+      const result = (await response.json()) as KassensturzAutoRunResult
+      lastAutoRunResult.value = result
+      await load()
+      return result
+    } finally {
+      autoRunInProgress.value = false
+    }
+  }
+
   return {
     isLoading,
+    autoRunInProgress,
     error,
+    lastAutoRunResult,
     summary,
     plannedItems,
     incomeItems,
@@ -258,5 +284,6 @@ export function useKassensturz(planId: string) {
     addManualEntry,
     editManualEntry,
     removeManualEntry,
+    runAutoReconcile,
   }
 }

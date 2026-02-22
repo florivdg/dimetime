@@ -72,6 +72,44 @@ export interface KassensturzSummary {
   actualNet: number
 }
 
+export type KassensturzAutoReasonCode =
+  | 'RULE_MERCHANT_SOURCE'
+  | 'TEXT_SIMILARITY'
+  | 'AMOUNT_EXACT'
+  | 'AMOUNT_NEAR'
+  | 'AMOUNT_TOLERANCE'
+  | 'DUEDATE_NEAR'
+  | 'STATUS_PENALTY'
+
+export interface KassensturzAutoRunStats {
+  processed: number
+  matched: number
+  suggested: number
+  skippedAmbiguous: number
+  skippedNoCandidate: number
+}
+
+export interface KassensturzAutoCandidate {
+  plannedTransactionId: string
+  confidence: number
+  reasonCodes: KassensturzAutoReasonCode[]
+}
+
+export interface KassensturzAutoAppliedMatch extends KassensturzAutoCandidate {
+  bankTransactionId: string
+}
+
+export interface KassensturzAutoSuggestion {
+  bankTransactionId: string
+  candidates: KassensturzAutoCandidate[]
+}
+
+export interface KassensturzAutoRunResult {
+  stats: KassensturzAutoRunStats
+  applied: KassensturzAutoAppliedMatch[]
+  suggestions: KassensturzAutoSuggestion[]
+}
+
 export interface KassensturzData {
   summary: KassensturzSummary
   plannedItems: KassensturzPlannedItem[]

@@ -22,17 +22,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { EyeOff, GripVertical, Link, Search } from 'lucide-vue-next'
+import { EyeOff, GripVertical, Link, Loader2, Search } from 'lucide-vue-next'
 
 const props = defineProps<{
   transactions: KassensturzBankTransaction[]
   plannedItems: KassensturzPlannedItem[]
   isArchived?: boolean
+  autoRunInProgress?: boolean
 }>()
 
 const emit = defineEmits<{
   dismiss: [bankTransactionId: string, reason?: string]
   reconcile: [bankTransactionId: string, plannedTransactionId: string]
+  autoReconcile: []
 }>()
 
 const search = ref('')
@@ -102,15 +104,35 @@ function handleDragStart(e: DragEvent, txId: string) {
           ({{ transactions.length }})
         </span>
       </h3>
-      <div class="relative w-48">
-        <Search
-          class="text-muted-foreground absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
-        />
-        <Input
-          v-model="search"
-          placeholder="Filtern..."
-          class="h-8 pl-8 text-sm"
-        />
+      <div class="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          :disabled="
+            isArchived || autoRunInProgress || transactions.length === 0
+          "
+          @click="emit('autoReconcile')"
+        >
+          <Loader2
+            v-if="autoRunInProgress"
+            class="mr-1.5 size-3.5 animate-spin"
+          />
+          {{
+            autoRunInProgress
+              ? 'Auto-Zuordnung läuft...'
+              : 'Auto-Zuordnung starten'
+          }}
+        </Button>
+        <div class="relative w-48">
+          <Search
+            class="text-muted-foreground absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+          />
+          <Input
+            v-model="search"
+            placeholder="Filtern..."
+            class="h-8 pl-8 text-sm"
+          />
+        </div>
       </div>
     </div>
 

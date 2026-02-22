@@ -84,6 +84,7 @@ export const plannedTransaction = sqliteTable(
 
 export const categoryRelations = relations(category, ({ many }) => ({
   transactions: many(plannedTransaction),
+  kassensturzMatchRules: many(kassensturzMatchRule),
 }))
 
 export const planRelations = relations(plan, ({ many }) => ({
@@ -384,6 +385,53 @@ export const kassensturzManualEntry = sqliteTable(
   ],
 )
 
+// Kassensturz: learned auto-match rules
+export const kassensturzMatchRule = sqliteTable(
+  'kassensturz_match_rule',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => importSource.id, { onDelete: 'cascade' }),
+    direction: text('direction', { enum: ['income', 'expense'] }).notNull(),
+    merchantFingerprint: text('merchant_fingerprint').notNull(),
+    targetPlannedNameNormalized: text(
+      'target_planned_name_normalized',
+    ).notNull(),
+    targetCategoryId: text('target_category_id').references(() => category.id, {
+      onDelete: 'set null',
+    }),
+    avgAmountCents: integer('avg_amount_cents').notNull(),
+    amountToleranceCents: integer('amount_tolerance_cents').notNull(),
+    confirmCount: integer('confirm_count').notNull().default(1),
+    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('kassensturzMatchRule_source_fingerprint_target_idx').on(
+      table.sourceId,
+      table.direction,
+      table.merchantFingerprint,
+      table.targetPlannedNameNormalized,
+    ),
+    index('kassensturzMatchRule_lookup_idx').on(
+      table.sourceId,
+      table.direction,
+      table.merchantFingerprint,
+      table.active,
+    ),
+    index('kassensturzMatchRule_targetName_idx').on(
+      table.targetPlannedNameNormalized,
+    ),
+    index('kassensturzMatchRule_category_idx').on(table.targetCategoryId),
+  ],
+)
+
 // Relations
 export const transactionPresetRelations = relations(
   transactionPreset,
@@ -402,6 +450,7 @@ export const transactionPresetRelations = relations(
 export const importSourceRelations = relations(importSource, ({ many }) => ({
   statementImports: many(statementImport),
   bankTransactions: many(bankTransaction),
+  kassensturzMatchRules: many(kassensturzMatchRule),
 }))
 
 export const statementImportRelations = relations(
@@ -490,6 +539,20 @@ export const kassensturzManualEntryRelations = relations(
     createdByUser: one(user, {
       fields: [kassensturzManualEntry.createdByUserId],
       references: [user.id],
+    }),
+  }),
+)
+
+export const kassensturzMatchRuleRelations = relations(
+  kassensturzMatchRule,
+  ({ one }) => ({
+    source: one(importSource, {
+      fields: [kassensturzMatchRule.sourceId],
+      references: [importSource.id],
+    }),
+    targetCategory: one(category, {
+      fields: [kassensturzMatchRule.targetCategoryId],
+      references: [category.id],
     }),
   }),
 )

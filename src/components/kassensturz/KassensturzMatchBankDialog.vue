@@ -66,7 +66,9 @@ function handleConfirm() {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-h-[80vh] sm:max-w-xl">
+    <DialogContent
+      class="flex max-h-[80vh] flex-col overflow-hidden sm:max-w-xl"
+    >
       <DialogHeader>
         <DialogTitle>Umsätze zuordnen</DialogTitle>
         <DialogDescription>
@@ -74,15 +76,15 @@ function handleConfirm() {
         </DialogDescription>
       </DialogHeader>
 
-      <div class="space-y-3">
-        <div class="relative">
+      <div class="flex min-h-0 flex-1 flex-col gap-3">
+        <div class="relative shrink-0">
           <Search
             class="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
           />
           <Input v-model="search" placeholder="Suchen..." class="pl-9" />
         </div>
 
-        <div class="max-h-[40vh] space-y-1 overflow-y-auto">
+        <div class="min-h-0 flex-1 space-y-1 overflow-y-auto">
           <div
             v-for="tx in filteredTransactions"
             :key="tx.id"
@@ -127,7 +129,7 @@ function handleConfirm() {
         </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter class="shrink-0">
         <Button variant="outline" @click="open = false">Abbrechen</Button>
         <Button :disabled="selectedIds.size === 0" @click="handleConfirm">
           {{ selectedIds.size }} zuordnen
