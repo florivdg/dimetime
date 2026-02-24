@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.6.0...v0.7.0)
+
+### 🚀 Enhancements
+
+- **ui:** Add Progress and Tabs components with templates and props handling ([a87380f](https://github.com/florivdg/dimetime/commit/a87380f))
+- **kassensturz:** Implement dismissal and manual entry features for bank transactions ([ad2245a](https://github.com/florivdg/dimetime/commit/ad2245a))
+- **kassensturz:** Implement auto-reconciliation feature with learning capabilities ([0a0d795](https://github.com/florivdg/dimetime/commit/0a0d795))
+
+### 🏡 Chore
+
+- Remove unused components and API endpoints ([858ee72](https://github.com/florivdg/dimetime/commit/858ee72))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.6.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.5.1...v0.6.0)
