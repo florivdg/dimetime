@@ -135,6 +135,33 @@ export function useBankTransactions(
     }
   }
 
+  async function updateTransactionNote(
+    id: string,
+    note: string | null,
+  ): Promise<boolean> {
+    const tx = transactions.value.find((t) => t.id === id)
+    if (!tx) return false
+
+    const originalNote = tx.note
+
+    // Optimistic update
+    tx.note = note
+
+    try {
+      const response = await fetch(`/api/bank-transactions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      })
+      if (!response.ok) throw new Error('Update failed')
+      return true
+    } catch {
+      // Rollback
+      tx.note = originalNote
+      return false
+    }
+  }
+
   // Watch filters for changes and auto-fetch
   watch(
     () => ({ ...filters.state }),
@@ -153,5 +180,6 @@ export function useBankTransactions(
     loadSources,
     loadPlans,
     updateTransactionPlan,
+    updateTransactionNote,
   }
 }

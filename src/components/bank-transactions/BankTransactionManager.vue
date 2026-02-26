@@ -62,6 +62,7 @@ const {
   loadTransactions,
   loadSources,
   updateTransactionPlan,
+  updateTransactionNote,
 } = useBankTransactions(filters, {
   transactions: props.initialTransactions,
   pagination: props.initialPagination,
@@ -90,6 +91,15 @@ async function handlePlanUpdate(transactionId: string, planId: string | null) {
     toast.success(planId ? 'Plan zugewiesen' : 'Plan entfernt')
   } else {
     toast.error('Plan konnte nicht aktualisiert werden.')
+  }
+}
+
+async function handleNoteUpdate(transactionId: string, note: string | null) {
+  const success = await updateTransactionNote(transactionId, note)
+  if (success) {
+    toast.success(note ? 'Notiz gespeichert' : 'Notiz entfernt')
+  } else {
+    toast.error('Notiz konnte nicht gespeichert werden.')
   }
 }
 
@@ -212,6 +222,7 @@ function handleImported() {
         :has-active-filters="filters.hasActiveFilters.value"
         @sort="handleSort"
         @update:plan="handlePlanUpdate"
+        @update:note="handleNoteUpdate"
       />
 
       <!-- Pagination -->

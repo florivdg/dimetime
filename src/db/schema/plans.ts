@@ -221,6 +221,7 @@ export const bankTransaction = sqliteTable(
     country: text('country'),
     cardLast4: text('card_last4'),
     cardholder: text('cardholder'),
+    note: text('note'),
     rawDataJson: text('raw_data_json').notNull(),
     planId: text('plan_id').references(() => plan.id, { onDelete: 'set null' }),
     planAssignment: text('plan_assignment', {

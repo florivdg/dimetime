@@ -2,6 +2,7 @@
 import type { BankTransactionWithRelations } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import { formatAmount, formatDate } from '@/lib/format'
+import NoteEditor from './NoteEditor.vue'
 import PlanPicker from './PlanPicker.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   ArrowDown,
   ArrowUp,
@@ -35,6 +42,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   sort: [column: 'bookingDate' | 'amountCents' | 'createdAt']
   'update:plan': [transactionId: string, planId: string | null]
+  'update:note': [transactionId: string, note: string | null]
 }>()
 
 function getSortIcon(column: 'bookingDate' | 'amountCents' | 'createdAt') {
@@ -97,6 +105,7 @@ function statusVariant(
               <component :is="getSortIcon('bookingDate')" class="ml-2 size-4" />
             </Button>
           </TableHead>
+          <TableHead class="w-10"></TableHead>
           <TableHead>Beschreibung</TableHead>
           <TableHead class="w-36">
             <Button
@@ -115,22 +124,40 @@ function statusVariant(
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow v-for="tx in transactions" :key="tx.id">
+        <TableRow v-for="tx in transactions" :key="tx.id" class="group/row">
           <!-- Date -->
           <TableCell>{{ formatDate(tx.bookingDate) }}</TableCell>
+
+          <!-- Note -->
+          <TableCell class="px-0">
+            <NoteEditor
+              :note="tx.note"
+              :transaction-id="tx.id"
+              @update:note="(id, note) => emit('update:note', id, note)"
+            />
+          </TableCell>
 
           <!-- Description -->
           <TableCell>
             <div>
-              <span v-if="tx.counterparty" class="font-medium">{{
-                tx.counterparty
-              }}</span>
-              <p
-                v-if="tx.description"
-                class="text-muted-foreground truncate text-sm"
-              >
-                {{ tx.description }}
-              </p>
+              <TooltipProvider v-if="tx.counterparty ?? tx.description">
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <span class="font-medium">{{
+                      tx.counterparty ?? tx.description
+                    }}</span>
+                  </TooltipTrigger>
+                  <TooltipContent v-if="tx.note">
+                    <p class="max-w-64">
+                      {{
+                        tx.note.length > 100
+                          ? tx.note.slice(0, 100) + '…'
+                          : tx.note
+                      }}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </TableCell>
 

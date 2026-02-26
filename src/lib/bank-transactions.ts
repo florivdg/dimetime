@@ -285,6 +285,22 @@ export async function updateBankTransactionPlan(
   return updated
 }
 
+export async function updateBankTransactionNote(
+  id: string,
+  note: string | null,
+): Promise<BankTransaction | undefined> {
+  const [updated] = await db
+    .update(bankTransaction)
+    .set({
+      note,
+      updatedAt: new Date(),
+    })
+    .where(eq(bankTransaction.id, id))
+    .returning()
+
+  return updated
+}
+
 export async function createManualReconciliation(input: {
   bankTransactionId: string
   plannedTransactionId: string
