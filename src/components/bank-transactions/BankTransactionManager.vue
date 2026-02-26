@@ -219,8 +219,8 @@ function handleImported() {
       </div>
 
       <!-- Filters -->
-      <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
-        <div class="relative flex-1">
+      <div class="mb-4 space-y-3">
+        <div class="relative w-full">
           <Search
             class="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
           />
@@ -232,74 +232,77 @@ function handleImported() {
             @keyup.escape="filters.search.value = ''"
           />
         </div>
-        <Select v-model="filters.sourceId.value">
-          <SelectTrigger class="w-[180px]">
-            <SelectValue placeholder="Quelle" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alle Quellen</SelectItem>
-            <SelectItem
-              v-for="source in sources.filter((s) => s.isActive)"
-              :key="source.id"
-              :value="source.id"
-            >
-              {{ source.name }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <Select v-model="filters.status.value">
-          <SelectTrigger class="w-[140px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alle Status</SelectItem>
-            <SelectItem value="booked">Gebucht</SelectItem>
-            <SelectItem value="pending">Ausstehend</SelectItem>
-            <SelectItem value="unknown">Unbekannt</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select v-model="filters.planId.value">
-          <SelectTrigger class="w-[180px]">
-            <SelectValue placeholder="Plan" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alle Pläne</SelectItem>
-            <SelectItem v-for="p in plans" :key="p.id" :value="p.id">
-              {{ getPlanDisplayName(p.name, p.date) }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <Input
-          v-model="filters.dateFrom.value"
-          type="date"
-          class="w-[150px]"
-          placeholder="Von"
-        />
-        <Input
-          v-model="filters.dateTo.value"
-          type="date"
-          class="w-[150px]"
-          placeholder="Bis"
-        />
-        <div class="flex items-center gap-2">
-          <Switch
-            id="show-archived"
-            :model-value="filters.showArchived.value"
-            @update:model-value="filters.showArchived.value = $event"
+        <div class="flex flex-wrap items-center gap-2">
+          <Select v-model="filters.sourceId.value">
+            <SelectTrigger class="w-[150px]">
+              <SelectValue placeholder="Quelle" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Quellen</SelectItem>
+              <SelectItem
+                v-for="source in sources.filter((s) => s.isActive)"
+                :key="source.id"
+                :value="source.id"
+              >
+                {{ source.name }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Select v-model="filters.status.value">
+            <SelectTrigger class="w-[140px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Status</SelectItem>
+              <SelectItem value="booked">Gebucht</SelectItem>
+              <SelectItem value="pending">Ausstehend</SelectItem>
+              <SelectItem value="unknown">Unbekannt</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select v-model="filters.planId.value">
+            <SelectTrigger class="w-[150px]">
+              <SelectValue placeholder="Plan" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Pläne</SelectItem>
+              <SelectItem v-for="p in plans" :key="p.id" :value="p.id">
+                {{ getPlanDisplayName(p.name, p.date) }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            v-model="filters.dateFrom.value"
+            type="date"
+            class="w-[130px]"
+            placeholder="Von"
           />
-          <Label for="show-archived" class="text-sm whitespace-nowrap"
-            >Archivierte zeigen</Label
+          <Input
+            v-model="filters.dateTo.value"
+            type="date"
+            class="w-[130px]"
+            placeholder="Bis"
+          />
+          <div class="flex items-center gap-2">
+            <Switch
+              id="show-archived"
+              :model-value="filters.showArchived.value"
+              @update:model-value="filters.showArchived.value = $event"
+            />
+            <Label for="show-archived" class="text-sm whitespace-nowrap"
+              >Archivierte zeigen</Label
+            >
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            title="Filter zurücksetzen"
+            class="ml-auto"
+            :disabled="!filters.hasActiveFilters.value"
+            @click="filters.resetFilters"
           >
+            <X class="size-4" />
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="icon"
-          title="Filter zurücksetzen"
-          :disabled="!filters.hasActiveFilters.value"
-          @click="filters.resetFilters"
-        >
-          <X class="size-4" />
-        </Button>
       </div>
 
       <!-- Table -->

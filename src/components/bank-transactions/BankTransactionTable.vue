@@ -146,9 +146,9 @@ function statusVariant(
               <component :is="getSortIcon('amountCents')" class="ml-2 size-4" />
             </Button>
           </TableHead>
-          <TableHead>Quelle</TableHead>
+          <TableHead class="hidden lg:table-cell">Quelle</TableHead>
           <TableHead class="w-28">Status</TableHead>
-          <TableHead>Plan</TableHead>
+          <TableHead class="hidden xl:table-cell">Plan</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -184,7 +184,7 @@ function statusVariant(
               <TooltipProvider v-if="tx.counterparty ?? tx.description">
                 <Tooltip>
                   <TooltipTrigger as-child>
-                    <span class="font-medium">{{
+                    <span class="block max-w-[240px] truncate font-medium">{{
                       tx.counterparty ?? tx.description
                     }}</span>
                     <Badge v-if="tx.isArchived" variant="outline" class="ml-2"
@@ -219,7 +219,7 @@ function statusVariant(
           </TableCell>
 
           <!-- Source -->
-          <TableCell>
+          <TableCell class="hidden lg:table-cell">
             <span class="text-muted-foreground text-sm">{{
               tx.sourceName || '-'
             }}</span>
@@ -233,7 +233,7 @@ function statusVariant(
           </TableCell>
 
           <!-- Plan -->
-          <TableCell>
+          <TableCell class="hidden xl:table-cell">
             <PlanPicker
               :plans="plans"
               :plan-id="tx.planId"
