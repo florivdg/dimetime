@@ -48,6 +48,7 @@ export function useBankTransactions(
       }
       if (filters.dateFrom.value) params.set('dateFrom', filters.dateFrom.value)
       if (filters.dateTo.value) params.set('dateTo', filters.dateTo.value)
+      if (filters.showArchived.value) params.set('showArchived', 'true')
       params.set('sortBy', filters.sortBy.value)
       params.set('sortDir', filters.sortDir.value)
       params.set('page', filters.page.value.toString())
@@ -162,6 +163,33 @@ export function useBankTransactions(
     }
   }
 
+  async function bulkArchiveTransactions(
+    ids: string[],
+    isArchived: boolean,
+  ): Promise<boolean> {
+    try {
+      const response = await fetch('/api/bank-transactions/bulk-archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, isArchived }),
+      })
+      if (!response.ok) throw new Error('Bulk archive failed')
+      await loadTransactions()
+      // If current page is now empty but there are still results, jump to last valid page
+      if (
+        transactions.value.length === 0 &&
+        pagination.value.total > 0 &&
+        filters.page.value > 1
+      ) {
+        filters.page.value = Math.max(1, pagination.value.totalPages)
+      }
+      return true
+    } catch {
+      errorMessage.value = 'Archivierung konnte nicht durchgeführt werden.'
+      return false
+    }
+  }
+
   // Watch filters for changes and auto-fetch
   watch(
     () => ({ ...filters.state }),
@@ -181,5 +209,6 @@ export function useBankTransactions(
     loadPlans,
     updateTransactionPlan,
     updateTransactionNote,
+    bulkArchiveTransactions,
   }
 }

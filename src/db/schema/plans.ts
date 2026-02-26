@@ -229,6 +229,9 @@ export const bankTransaction = sqliteTable(
     })
       .notNull()
       .default('none'),
+    isArchived: integer('is_archived', { mode: 'boolean' })
+      .default(false)
+      .notNull(),
     importSeenCount: integer('import_seen_count').notNull().default(1),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
@@ -246,6 +249,7 @@ export const bankTransaction = sqliteTable(
     index('bankTransaction_externalTransactionId_idx').on(
       table.externalTransactionId,
     ),
+    index('bankTransaction_isArchived_idx').on(table.isArchived),
   ],
 )
 

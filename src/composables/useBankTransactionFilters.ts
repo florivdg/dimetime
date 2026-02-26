@@ -9,6 +9,7 @@ export function useBankTransactionFilters() {
     planId: { type: 'string', default: 'all', urlKey: 'plan' },
     dateFrom: { type: 'string', default: '', urlKey: 'from' },
     dateTo: { type: 'string', default: '', urlKey: 'to' },
+    showArchived: { type: 'boolean', default: false, urlKey: 'archived' },
     sortBy: {
       type: 'enum',
       default: 'bookingDate' as const,
@@ -94,6 +95,14 @@ export function useBankTransactionFilters() {
       state.page = v
     },
   })
+  const showArchived = computed({
+    get: () => state.showArchived,
+    set: (v: boolean) => {
+      if (state.showArchived === v) return
+      state.showArchived = v
+      state.page = 1
+    },
+  })
 
   return {
     search,
@@ -102,6 +111,7 @@ export function useBankTransactionFilters() {
     planId,
     dateFrom,
     dateTo,
+    showArchived,
     sortBy,
     sortDir,
     page,

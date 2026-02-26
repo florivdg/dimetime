@@ -32,6 +32,10 @@ bun run astro check        # Astro project check
 
 - Always prefer installing pre-built components from shadcn-vue than creating new base compoenents yourself. Use the shadcn-vue MCP server to look up existing components and see how they are used and configured.
 
+### reka-ui Component Props (shadcn-vue)
+
+shadcn-vue components are based on reka-ui v2. These components use `modelValue` / `update:modelValue` — **not** HTML-native names like `checked`, `selected`, or `value`. When using these components, always use the `modelValue` prop and `update:modelValue` event for two-way binding.
+
 ## Path Alias
 
 `@/*` maps to `./src/*` (configured in tsconfig.json)

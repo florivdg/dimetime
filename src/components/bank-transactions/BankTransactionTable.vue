@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { BankTransactionWithRelations } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import { formatAmount, formatDate } from '@/lib/format'
@@ -6,6 +7,7 @@ import NoteEditor from './NoteEditor.vue'
 import PlanPicker from './PlanPicker.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -37,13 +39,27 @@ const props = defineProps<{
   sortBy: 'bookingDate' | 'amountCents' | 'createdAt'
   sortDir: 'asc' | 'desc'
   hasActiveFilters: boolean
+  selectedIds: Set<string>
 }>()
 
 const emit = defineEmits<{
   sort: [column: 'bookingDate' | 'amountCents' | 'createdAt']
   'update:plan': [transactionId: string, planId: string | null]
   'update:note': [transactionId: string, note: string | null]
+  'toggle-select': [id: string, shiftKey: boolean]
+  'toggle-select-all': []
 }>()
+
+const allOnPageSelected = computed(
+  () =>
+    props.transactions.length > 0 &&
+    props.transactions.every((tx) => props.selectedIds.has(tx.id)),
+)
+const someOnPageSelected = computed(
+  () =>
+    !allOnPageSelected.value &&
+    props.transactions.some((tx) => props.selectedIds.has(tx.id)),
+)
 
 function getSortIcon(column: 'bookingDate' | 'amountCents' | 'createdAt') {
   if (props.sortBy !== column) return ArrowUpDown
@@ -94,6 +110,18 @@ function statusVariant(
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead class="w-10">
+            <Checkbox
+              :model-value="
+                allOnPageSelected
+                  ? true
+                  : someOnPageSelected
+                    ? 'indeterminate'
+                    : false
+              "
+              @update:model-value="emit('toggle-select-all')"
+            />
+          </TableHead>
           <TableHead class="w-36">
             <Button
               variant="ghost"
@@ -124,7 +152,20 @@ function statusVariant(
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow v-for="tx in transactions" :key="tx.id" class="group/row">
+        <TableRow
+          v-for="tx in transactions"
+          :key="tx.id"
+          class="group/row"
+          :class="{ 'opacity-60': tx.isArchived }"
+        >
+          <!-- Checkbox -->
+          <TableCell
+            class="cursor-pointer"
+            @click="(e: MouseEvent) => emit('toggle-select', tx.id, e.shiftKey)"
+          >
+            <Checkbox :model-value="selectedIds.has(tx.id)" />
+          </TableCell>
+
           <!-- Date -->
           <TableCell>{{ formatDate(tx.bookingDate) }}</TableCell>
 
@@ -146,6 +187,9 @@ function statusVariant(
                     <span class="font-medium">{{
                       tx.counterparty ?? tx.description
                     }}</span>
+                    <Badge v-if="tx.isArchived" variant="outline" class="ml-2"
+                      >Archiviert</Badge
+                    >
                   </TooltipTrigger>
                   <TooltipContent v-if="tx.note">
                     <p class="max-w-64">

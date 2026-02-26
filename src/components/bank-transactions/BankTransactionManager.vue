@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type {
   BankTransactionWithRelations,
   ImportSource,
@@ -35,7 +35,16 @@ import {
   PaginationPrevious,
 } from '@/components/ui/pagination'
 import { Button } from '@/components/ui/button'
-import { Landmark, Search, Upload, X } from 'lucide-vue-next'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import {
+  Archive,
+  ArchiveRestore,
+  Landmark,
+  Search,
+  Upload,
+  X,
+} from 'lucide-vue-next'
 import BankTransactionTable from './BankTransactionTable.vue'
 import BankImportDialog from './BankImportDialog.vue'
 
@@ -63,6 +72,7 @@ const {
   loadSources,
   updateTransactionPlan,
   updateTransactionNote,
+  bulkArchiveTransactions,
 } = useBankTransactions(filters, {
   transactions: props.initialTransactions,
   pagination: props.initialPagination,
@@ -71,6 +81,77 @@ const {
 })
 
 const importDialogOpen = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+const lastSelectedId = ref<string | null>(null)
+
+// Clear selection on filter/page changes
+watch(
+  () => ({ ...filters.state }),
+  () => {
+    selectedIds.value = new Set()
+    lastSelectedId.value = null
+  },
+  { deep: true },
+)
+
+function toggleSelect(id: string, shiftKey: boolean) {
+  const next = new Set(selectedIds.value)
+  if (shiftKey && lastSelectedId.value) {
+    const txList = transactions.value
+    const anchorIdx = txList.findIndex((tx) => tx.id === lastSelectedId.value)
+    const currentIdx = txList.findIndex((tx) => tx.id === id)
+    if (anchorIdx !== -1 && currentIdx !== -1) {
+      const [start, end] = [
+        Math.min(anchorIdx, currentIdx),
+        Math.max(anchorIdx, currentIdx),
+      ]
+      for (let i = start; i <= end; i++) {
+        next.add(txList[i].id)
+      }
+    }
+  } else {
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+  }
+  selectedIds.value = next
+  lastSelectedId.value = id
+}
+
+function toggleSelectAll() {
+  const allSelected = transactions.value.every((tx) =>
+    selectedIds.value.has(tx.id),
+  )
+  if (allSelected) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(transactions.value.map((tx) => tx.id))
+  }
+}
+
+function clearSelection() {
+  selectedIds.value = new Set()
+  lastSelectedId.value = null
+}
+
+async function handleBulkArchive(isArchived: boolean) {
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) return
+
+  const success = await bulkArchiveTransactions(ids, isArchived)
+  if (success) {
+    toast.success(
+      isArchived
+        ? `${ids.length} Transaktion(en) archiviert`
+        : `${ids.length} Transaktion(en) entarchiviert`,
+    )
+    selectedIds.value = new Set()
+  } else {
+    toast.error('Archivierung konnte nicht durchgeführt werden.')
+  }
+}
 
 function handleSort(column: 'bookingDate' | 'amountCents' | 'createdAt') {
   if (filters.sortBy.value === column) {
@@ -200,6 +281,16 @@ function handleImported() {
           class="w-[150px]"
           placeholder="Bis"
         />
+        <div class="flex items-center gap-2">
+          <Switch
+            id="show-archived"
+            :model-value="filters.showArchived.value"
+            @update:model-value="filters.showArchived.value = $event"
+          />
+          <Label for="show-archived" class="text-sm whitespace-nowrap"
+            >Archivierte zeigen</Label
+          >
+        </div>
         <Button
           variant="outline"
           size="icon"
@@ -220,10 +311,39 @@ function handleImported() {
         :sort-by="filters.sortBy.value"
         :sort-dir="filters.sortDir.value"
         :has-active-filters="filters.hasActiveFilters.value"
+        :selected-ids="selectedIds"
         @sort="handleSort"
         @update:plan="handlePlanUpdate"
         @update:note="handleNoteUpdate"
+        @toggle-select="toggleSelect"
+        @toggle-select-all="toggleSelectAll"
       />
+
+      <!-- Floating action bar -->
+      <div
+        v-if="selectedIds.size > 0"
+        class="bg-background/80 sticky bottom-0 z-10 mt-4 flex items-center gap-3 rounded-md border px-4 py-3 shadow-md backdrop-blur-sm"
+      >
+        <span class="text-sm font-medium">
+          {{ selectedIds.size }} ausgewählt
+        </span>
+        <Button size="sm" @click="handleBulkArchive(true)">
+          <Archive class="mr-2 size-4" />
+          Archivieren
+        </Button>
+        <Button
+          v-if="filters.showArchived.value"
+          size="sm"
+          variant="outline"
+          @click="handleBulkArchive(false)"
+        >
+          <ArchiveRestore class="mr-2 size-4" />
+          Entarchivieren
+        </Button>
+        <Button size="sm" variant="ghost" @click="clearSelection">
+          <X class="size-4" />
+        </Button>
+      </div>
 
       <!-- Pagination -->
       <div v-if="pagination.totalPages > 1" class="mt-4">
