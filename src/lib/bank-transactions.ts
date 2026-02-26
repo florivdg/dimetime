@@ -306,6 +306,35 @@ export async function updateBankTransactionNote(
   return updated
 }
 
+export async function updateBankTransactionFields(
+  id: string,
+  fields: {
+    planId?: string | null
+    note?: string | null
+  },
+): Promise<BankTransaction | undefined> {
+  const setValues: Partial<typeof bankTransaction.$inferInsert> = {
+    updatedAt: new Date(),
+  }
+
+  if (fields.planId !== undefined) {
+    setValues.planId = fields.planId
+    setValues.planAssignment = fields.planId ? 'manual' : 'none'
+  }
+
+  if (fields.note !== undefined) {
+    setValues.note = fields.note
+  }
+
+  const [updated] = await db
+    .update(bankTransaction)
+    .set(setValues)
+    .where(eq(bankTransaction.id, id))
+    .returning()
+
+  return updated
+}
+
 export async function createManualReconciliation(input: {
   bankTransactionId: string
   plannedTransactionId: string

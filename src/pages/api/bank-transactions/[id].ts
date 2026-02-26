@@ -2,8 +2,7 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import {
   getBankTransactionById,
-  updateBankTransactionNote,
-  updateBankTransactionPlan,
+  updateBankTransactionFields,
 } from '@/lib/bank-transactions'
 import { getPlanById } from '@/lib/plans'
 
@@ -59,8 +58,6 @@ export const PATCH: APIRoute = async ({ params, request }) => {
     )
   }
 
-  let updated: Awaited<ReturnType<typeof updateBankTransactionPlan>> = existing
-
   if (parsed.data.planId !== undefined) {
     if (parsed.data.planId) {
       const targetPlan = await getPlanById(parsed.data.planId)
@@ -83,12 +80,12 @@ export const PATCH: APIRoute = async ({ params, request }) => {
         )
       }
     }
-    updated = await updateBankTransactionPlan(id, parsed.data.planId)
   }
 
-  if (parsed.data.note !== undefined) {
-    updated = await updateBankTransactionNote(id, parsed.data.note)
-  }
+  const updated = await updateBankTransactionFields(id, {
+    ...(parsed.data.planId !== undefined && { planId: parsed.data.planId }),
+    ...(parsed.data.note !== undefined && { note: parsed.data.note }),
+  })
 
   return new Response(JSON.stringify(updated), {
     status: 200,
