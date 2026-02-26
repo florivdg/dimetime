@@ -29,3 +29,5 @@ sqlite.db
 *.db-wal
 
 data/
+
+.playwright-cli
