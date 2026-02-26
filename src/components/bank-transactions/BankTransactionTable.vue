@@ -183,14 +183,16 @@ function statusVariant(
             <div>
               <TooltipProvider v-if="tx.counterparty ?? tx.description">
                 <Tooltip>
-                  <TooltipTrigger as-child>
-                    <span class="block max-w-[240px] truncate font-medium">{{
-                      tx.counterparty ?? tx.description
-                    }}</span>
-                    <Badge v-if="tx.isArchived" variant="outline" class="ml-2"
+                  <span class="flex items-center gap-2">
+                    <TooltipTrigger as-child>
+                      <span class="max-w-[240px] truncate font-medium">{{
+                        tx.counterparty ?? tx.description
+                      }}</span>
+                    </TooltipTrigger>
+                    <Badge v-if="tx.isArchived" variant="outline"
                       >Archiviert</Badge
                     >
-                  </TooltipTrigger>
+                  </span>
                   <TooltipContent v-if="tx.note">
                     <p class="max-w-64">
                       {{
