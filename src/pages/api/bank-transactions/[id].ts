@@ -2,13 +2,18 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import {
   getBankTransactionById,
-  updateBankTransactionPlan,
+  updateBankTransactionFields,
 } from '@/lib/bank-transactions'
 import { getPlanById } from '@/lib/plans'
 
-const patchSchema = z.object({
-  planId: z.uuid().nullable(),
-})
+const patchSchema = z
+  .object({
+    planId: z.uuid().nullable().optional(),
+    note: z.string().max(2000).nullable().optional(),
+  })
+  .refine((data) => data.planId !== undefined || data.note !== undefined, {
+    message: 'Mindestens ein Feld (planId oder note) muss angegeben werden.',
+  })
 
 export const PATCH: APIRoute = async ({ params, request }) => {
   const id = params.id
@@ -53,29 +58,35 @@ export const PATCH: APIRoute = async ({ params, request }) => {
     )
   }
 
-  if (parsed.data.planId) {
-    const targetPlan = await getPlanById(parsed.data.planId)
-    if (!targetPlan) {
-      return new Response(
-        JSON.stringify({ error: 'Zielplan nicht gefunden' }),
-        {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      )
-    }
-    if (targetPlan.isArchived) {
-      return new Response(
-        JSON.stringify({
-          error:
-            'Banktransaktionen können nicht einem archivierten Plan zugeordnet werden.',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      )
+  if (parsed.data.planId !== undefined) {
+    if (parsed.data.planId) {
+      const targetPlan = await getPlanById(parsed.data.planId)
+      if (!targetPlan) {
+        return new Response(
+          JSON.stringify({ error: 'Zielplan nicht gefunden' }),
+          {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }
+      if (targetPlan.isArchived) {
+        return new Response(
+          JSON.stringify({
+            error:
+              'Banktransaktionen können nicht einem archivierten Plan zugeordnet werden.',
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
     }
   }
 
-  const updated = await updateBankTransactionPlan(id, parsed.data.planId)
+  const updated = await updateBankTransactionFields(id, {
+    ...(parsed.data.planId !== undefined && { planId: parsed.data.planId }),
+    ...(parsed.data.note !== undefined && { note: parsed.data.note }),
+  })
+
   return new Response(JSON.stringify(updated), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },

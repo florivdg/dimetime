@@ -14,6 +14,7 @@ import {
   eq,
   getTableColumns,
   gte,
+  inArray,
   like,
   lte,
   or,
@@ -63,6 +64,7 @@ export interface BankTransactionQueryOptions {
   search?: string
   dateFrom?: string
   dateTo?: string
+  showArchived?: boolean
   sortBy?: 'bookingDate' | 'amountCents' | 'createdAt'
   sortDir?: 'asc' | 'desc'
   page?: number
@@ -198,6 +200,9 @@ export async function getBankTransactions(
   if (status) conditions.push(eq(bankTransaction.status, status))
   if (dateFrom) conditions.push(gte(bankTransaction.bookingDate, dateFrom))
   if (dateTo) conditions.push(lte(bankTransaction.bookingDate, dateTo))
+  if (!options.showArchived) {
+    conditions.push(eq(bankTransaction.isArchived, false))
+  }
   if (search) {
     conditions.push(
       or(
@@ -279,6 +284,51 @@ export async function updateBankTransactionPlan(
       planAssignment: planId ? 'manual' : 'none',
       updatedAt: new Date(),
     })
+    .where(eq(bankTransaction.id, id))
+    .returning()
+
+  return updated
+}
+
+export async function updateBankTransactionNote(
+  id: string,
+  note: string | null,
+): Promise<BankTransaction | undefined> {
+  const [updated] = await db
+    .update(bankTransaction)
+    .set({
+      note,
+      updatedAt: new Date(),
+    })
+    .where(eq(bankTransaction.id, id))
+    .returning()
+
+  return updated
+}
+
+export async function updateBankTransactionFields(
+  id: string,
+  fields: {
+    planId?: string | null
+    note?: string | null
+  },
+): Promise<BankTransaction | undefined> {
+  const setValues: Partial<typeof bankTransaction.$inferInsert> = {
+    updatedAt: new Date(),
+  }
+
+  if (fields.planId !== undefined) {
+    setValues.planId = fields.planId
+    setValues.planAssignment = fields.planId ? 'manual' : 'none'
+  }
+
+  if (fields.note !== undefined) {
+    setValues.note = fields.note
+  }
+
+  const [updated] = await db
+    .update(bankTransaction)
+    .set(setValues)
     .where(eq(bankTransaction.id, id))
     .returning()
 
@@ -426,4 +476,16 @@ export async function getPlannedTransactionById(
   return db.query.plannedTransaction.findFirst({
     where: eq(plannedTransaction.id, id),
   })
+}
+
+export async function bulkArchiveBankTransactions(
+  ids: string[],
+  isArchived: boolean,
+): Promise<number> {
+  const result = await db
+    .update(bankTransaction)
+    .set({ isArchived, updatedAt: new Date() })
+    .where(inArray(bankTransaction.id, ids))
+    .returning({ id: bankTransaction.id })
+  return result.length
 }

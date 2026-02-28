@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { BankTransactionWithRelations } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import { formatAmount, formatDate } from '@/lib/format'
+import NoteEditor from './NoteEditor.vue'
 import PlanPicker from './PlanPicker.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -13,6 +16,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   ArrowDown,
   ArrowUp,
@@ -30,12 +39,27 @@ const props = defineProps<{
   sortBy: 'bookingDate' | 'amountCents' | 'createdAt'
   sortDir: 'asc' | 'desc'
   hasActiveFilters: boolean
+  selectedIds: Set<string>
 }>()
 
 const emit = defineEmits<{
   sort: [column: 'bookingDate' | 'amountCents' | 'createdAt']
   'update:plan': [transactionId: string, planId: string | null]
+  'update:note': [transactionId: string, note: string | null]
+  'toggle-select': [id: string, shiftKey: boolean]
+  'toggle-select-all': []
 }>()
+
+const allOnPageSelected = computed(
+  () =>
+    props.transactions.length > 0 &&
+    props.transactions.every((tx) => props.selectedIds.has(tx.id)),
+)
+const someOnPageSelected = computed(
+  () =>
+    !allOnPageSelected.value &&
+    props.transactions.some((tx) => props.selectedIds.has(tx.id)),
+)
 
 function getSortIcon(column: 'bookingDate' | 'amountCents' | 'createdAt') {
   if (props.sortBy !== column) return ArrowUpDown
@@ -86,6 +110,18 @@ function statusVariant(
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead class="w-10">
+            <Checkbox
+              :model-value="
+                allOnPageSelected
+                  ? true
+                  : someOnPageSelected
+                    ? 'indeterminate'
+                    : false
+              "
+              @update:model-value="emit('toggle-select-all')"
+            />
+          </TableHead>
           <TableHead class="w-36">
             <Button
               variant="ghost"
@@ -97,6 +133,7 @@ function statusVariant(
               <component :is="getSortIcon('bookingDate')" class="ml-2 size-4" />
             </Button>
           </TableHead>
+          <TableHead class="w-10"></TableHead>
           <TableHead>Beschreibung</TableHead>
           <TableHead class="w-36">
             <Button
@@ -109,28 +146,64 @@ function statusVariant(
               <component :is="getSortIcon('amountCents')" class="ml-2 size-4" />
             </Button>
           </TableHead>
-          <TableHead>Quelle</TableHead>
+          <TableHead class="hidden lg:table-cell">Quelle</TableHead>
           <TableHead class="w-28">Status</TableHead>
-          <TableHead>Plan</TableHead>
+          <TableHead class="hidden xl:table-cell">Plan</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow v-for="tx in transactions" :key="tx.id">
+        <TableRow
+          v-for="tx in transactions"
+          :key="tx.id"
+          class="group/row"
+          :class="{ 'opacity-60': tx.isArchived }"
+        >
+          <!-- Checkbox -->
+          <TableCell
+            class="cursor-pointer"
+            @click="(e: MouseEvent) => emit('toggle-select', tx.id, e.shiftKey)"
+          >
+            <Checkbox :model-value="selectedIds.has(tx.id)" />
+          </TableCell>
+
           <!-- Date -->
           <TableCell>{{ formatDate(tx.bookingDate) }}</TableCell>
+
+          <!-- Note -->
+          <TableCell class="px-0">
+            <NoteEditor
+              :note="tx.note"
+              :transaction-id="tx.id"
+              @update:note="(id, note) => emit('update:note', id, note)"
+            />
+          </TableCell>
 
           <!-- Description -->
           <TableCell>
             <div>
-              <span v-if="tx.counterparty" class="font-medium">{{
-                tx.counterparty
-              }}</span>
-              <p
-                v-if="tx.description"
-                class="text-muted-foreground truncate text-sm"
-              >
-                {{ tx.description }}
-              </p>
+              <TooltipProvider v-if="tx.counterparty ?? tx.description">
+                <Tooltip>
+                  <span class="flex items-center gap-2">
+                    <TooltipTrigger as-child>
+                      <span class="max-w-[240px] truncate font-medium">{{
+                        tx.counterparty ?? tx.description
+                      }}</span>
+                    </TooltipTrigger>
+                    <Badge v-if="tx.isArchived" variant="outline"
+                      >Archiviert</Badge
+                    >
+                  </span>
+                  <TooltipContent v-if="tx.note">
+                    <p class="max-w-64">
+                      {{
+                        tx.note.length > 100
+                          ? tx.note.slice(0, 100) + '…'
+                          : tx.note
+                      }}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </TableCell>
 
@@ -148,7 +221,7 @@ function statusVariant(
           </TableCell>
 
           <!-- Source -->
-          <TableCell>
+          <TableCell class="hidden lg:table-cell">
             <span class="text-muted-foreground text-sm">{{
               tx.sourceName || '-'
             }}</span>
@@ -162,7 +235,7 @@ function statusVariant(
           </TableCell>
 
           <!-- Plan -->
-          <TableCell>
+          <TableCell class="hidden xl:table-cell">
             <PlanPicker
               :plans="plans"
               :plan-id="tx.planId"

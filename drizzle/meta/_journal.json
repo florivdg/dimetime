@@ -71,6 +71,20 @@
       "when": 1771715495666,
       "tag": "0009_left_falcon",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1772132515668,
+      "tag": "0010_early_doctor_faustus",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1772137324467,
+      "tag": "0011_yielding_manta",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ const querySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  showArchived: z.coerce.boolean().optional(),
   sortBy: z.enum(['bookingDate', 'amountCents', 'createdAt']).optional(),
   sortDir: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().min(1).optional().default(1),
@@ -35,6 +36,7 @@ export const GET: APIRoute = async ({ url }) => {
     search: url.searchParams.get('search') || undefined,
     dateFrom: url.searchParams.get('dateFrom') || undefined,
     dateTo: url.searchParams.get('dateTo') || undefined,
+    showArchived: url.searchParams.get('showArchived') || undefined,
     sortBy: url.searchParams.get('sortBy') || undefined,
     sortDir: url.searchParams.get('sortDir') || undefined,
     page: url.searchParams.get('page') || undefined,
