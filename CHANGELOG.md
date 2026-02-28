@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.7.1
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.7.0...v0.7.1)
+
+### 🚀 Enhancements
+
+- **bank-transactions:** Add notes, inline editing, and bulk archive functionality ([#9](https://github.com/florivdg/dimetime/pull/9))
+
+### 🏡 Chore
+
+- **.gitignore:** Add .playwright-cli to ignore list ([b04606d](https://github.com/florivdg/dimetime/commit/b04606d))
+- **dependencies:** Update better-auth and passkey to version 1.4.20 ([eaabc81](https://github.com/florivdg/dimetime/commit/eaabc81))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.7.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.6.0...v0.7.0)
