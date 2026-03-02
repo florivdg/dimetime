@@ -84,18 +84,15 @@ export const plannedTransaction = sqliteTable(
 
 export const categoryRelations = relations(category, ({ many }) => ({
   transactions: many(plannedTransaction),
-  kassensturzMatchRules: many(kassensturzMatchRule),
 }))
 
 export const planRelations = relations(plan, ({ many }) => ({
   transactions: many(plannedTransaction),
-  kassensturzDismissals: many(kassensturzDismissal),
-  kassensturzManualEntries: many(kassensturzManualEntry),
 }))
 
 export const plannedTransactionRelations = relations(
   plannedTransaction,
-  ({ one, many }) => ({
+  ({ one }) => ({
     plan: one(plan, {
       fields: [plannedTransaction.planId],
       references: [plan.id],
@@ -108,8 +105,6 @@ export const plannedTransactionRelations = relations(
       fields: [plannedTransaction.categoryId],
       references: [category.id],
     }),
-    reconciliations: many(transactionReconciliation),
-    kassensturzManualEntries: many(kassensturzManualEntry),
   }),
 )
 
@@ -253,38 +248,6 @@ export const bankTransaction = sqliteTable(
   ],
 )
 
-// Link between imported and planned transactions (future automatic matching)
-export const transactionReconciliation = sqliteTable(
-  'transaction_reconciliation',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    bankTransactionId: text('bank_transaction_id')
-      .notNull()
-      .references(() => bankTransaction.id, { onDelete: 'cascade' }),
-    plannedTransactionId: text('planned_transaction_id')
-      .notNull()
-      .references(() => plannedTransaction.id, { onDelete: 'cascade' }),
-    matchType: text('match_type', { enum: ['manual', 'auto'] })
-      .notNull()
-      .default('manual'),
-    confidence: integer('confidence'),
-    matchedAt: integer('matched_at', { mode: 'timestamp_ms' }).notNull(),
-    matchedByUserId: text('matched_by_user_id').references(() => user.id, {
-      onDelete: 'set null',
-    }),
-  },
-  (table) => [
-    uniqueIndex('transactionReconciliation_bankTransactionId_idx').on(
-      table.bankTransactionId,
-    ),
-    index('transactionReconciliation_plannedTransactionId_idx').on(
-      table.plannedTransactionId,
-    ),
-  ],
-)
-
 // Transaction Presets
 export const transactionPreset = sqliteTable(
   'transaction_preset',
@@ -326,117 +289,6 @@ export const transactionPreset = sqliteTable(
   ],
 )
 
-// Kassensturz: dismissed bank transactions (per plan)
-export const kassensturzDismissal = sqliteTable(
-  'kassensturz_dismissal',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    bankTransactionId: text('bank_transaction_id')
-      .notNull()
-      .references(() => bankTransaction.id, { onDelete: 'cascade' }),
-    planId: text('plan_id')
-      .notNull()
-      .references(() => plan.id, { onDelete: 'cascade' }),
-    reason: text('reason'),
-    dismissedAt: integer('dismissed_at', { mode: 'timestamp_ms' }).notNull(),
-    dismissedByUserId: text('dismissed_by_user_id').references(() => user.id, {
-      onDelete: 'set null',
-    }),
-  },
-  (table) => [
-    uniqueIndex('kassensturzDismissal_bankTx_plan_idx').on(
-      table.bankTransactionId,
-      table.planId,
-    ),
-    index('kassensturzDismissal_planId_idx').on(table.planId),
-  ],
-)
-
-// Kassensturz: manual balance entries (cash, PayPal, etc.)
-export const kassensturzManualEntry = sqliteTable(
-  'kassensturz_manual_entry',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    planId: text('plan_id')
-      .notNull()
-      .references(() => plan.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    note: text('note'),
-    amountCents: integer('amount_cents').notNull(),
-    type: text('type', { enum: ['income', 'expense'] })
-      .notNull()
-      .default('expense'),
-    plannedTransactionId: text('planned_transaction_id').references(
-      () => plannedTransaction.id,
-      { onDelete: 'set null' },
-    ),
-    createdByUserId: text('created_by_user_id').references(() => user.id, {
-      onDelete: 'set null',
-    }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    index('kassensturzManualEntry_planId_idx').on(table.planId),
-    index('kassensturzManualEntry_plannedTransactionId_idx').on(
-      table.plannedTransactionId,
-    ),
-  ],
-)
-
-// Kassensturz: learned auto-match rules
-export const kassensturzMatchRule = sqliteTable(
-  'kassensturz_match_rule',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    sourceId: text('source_id')
-      .notNull()
-      .references(() => importSource.id, { onDelete: 'cascade' }),
-    direction: text('direction', { enum: ['income', 'expense'] }).notNull(),
-    merchantFingerprint: text('merchant_fingerprint').notNull(),
-    targetPlannedNameNormalized: text(
-      'target_planned_name_normalized',
-    ).notNull(),
-    targetCategoryId: text('target_category_id').references(() => category.id, {
-      onDelete: 'set null',
-    }),
-    avgAmountCents: integer('avg_amount_cents').notNull(),
-    amountToleranceCents: integer('amount_tolerance_cents').notNull(),
-    confirmCount: integer('confirm_count').notNull().default(1),
-    active: integer('active', { mode: 'boolean' }).notNull().default(true),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex('kassensturzMatchRule_source_fingerprint_target_idx').on(
-      table.sourceId,
-      table.direction,
-      table.merchantFingerprint,
-      table.targetPlannedNameNormalized,
-    ),
-    index('kassensturzMatchRule_lookup_idx').on(
-      table.sourceId,
-      table.direction,
-      table.merchantFingerprint,
-      table.active,
-    ),
-    index('kassensturzMatchRule_targetName_idx').on(
-      table.targetPlannedNameNormalized,
-    ),
-    index('kassensturzMatchRule_category_idx').on(table.targetCategoryId),
-  ],
-)
-
 // Relations
 export const transactionPresetRelations = relations(
   transactionPreset,
@@ -455,7 +307,6 @@ export const transactionPresetRelations = relations(
 export const importSourceRelations = relations(importSource, ({ many }) => ({
   statementImports: many(statementImport),
   bankTransactions: many(bankTransaction),
-  kassensturzMatchRules: many(kassensturzMatchRule),
 }))
 
 export const statementImportRelations = relations(
@@ -490,74 +341,6 @@ export const bankTransactionRelations = relations(
     plan: one(plan, {
       fields: [bankTransaction.planId],
       references: [plan.id],
-    }),
-  }),
-)
-
-export const transactionReconciliationRelations = relations(
-  transactionReconciliation,
-  ({ one }) => ({
-    bankTransaction: one(bankTransaction, {
-      fields: [transactionReconciliation.bankTransactionId],
-      references: [bankTransaction.id],
-    }),
-    plannedTransaction: one(plannedTransaction, {
-      fields: [transactionReconciliation.plannedTransactionId],
-      references: [plannedTransaction.id],
-    }),
-    matchedByUser: one(user, {
-      fields: [transactionReconciliation.matchedByUserId],
-      references: [user.id],
-    }),
-  }),
-)
-
-export const kassensturzDismissalRelations = relations(
-  kassensturzDismissal,
-  ({ one }) => ({
-    bankTransaction: one(bankTransaction, {
-      fields: [kassensturzDismissal.bankTransactionId],
-      references: [bankTransaction.id],
-    }),
-    plan: one(plan, {
-      fields: [kassensturzDismissal.planId],
-      references: [plan.id],
-    }),
-    dismissedByUser: one(user, {
-      fields: [kassensturzDismissal.dismissedByUserId],
-      references: [user.id],
-    }),
-  }),
-)
-
-export const kassensturzManualEntryRelations = relations(
-  kassensturzManualEntry,
-  ({ one }) => ({
-    plan: one(plan, {
-      fields: [kassensturzManualEntry.planId],
-      references: [plan.id],
-    }),
-    plannedTransaction: one(plannedTransaction, {
-      fields: [kassensturzManualEntry.plannedTransactionId],
-      references: [plannedTransaction.id],
-    }),
-    createdByUser: one(user, {
-      fields: [kassensturzManualEntry.createdByUserId],
-      references: [user.id],
-    }),
-  }),
-)
-
-export const kassensturzMatchRuleRelations = relations(
-  kassensturzMatchRule,
-  ({ one }) => ({
-    source: one(importSource, {
-      fields: [kassensturzMatchRule.sourceId],
-      references: [importSource.id],
-    }),
-    targetCategory: one(category, {
-      fields: [kassensturzMatchRule.targetCategoryId],
-      references: [category.id],
     }),
   }),
 )
