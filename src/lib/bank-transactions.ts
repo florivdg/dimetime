@@ -1,11 +1,5 @@
 import { db } from '@/db/database'
-import {
-  bankTransaction,
-  importSource,
-  plan,
-  plannedTransaction,
-  transactionReconciliation,
-} from '@/db/schema/plans'
+import { bankTransaction, importSource, plan } from '@/db/schema/plans'
 import {
   and,
   asc,
@@ -23,17 +17,6 @@ import {
 export type ImportSource = typeof importSource.$inferSelect
 export type NewImportSource = typeof importSource.$inferInsert
 export type BankTransaction = typeof bankTransaction.$inferSelect
-export type TransactionReconciliation =
-  typeof transactionReconciliation.$inferSelect
-export type ManualReconciliationResult =
-  | {
-      status: 'created'
-      reconciliation: TransactionReconciliation
-    }
-  | {
-      status: 'bank_conflict'
-      reconciliation: TransactionReconciliation
-    }
 
 export interface CreateImportSourceInput {
   name: string
@@ -333,149 +316,6 @@ export async function updateBankTransactionFields(
     .returning()
 
   return updated
-}
-
-export async function createManualReconciliation(input: {
-  bankTransactionId: string
-  plannedTransactionId: string
-  matchedByUserId?: string | null
-}): Promise<TransactionReconciliation> {
-  const [created] = await db
-    .insert(transactionReconciliation)
-    .values({
-      bankTransactionId: input.bankTransactionId,
-      plannedTransactionId: input.plannedTransactionId,
-      matchType: 'manual',
-      confidence: null,
-      matchedAt: new Date(),
-      matchedByUserId: input.matchedByUserId ?? null,
-    })
-    .returning()
-
-  return created
-}
-
-export async function createManualReconciliationSafely(input: {
-  bankTransactionId: string
-  plannedTransactionId: string
-  matchedByUserId?: string | null
-}): Promise<ManualReconciliationResult> {
-  const [created] = await db
-    .insert(transactionReconciliation)
-    .values({
-      bankTransactionId: input.bankTransactionId,
-      plannedTransactionId: input.plannedTransactionId,
-      matchType: 'manual',
-      confidence: null,
-      matchedAt: new Date(),
-      matchedByUserId: input.matchedByUserId ?? null,
-    })
-    .onConflictDoNothing()
-    .returning()
-
-  if (created) {
-    return {
-      status: 'created',
-      reconciliation: created,
-    }
-  }
-
-  const existingBankMatch = await getReconciliationByBankTransactionId(
-    input.bankTransactionId,
-  )
-
-  if (existingBankMatch) {
-    return {
-      status: 'bank_conflict',
-      reconciliation: existingBankMatch,
-    }
-  }
-
-  throw new Error(
-    'Abgleich konnte wegen eines Konflikts nicht erstellt werden.',
-  )
-}
-
-export async function createAutoReconciliationSafely(input: {
-  bankTransactionId: string
-  plannedTransactionId: string
-  confidence: number
-  matchedByUserId?: string | null
-}): Promise<ManualReconciliationResult> {
-  const confidence = Math.max(0, Math.min(100, Math.round(input.confidence)))
-
-  const [created] = await db
-    .insert(transactionReconciliation)
-    .values({
-      bankTransactionId: input.bankTransactionId,
-      plannedTransactionId: input.plannedTransactionId,
-      matchType: 'auto',
-      confidence,
-      matchedAt: new Date(),
-      matchedByUserId: input.matchedByUserId ?? null,
-    })
-    .onConflictDoNothing()
-    .returning()
-
-  if (created) {
-    return {
-      status: 'created',
-      reconciliation: created,
-    }
-  }
-
-  const existingBankMatch = await getReconciliationByBankTransactionId(
-    input.bankTransactionId,
-  )
-
-  if (existingBankMatch) {
-    return {
-      status: 'bank_conflict',
-      reconciliation: existingBankMatch,
-    }
-  }
-
-  throw new Error(
-    'Auto-Abgleich konnte wegen eines Konflikts nicht erstellt werden.',
-  )
-}
-
-export async function getReconciliationByBankTransactionId(
-  bankTransactionId: string,
-): Promise<TransactionReconciliation | undefined> {
-  return db.query.transactionReconciliation.findFirst({
-    where: eq(transactionReconciliation.bankTransactionId, bankTransactionId),
-  })
-}
-
-export async function getReconciliationByPlannedTransactionId(
-  plannedTransactionId: string,
-): Promise<TransactionReconciliation | undefined> {
-  return db.query.transactionReconciliation.findFirst({
-    where: eq(
-      transactionReconciliation.plannedTransactionId,
-      plannedTransactionId,
-    ),
-  })
-}
-
-export async function getReconciliationsByPlannedTransactionId(
-  plannedTransactionId: string,
-): Promise<TransactionReconciliation[]> {
-  return db.query.transactionReconciliation.findMany({
-    where: eq(
-      transactionReconciliation.plannedTransactionId,
-      plannedTransactionId,
-    ),
-  })
-}
-
-export async function getPlannedTransactionById(
-  id: string,
-): Promise<typeof plannedTransaction.$inferSelect | undefined> {
-  return db.query.plannedTransaction.findFirst({
-    where: eq(plannedTransaction.id, id),
-  })
 }
 
 export async function bulkArchiveBankTransactions(
