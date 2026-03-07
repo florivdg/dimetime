@@ -329,3 +329,19 @@ export async function bulkArchiveBankTransactions(
     .returning({ id: bankTransaction.id })
   return result.length
 }
+
+export async function bulkAssignPlanToTransactions(
+  ids: string[],
+  planId: string | null,
+): Promise<number> {
+  const result = await db
+    .update(bankTransaction)
+    .set({
+      planId,
+      planAssignment: planId ? 'manual' : 'none',
+      updatedAt: new Date(),
+    })
+    .where(inArray(bankTransaction.id, ids))
+    .returning({ id: bankTransaction.id })
+  return result.length
+}

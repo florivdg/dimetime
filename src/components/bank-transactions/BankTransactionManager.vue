@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   BankTransactionWithRelations,
   ImportSource,
@@ -38,8 +38,22 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
   Archive,
   ArchiveRestore,
+  CalendarDays,
   Landmark,
   Search,
   Upload,
@@ -73,6 +87,7 @@ const {
   updateTransactionPlan,
   updateTransactionNote,
   bulkArchiveTransactions,
+  bulkAssignPlan,
 } = useBankTransactions(filters, {
   transactions: props.initialTransactions,
   pagination: props.initialPagination,
@@ -81,6 +96,8 @@ const {
 })
 
 const importDialogOpen = ref(false)
+const bulkPlanPopoverOpen = ref(false)
+const activePlans = computed(() => plans.value.filter((p) => !p.isArchived))
 const selectedIds = ref<Set<string>>(new Set())
 const lastSelectedId = ref<string | null>(null)
 
@@ -134,6 +151,24 @@ function toggleSelectAll() {
 function clearSelection() {
   selectedIds.value = new Set()
   lastSelectedId.value = null
+}
+
+async function handleBulkAssignPlan(planId: string | null) {
+  bulkPlanPopoverOpen.value = false
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) return
+
+  const success = await bulkAssignPlan(ids, planId)
+  if (success) {
+    toast.success(
+      planId
+        ? `${ids.length} Transaktion(en) Plan zugewiesen`
+        : `${ids.length} Transaktion(en) Plan entfernt`,
+    )
+    selectedIds.value = new Set()
+  } else {
+    toast.error('Plan konnte nicht zugewiesen werden.')
+  }
 }
 
 async function handleBulkArchive(isArchived: boolean) {
@@ -343,6 +378,38 @@ function handleImported() {
           <ArchiveRestore class="mr-2 size-4" />
           Entarchivieren
         </Button>
+        <Popover v-model:open="bulkPlanPopoverOpen">
+          <PopoverTrigger as-child>
+            <Button size="sm" variant="outline">
+              <CalendarDays class="mr-2 size-4" />
+              Plan zuweisen
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent class="w-[250px] p-0" side="top" align="start">
+            <Command>
+              <CommandInput placeholder="Plan suchen..." />
+              <CommandList>
+                <CommandEmpty>Kein Plan gefunden.</CommandEmpty>
+                <CommandGroup>
+                  <CommandItem
+                    value="__kein_plan__"
+                    @select="handleBulkAssignPlan(null)"
+                  >
+                    Kein Plan
+                  </CommandItem>
+                  <CommandItem
+                    v-for="p in activePlans"
+                    :key="p.id"
+                    :value="getPlanDisplayName(p.name, p.date)"
+                    @select="handleBulkAssignPlan(p.id)"
+                  >
+                    {{ getPlanDisplayName(p.name, p.date) }}
+                  </CommandItem>
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
         <Button size="sm" variant="ghost" @click="clearSelection">
           <X class="size-4" />
         </Button>

@@ -190,6 +190,25 @@ export function useBankTransactions(
     }
   }
 
+  async function bulkAssignPlan(
+    ids: string[],
+    planId: string | null,
+  ): Promise<boolean> {
+    try {
+      const response = await fetch('/api/bank-transactions/bulk-assign-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, planId }),
+      })
+      if (!response.ok) throw new Error('Bulk assign plan failed')
+      await loadTransactions()
+      return true
+    } catch {
+      errorMessage.value = 'Plan konnte nicht zugewiesen werden.'
+      return false
+    }
+  }
+
   // Watch filters for changes and auto-fetch
   watch(
     () => ({ ...filters.state }),
@@ -210,5 +229,6 @@ export function useBankTransactions(
     updateTransactionPlan,
     updateTransactionNote,
     bulkArchiveTransactions,
+    bulkAssignPlan,
   }
 }
