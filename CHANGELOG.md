@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.8.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.7.1...v0.8.0)
+
+### 🚀 Enhancements
+
+- **bank-transactions:** Add bulk plan assignment for selected transactions ([9a8445f](https://github.com/florivdg/dimetime/commit/9a8445f))
+- **budgets:** Add budget tracking with utilization badges for plans and transactions ([#11](https://github.com/florivdg/dimetime/pull/11))
+
+### 💅 Refactors
+
+- Remove Kassensturz (bank reconciliation) feature ([#10](https://github.com/florivdg/dimetime/pull/10))
+- **sidebar:** Move Transaktionen under Pläne as sub-item ([5bfe3d0](https://github.com/florivdg/dimetime/commit/5bfe3d0))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.7.1
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.7.0...v0.7.1)
