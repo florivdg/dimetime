@@ -13,6 +13,7 @@ import {
   eq,
   getTableColumns,
   gte,
+  inArray,
   like,
   lte,
   ne,
@@ -457,6 +458,33 @@ export async function getBudgetSpendingForPlan(
         eq(plannedTransaction.isBudget, true),
       ),
     )
+    .groupBy(bankTransaction.budgetId)
+
+  const spending: Record<string, number> = {}
+  for (const row of result) {
+    if (row.budgetId) {
+      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
+    }
+  }
+  return spending
+}
+
+/**
+ * Computes budget spending for a set of budget transaction IDs.
+ * Returns a Record mapping each budgetId to its total absolute spending in cents.
+ */
+export async function getBudgetSpendingForBudgets(
+  budgetIds: string[],
+): Promise<Record<string, number>> {
+  if (budgetIds.length === 0) return {}
+
+  const result = await db
+    .select({
+      budgetId: bankTransaction.budgetId,
+      spent: sum(bankTransaction.amountCents),
+    })
+    .from(bankTransaction)
+    .where(inArray(bankTransaction.budgetId, budgetIds))
     .groupBy(bankTransaction.budgetId)
 
   const spending: Record<string, number> = {}

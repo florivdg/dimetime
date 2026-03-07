@@ -2,7 +2,10 @@
 import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import TransactionManager from '@/components/transactions/TransactionManager.vue'
-import { getTransactions } from '@/lib/transactions'
+import {
+  getBudgetSpendingForBudgets,
+  getTransactions,
+} from '@/lib/transactions'
 import { getAllCategories } from '@/lib/categories'
 import { getAllPlans, getSidebarPlans } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
@@ -14,6 +17,9 @@ const { transactions, pagination } = await getTransactions({
   page: 1,
   limit: 20,
 })
+const budgetIds = transactions.filter((t) => t.isBudget).map((t) => t.id)
+const initialBudgetSpending =
+  budgetIds.length > 0 ? await getBudgetSpendingForBudgets(budgetIds) : {}
 const categories = await getAllCategories()
 const plans = await getAllPlans(true) // Include archived plans for filter
 
@@ -49,6 +55,7 @@ if (latest && latest.id !== currentMonth?.id) {
         client:load
         initialTransactions={transactions}
         initialPagination={pagination}
+        initialBudgetSpending={initialBudgetSpending}
         categories={categories}
         plans={plans}
       />

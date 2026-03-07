@@ -1,6 +1,10 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
-import { createTransaction, getTransactions } from '@/lib/transactions'
+import {
+  createTransaction,
+  getBudgetSpendingForBudgets,
+  getTransactions,
+} from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
 import { getSetting } from '@/lib/settings'
 
@@ -87,7 +91,13 @@ export const GET: APIRoute = async ({ url, locals }) => {
     groupByType,
   })
 
-  return new Response(JSON.stringify(result), {
+  const budgetIds = result.transactions
+    .filter((t) => t.isBudget)
+    .map((t) => t.id)
+  const budgetSpending =
+    budgetIds.length > 0 ? await getBudgetSpendingForBudgets(budgetIds) : {}
+
+  return new Response(JSON.stringify({ ...result, budgetSpending }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })

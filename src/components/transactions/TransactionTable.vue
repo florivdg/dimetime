@@ -67,15 +67,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import BudgetUtilizationBadge from '@/components/plans/BudgetUtilizationBadge.vue'
 
-const props = defineProps<{
-  transactions: TransactionWithCategory[]
-  isLoading: boolean
-  searchQuery: string
-  sortBy: 'name' | 'dueDate' | 'categoryName' | 'amount'
-  sortDir: 'asc' | 'desc'
-  categories: Category[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    transactions: TransactionWithCategory[]
+    isLoading: boolean
+    searchQuery: string
+    sortBy: 'name' | 'dueDate' | 'categoryName' | 'amount'
+    sortDir: 'asc' | 'desc'
+    categories: Category[]
+    budgetSpending?: Record<string, number>
+  }>(),
+  {
+    budgetSpending: () => ({}),
+  },
+)
 
 const emit = defineEmits<{
   updated: []
@@ -223,181 +230,189 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
   </div>
 
   <!-- Table -->
-  <div v-else class="rounded-md border">
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="-ml-3"
-              @click="emit('sort', 'name')"
-            >
-              Name
-              <component :is="getSortIcon('name')" class="ml-2 size-4" />
-            </Button>
-          </TableHead>
-          <TableHead class="w-36">
-            <Button
-              variant="ghost"
-              size="sm"
-              class="-ml-3"
-              @click="emit('sort', 'dueDate')"
-            >
-              Datum
-              <component :is="getSortIcon('dueDate')" class="ml-2 size-4" />
-            </Button>
-          </TableHead>
-          <TableHead>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="-ml-3"
-              @click="emit('sort', 'categoryName')"
-            >
-              Kategorie
-              <component
-                :is="getSortIcon('categoryName')"
-                class="ml-2 size-4"
-              />
-            </Button>
-          </TableHead>
-          <TableHead>Plan</TableHead>
-          <TableHead class="w-36">
-            <Button
-              variant="ghost"
-              size="sm"
-              class="-ml-3"
-              @click="emit('sort', 'amount')"
-            >
-              Betrag
-              <component :is="getSortIcon('amount')" class="ml-2 size-4" />
-            </Button>
-          </TableHead>
-          <TableHead class="w-24 text-right">Aktionen</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        <TableRow v-for="transaction in transactions" :key="transaction.id">
-          <!-- Name -->
-          <TableCell>
-            <Input
-              v-if="editingId === transaction.id"
-              :ref="
-                (el) => setEditInputRef(transaction.id, el as HTMLInputElement)
-              "
-              v-model="editName"
-              class="h-8"
-              placeholder="Name..."
-              @keyup.enter="updateTransaction(transaction.id)"
-              @keyup.escape="cancelEditing"
-            />
-            <span v-else class="font-medium">{{ transaction.name }}</span>
-          </TableCell>
-
-          <!-- Date -->
-          <TableCell>
-            <Input
-              v-if="editingId === transaction.id"
-              v-model="editDueDate"
-              type="date"
-              class="h-8"
-              @keyup.enter="updateTransaction(transaction.id)"
-              @keyup.escape="cancelEditing"
-            />
-            <span v-else>{{ formatDate(transaction.dueDate) }}</span>
-          </TableCell>
-
-          <!-- Category -->
-          <TableCell>
-            <Select
-              v-if="editingId === transaction.id"
-              v-model="editCategoryId"
-            >
-              <SelectTrigger class="h-8">
-                <SelectValue placeholder="Kategorie" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem :value="null">Keine Kategorie</SelectItem>
-                <SelectItem
-                  v-for="cat in categories"
-                  :key="cat.id"
-                  :value="cat.id"
-                >
-                  {{ cat.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <div v-else class="flex items-center gap-2">
-              <span
-                v-if="transaction.categoryColor"
-                class="size-3 shrink-0 rounded-full"
-                :style="{ backgroundColor: transaction.categoryColor }"
-              />
-              <span>{{ transaction.categoryName || '-' }}</span>
-            </div>
-          </TableCell>
-
-          <!-- Plan -->
-          <TableCell>
-            <a
-              v-if="transaction.planId"
-              :href="`/plans/${transaction.planId}`"
-              class="hover:underline"
-            >
-              {{
-                getPlanDisplayName(transaction.planName, transaction.planDate)
-              }}
-            </a>
-            <span v-else class="text-muted-foreground">-</span>
-          </TableCell>
-
-          <!-- Amount -->
-          <TableCell>
-            <InputGroup v-if="editingId === transaction.id" class="h-8">
-              <InputGroupAddon>
-                <InputGroupButton
-                  :class="
-                    editType === 'income'
-                      ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
-                      : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
-                  "
-                  @click="toggleType"
-                >
-                  <Plus v-if="editType === 'income'" class="size-4" />
-                  <Minus v-else class="size-4" />
-                </InputGroupButton>
-              </InputGroupAddon>
-              <InputGroupInput
-                v-model.number="editAmount"
-                type="number"
-                step="0.01"
+  <TooltipProvider v-else>
+    <div class="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-3"
+                @click="emit('sort', 'name')"
+              >
+                Name
+                <component :is="getSortIcon('name')" class="ml-2 size-4" />
+              </Button>
+            </TableHead>
+            <TableHead class="w-36">
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-3"
+                @click="emit('sort', 'dueDate')"
+              >
+                Datum
+                <component :is="getSortIcon('dueDate')" class="ml-2 size-4" />
+              </Button>
+            </TableHead>
+            <TableHead>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-3"
+                @click="emit('sort', 'categoryName')"
+              >
+                Kategorie
+                <component
+                  :is="getSortIcon('categoryName')"
+                  class="ml-2 size-4"
+                />
+              </Button>
+            </TableHead>
+            <TableHead>Plan</TableHead>
+            <TableHead class="w-36">
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-3"
+                @click="emit('sort', 'amount')"
+              >
+                Betrag
+                <component :is="getSortIcon('amount')" class="ml-2 size-4" />
+              </Button>
+            </TableHead>
+            <TableHead class="w-24 text-right">Aktionen</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-for="transaction in transactions" :key="transaction.id">
+            <!-- Name -->
+            <TableCell>
+              <Input
+                v-if="editingId === transaction.id"
+                :ref="
+                  (el) =>
+                    setEditInputRef(transaction.id, el as HTMLInputElement)
+                "
+                v-model="editName"
+                class="h-8"
+                placeholder="Name..."
                 @keyup.enter="updateTransaction(transaction.id)"
                 @keyup.escape="cancelEditing"
               />
-            </InputGroup>
-            <span
-              v-else
-              :class="
-                transaction.type === 'income'
-                  ? 'text-lime-600 dark:text-lime-400'
-                  : 'text-rose-600 dark:text-rose-400'
-              "
-            >
-              {{ transaction.type === 'income' ? '+' : '-'
-              }}{{ formatAmount(transaction.amount) }}
-            </span>
-          </TableCell>
+              <div v-else class="flex items-center gap-2">
+                <span class="font-medium">{{ transaction.name }}</span>
+                <BudgetUtilizationBadge
+                  v-if="transaction.isBudget"
+                  :budgeted-cents="transaction.amount"
+                  :spent-cents="budgetSpending[transaction.id] ?? 0"
+                />
+              </div>
+            </TableCell>
 
-          <!-- Actions -->
-          <TableCell class="text-right">
-            <!-- Read-only: show lock icon -->
-            <div
-              v-if="isTransactionReadOnly(transaction)"
-              class="flex justify-end"
-            >
-              <TooltipProvider>
+            <!-- Date -->
+            <TableCell>
+              <Input
+                v-if="editingId === transaction.id"
+                v-model="editDueDate"
+                type="date"
+                class="h-8"
+                @keyup.enter="updateTransaction(transaction.id)"
+                @keyup.escape="cancelEditing"
+              />
+              <span v-else>{{ formatDate(transaction.dueDate) }}</span>
+            </TableCell>
+
+            <!-- Category -->
+            <TableCell>
+              <Select
+                v-if="editingId === transaction.id"
+                v-model="editCategoryId"
+              >
+                <SelectTrigger class="h-8">
+                  <SelectValue placeholder="Kategorie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="null">Keine Kategorie</SelectItem>
+                  <SelectItem
+                    v-for="cat in categories"
+                    :key="cat.id"
+                    :value="cat.id"
+                  >
+                    {{ cat.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <div v-else class="flex items-center gap-2">
+                <span
+                  v-if="transaction.categoryColor"
+                  class="size-3 shrink-0 rounded-full"
+                  :style="{ backgroundColor: transaction.categoryColor }"
+                />
+                <span>{{ transaction.categoryName || '-' }}</span>
+              </div>
+            </TableCell>
+
+            <!-- Plan -->
+            <TableCell>
+              <a
+                v-if="transaction.planId"
+                :href="`/plans/${transaction.planId}`"
+                class="hover:underline"
+              >
+                {{
+                  getPlanDisplayName(transaction.planName, transaction.planDate)
+                }}
+              </a>
+              <span v-else class="text-muted-foreground">-</span>
+            </TableCell>
+
+            <!-- Amount -->
+            <TableCell>
+              <InputGroup v-if="editingId === transaction.id" class="h-8">
+                <InputGroupAddon>
+                  <InputGroupButton
+                    :class="
+                      editType === 'income'
+                        ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
+                        : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
+                    "
+                    @click="toggleType"
+                  >
+                    <Plus v-if="editType === 'income'" class="size-4" />
+                    <Minus v-else class="size-4" />
+                  </InputGroupButton>
+                </InputGroupAddon>
+                <InputGroupInput
+                  v-model.number="editAmount"
+                  type="number"
+                  step="0.01"
+                  @keyup.enter="updateTransaction(transaction.id)"
+                  @keyup.escape="cancelEditing"
+                />
+              </InputGroup>
+              <span
+                v-else
+                :class="
+                  transaction.type === 'income'
+                    ? 'text-lime-600 dark:text-lime-400'
+                    : 'text-rose-600 dark:text-rose-400'
+                "
+              >
+                {{ transaction.type === 'income' ? '+' : '-'
+                }}{{ formatAmount(transaction.amount) }}
+              </span>
+            </TableCell>
+
+            <!-- Actions -->
+            <TableCell class="text-right">
+              <!-- Read-only: show lock icon -->
+              <div
+                v-if="isTransactionReadOnly(transaction)"
+                class="flex justify-end"
+              >
                 <Tooltip>
                   <TooltipTrigger as-child>
                     <div class="text-muted-foreground flex items-center gap-1">
@@ -411,66 +426,68 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
                     </p>
                   </TooltipContent>
                 </Tooltip>
-              </TooltipProvider>
-            </div>
-            <!-- Edit mode: show save/cancel buttons -->
-            <div
-              v-else-if="editingId === transaction.id"
-              class="flex justify-end gap-1"
-            >
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                title="Speichern"
-                @click="updateTransaction(transaction.id)"
+              </div>
+              <!-- Edit mode: show save/cancel buttons -->
+              <div
+                v-else-if="editingId === transaction.id"
+                class="flex justify-end gap-1"
               >
-                <Check class="size-4" />
-                <span class="sr-only">Speichern</span>
-              </Button>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                title="Abbrechen"
-                @click="cancelEditing"
-              >
-                <X class="size-4" />
-                <span class="sr-only">Abbrechen</span>
-              </Button>
-            </div>
-            <!-- Normal mode: show dropdown menu -->
-            <div v-else class="flex justify-end">
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <Button size="icon-sm" variant="ghost">
-                    <MoreVertical class="size-4" />
-                    <span class="sr-only">Aktionen</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem @click="startEditing(transaction)">
-                    <Pencil class="size-4" />
-                    Bearbeiten
-                  </DropdownMenuItem>
-                  <DropdownMenuItem @click="emit('saveAsPreset', transaction)">
-                    <BookmarkPlus class="size-4" />
-                    Als Vorlage speichern
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    class="text-destructive focus:text-destructive"
-                    @click="openDeleteDialog(transaction)"
-                  >
-                    <Trash2 class="size-4" />
-                    Löschen
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
-  </div>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  title="Speichern"
+                  @click="updateTransaction(transaction.id)"
+                >
+                  <Check class="size-4" />
+                  <span class="sr-only">Speichern</span>
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  title="Abbrechen"
+                  @click="cancelEditing"
+                >
+                  <X class="size-4" />
+                  <span class="sr-only">Abbrechen</span>
+                </Button>
+              </div>
+              <!-- Normal mode: show dropdown menu -->
+              <div v-else class="flex justify-end">
+                <DropdownMenu>
+                  <DropdownMenuTrigger as-child>
+                    <Button size="icon-sm" variant="ghost">
+                      <MoreVertical class="size-4" />
+                      <span class="sr-only">Aktionen</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem @click="startEditing(transaction)">
+                      <Pencil class="size-4" />
+                      Bearbeiten
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      @click="emit('saveAsPreset', transaction)"
+                    >
+                      <BookmarkPlus class="size-4" />
+                      Als Vorlage speichern
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      class="text-destructive focus:text-destructive"
+                      @click="openDeleteDialog(transaction)"
+                    >
+                      <Trash2 class="size-4" />
+                      Löschen
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+  </TooltipProvider>
 
   <!-- Delete confirmation dialog -->
   <AlertDialog v-model:open="deleteDialogOpen">

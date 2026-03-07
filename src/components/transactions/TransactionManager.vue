@@ -37,17 +37,23 @@ import PresetCreateDialog from '@/components/presets/PresetCreateDialog.vue'
 import type { PresetInitialValues } from '@/components/presets/PresetCreateDialog.vue'
 import TransactionTable from './TransactionTable.vue'
 
-const props = defineProps<{
-  initialTransactions: TransactionWithCategory[]
-  initialPagination: {
-    total: number
-    page: number
-    limit: number
-    totalPages: number
-  }
-  categories: Category[]
-  plans: Plan[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    initialTransactions: TransactionWithCategory[]
+    initialPagination: {
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }
+    initialBudgetSpending?: Record<string, number>
+    categories: Category[]
+    plans: Plan[]
+  }>(),
+  {
+    initialBudgetSpending: () => ({}),
+  },
+)
 
 // URL-synced filter state
 const { state: urlState, reset: resetUrlState } = useUrlState({
@@ -161,6 +167,7 @@ watch(
 // State
 const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
 const pagination = ref(props.initialPagination)
+const budgetSpending = ref<Record<string, number>>(props.initialBudgetSpending)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 
@@ -214,6 +221,7 @@ async function loadTransactions() {
     const data = await response.json()
     transactions.value = data.transactions
     pagination.value = data.pagination
+    budgetSpending.value = data.budgetSpending ?? {}
   } catch {
     errorMessage.value = 'Transaktionen konnten nicht geladen werden.'
   } finally {
@@ -334,6 +342,7 @@ function resetFilters() {
         :sort-by="sortBy"
         :sort-dir="sortDir"
         :categories="categories"
+        :budget-spending="budgetSpending"
         @updated="handleUpdated"
         @deleted="handleDeleted"
         @error="handleError"
