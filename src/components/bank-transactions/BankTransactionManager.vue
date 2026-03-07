@@ -105,6 +105,15 @@ const bulkBudgetPlanId = ref<string | null>(null)
 const bulkBudgetList = ref<{ id: string; name: string }[]>([])
 const bulkBudgetLoading = ref(false)
 const activePlans = computed(() => plans.value.filter((p) => !p.isArchived))
+
+const selectedSharedPlanId = computed(() => {
+  if (selectedIds.value.size === 0) return null
+  const ids = Array.from(selectedIds.value)
+  const selectedTxs = transactions.value.filter((tx) => ids.includes(tx.id))
+  const planIds = new Set(selectedTxs.map((tx) => tx.planId).filter(Boolean))
+  if (planIds.size === 1) return [...planIds][0]!
+  return null
+})
 const selectedIds = ref<Set<string>>(new Set())
 const lastSelectedId = ref<string | null>(null)
 
@@ -197,18 +206,8 @@ async function handleBudgetUpdate(
 
 async function openBulkBudgetPopover() {
   bulkBudgetPopoverOpen.value = true
-  // Pre-fill plan if all selected share the same planId
-  const ids = Array.from(selectedIds.value)
-  const selectedTxs = transactions.value.filter((tx) => ids.includes(tx.id))
-  const planIds = new Set(selectedTxs.map((tx) => tx.planId).filter(Boolean))
-  if (planIds.size === 1) {
-    const sharedPlanId = [...planIds][0]!
-    bulkBudgetPlanId.value = sharedPlanId
-    await loadBulkBudgets(sharedPlanId)
-  } else {
-    bulkBudgetPlanId.value = null
-    bulkBudgetList.value = []
-  }
+  bulkBudgetPlanId.value = selectedSharedPlanId.value
+  await loadBulkBudgets(selectedSharedPlanId.value!)
 }
 
 async function loadBulkBudgets(planId: string) {
@@ -224,11 +223,6 @@ async function loadBulkBudgets(planId: string) {
   } finally {
     bulkBudgetLoading.value = false
   }
-}
-
-async function handleBulkBudgetPlanSelect(planId: string) {
-  bulkBudgetPlanId.value = planId
-  await loadBulkBudgets(planId)
 }
 
 async function handleBulkAssignBudget(budgetId: string | null) {
@@ -507,34 +501,18 @@ function handleImported() {
         </Popover>
         <Popover v-model:open="bulkBudgetPopoverOpen">
           <PopoverTrigger as-child>
-            <Button size="sm" variant="outline" @click="openBulkBudgetPopover">
+            <Button
+              size="sm"
+              variant="outline"
+              :disabled="!selectedSharedPlanId"
+              @click="openBulkBudgetPopover"
+            >
               <Wallet class="mr-2 size-4" />
               Budget zuweisen
             </Button>
           </PopoverTrigger>
           <PopoverContent class="w-[280px] p-0" side="top" align="start">
-            <div v-if="!bulkBudgetPlanId" class="p-2">
-              <p class="text-muted-foreground mb-2 px-2 text-xs">
-                Plan auswählen:
-              </p>
-              <Command>
-                <CommandInput placeholder="Plan suchen..." />
-                <CommandList>
-                  <CommandEmpty>Kein Plan gefunden.</CommandEmpty>
-                  <CommandGroup>
-                    <CommandItem
-                      v-for="p in activePlans"
-                      :key="p.id"
-                      :value="getPlanDisplayName(p.name, p.date)"
-                      @select="handleBulkBudgetPlanSelect(p.id)"
-                    >
-                      {{ getPlanDisplayName(p.name, p.date) }}
-                    </CommandItem>
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </div>
-            <div v-else class="p-0">
+            <div class="p-0">
               <Command>
                 <CommandInput placeholder="Budget suchen..." />
                 <CommandList>
