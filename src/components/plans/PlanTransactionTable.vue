@@ -4,6 +4,7 @@ import type { TransactionWithCategory } from '@/lib/transactions'
 import { ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -233,9 +234,14 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
 
           <!-- Name -->
           <TableCell>
-            <span :class="{ 'line-through': transaction.isDone }">
-              {{ transaction.name }}
-            </span>
+            <div class="flex items-center gap-2">
+              <span :class="{ 'line-through': transaction.isDone }">
+                {{ transaction.name }}
+              </span>
+              <Badge v-if="transaction.isBudget" variant="secondary">
+                Budget
+              </Badge>
+            </div>
           </TableCell>
 
           <!-- Date -->

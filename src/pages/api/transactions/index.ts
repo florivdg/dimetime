@@ -46,6 +46,7 @@ const createSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   amount: z.number().int().min(0),
   isDone: z.boolean().optional(),
+  isBudget: z.boolean().optional(),
   planId: z.uuid(),
   categoryId: z.uuid().nullable().optional(),
 })

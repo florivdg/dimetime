@@ -58,6 +58,7 @@ export interface CreatePresetInput {
   endDate?: string | null
   categoryId?: string | null
   dayOfMonth?: number | null // 1-31
+  isBudget?: boolean
 }
 
 // Update input type
@@ -71,6 +72,7 @@ export interface UpdatePresetInput {
   endDate?: string | null
   categoryId?: string | null
   dayOfMonth?: number | null // 1-31
+  isBudget?: boolean
 }
 
 // Apply preset input type
@@ -235,6 +237,7 @@ export async function createPreset(
       endDate: input.endDate || null,
       categoryId: input.categoryId || null,
       dayOfMonth: input.dayOfMonth ?? null,
+      isBudget: input.isBudget ?? false,
       userId,
       createdAt: now,
       updatedAt: now,
@@ -262,6 +265,7 @@ export async function updatePreset(
   if (input.endDate !== undefined) updateData.endDate = input.endDate
   if (input.categoryId !== undefined) updateData.categoryId = input.categoryId
   if (input.dayOfMonth !== undefined) updateData.dayOfMonth = input.dayOfMonth
+  if (input.isBudget !== undefined) updateData.isBudget = input.isBudget
 
   updateData.updatedAt = new Date()
 
@@ -332,6 +336,7 @@ export async function applyPresetToPlan(
     dueDate,
     amount: preset.amount,
     isDone: false,
+    isBudget: preset.isBudget,
     planId: input.planId,
     categoryId: preset.categoryId,
   }

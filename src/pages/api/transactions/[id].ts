@@ -24,6 +24,7 @@ const updateTransactionSchema = z.object({
     .optional(),
   amount: z.number().int().min(0, 'Betrag muss positiv sein').optional(),
   isDone: z.boolean().optional(),
+  isBudget: z.boolean().optional(),
   categoryId: z.uuid().nullable().optional(),
   planId: z.uuid().optional(),
 })

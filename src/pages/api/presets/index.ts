@@ -49,6 +49,7 @@ const createSchema = z.object({
     .optional(),
   categoryId: z.uuid().nullable().optional(),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  isBudget: z.boolean().optional(),
 })
 
 export const GET: APIRoute = async ({ url, locals }) => {

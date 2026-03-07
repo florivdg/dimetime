@@ -175,6 +175,7 @@ function handleSaveAsPreset(transaction: TransactionWithCategory) {
     amount: transaction.amount,
     type: transaction.type,
     categoryId: transaction.categoryId,
+    isBudget: transaction.isBudget,
   }
   presetDialogOpen.value = true
 }
