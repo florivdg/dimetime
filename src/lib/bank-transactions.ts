@@ -1,5 +1,10 @@
 import { db } from '@/db/database'
-import { bankTransaction, importSource, plan } from '@/db/schema/plans'
+import {
+  bankTransaction,
+  importSource,
+  plan,
+  plannedTransaction,
+} from '@/db/schema/plans'
 import {
   and,
   asc,
@@ -58,6 +63,7 @@ export type BankTransactionWithRelations = BankTransaction & {
   sourceName: string | null
   planDate: string | null
   planName: string | null
+  budgetName: string | null
 }
 
 export interface PaginatedBankTransactions {
@@ -225,10 +231,15 @@ export async function getBankTransactions(
       sourceName: importSource.name,
       planDate: plan.date,
       planName: plan.name,
+      budgetName: plannedTransaction.name,
     })
     .from(bankTransaction)
     .leftJoin(importSource, eq(bankTransaction.sourceId, importSource.id))
     .leftJoin(plan, eq(bankTransaction.planId, plan.id))
+    .leftJoin(
+      plannedTransaction,
+      eq(bankTransaction.budgetId, plannedTransaction.id),
+    )
     .where(whereClause)
     .orderBy(orderBy)
 
@@ -294,6 +305,7 @@ export async function updateBankTransactionFields(
   fields: {
     planId?: string | null
     note?: string | null
+    budgetId?: string | null
   },
 ): Promise<BankTransaction | undefined> {
   const setValues: Partial<typeof bankTransaction.$inferInsert> = {
@@ -303,6 +315,12 @@ export async function updateBankTransactionFields(
   if (fields.planId !== undefined) {
     setValues.planId = fields.planId
     setValues.planAssignment = fields.planId ? 'manual' : 'none'
+    // Clear budget when plan changes (budget is plan-specific)
+    setValues.budgetId = null
+  }
+
+  if (fields.budgetId !== undefined) {
+    setValues.budgetId = fields.budgetId
   }
 
   if (fields.note !== undefined) {
@@ -334,11 +352,63 @@ export async function bulkAssignPlanToTransactions(
   ids: string[],
   planId: string | null,
 ): Promise<number> {
+  const now = new Date()
+
+  return db.transaction(async (tx) => {
+    const targetTransactions = await tx
+      .select({
+        id: bankTransaction.id,
+        planId: bankTransaction.planId,
+      })
+      .from(bankTransaction)
+      .where(inArray(bankTransaction.id, ids))
+
+    if (targetTransactions.length === 0) {
+      return 0
+    }
+
+    const idsToClearBudget = targetTransactions
+      .filter((transaction) => planId === null || transaction.planId !== planId)
+      .map((transaction) => transaction.id)
+    const idsToKeepBudget = targetTransactions
+      .filter((transaction) => planId !== null && transaction.planId === planId)
+      .map((transaction) => transaction.id)
+
+    if (idsToClearBudget.length > 0) {
+      await tx
+        .update(bankTransaction)
+        .set({
+          planId,
+          planAssignment: planId ? 'manual' : 'none',
+          budgetId: null,
+          updatedAt: now,
+        })
+        .where(inArray(bankTransaction.id, idsToClearBudget))
+    }
+
+    if (idsToKeepBudget.length > 0) {
+      await tx
+        .update(bankTransaction)
+        .set({
+          planId,
+          planAssignment: planId ? 'manual' : 'none',
+          updatedAt: now,
+        })
+        .where(inArray(bankTransaction.id, idsToKeepBudget))
+    }
+
+    return targetTransactions.length
+  })
+}
+
+export async function bulkAssignBudgetToTransactions(
+  ids: string[],
+  budgetId: string | null,
+): Promise<number> {
   const result = await db
     .update(bankTransaction)
     .set({
-      planId,
-      planAssignment: planId ? 'manual' : 'none',
+      budgetId,
       updatedAt: new Date(),
     })
     .where(inArray(bankTransaction.id, ids))

@@ -5,15 +5,24 @@ import {
   updateBankTransactionFields,
 } from '@/lib/bank-transactions'
 import { getPlanById } from '@/lib/plans'
+import { getTransactionById } from '@/lib/transactions'
 
 const patchSchema = z
   .object({
     planId: z.uuid().nullable().optional(),
     note: z.string().max(2000).nullable().optional(),
+    budgetId: z.uuid().nullable().optional(),
   })
-  .refine((data) => data.planId !== undefined || data.note !== undefined, {
-    message: 'Mindestens ein Feld (planId oder note) muss angegeben werden.',
-  })
+  .refine(
+    (data) =>
+      data.planId !== undefined ||
+      data.note !== undefined ||
+      data.budgetId !== undefined,
+    {
+      message:
+        'Mindestens ein Feld (planId, note oder budgetId) muss angegeben werden.',
+    },
+  )
 
 export const PATCH: APIRoute = async ({ params, request }) => {
   const id = params.id
@@ -82,9 +91,37 @@ export const PATCH: APIRoute = async ({ params, request }) => {
     }
   }
 
+  if (parsed.data.budgetId !== undefined && parsed.data.budgetId !== null) {
+    const budget = await getTransactionById(parsed.data.budgetId)
+    if (!budget) {
+      return new Response(JSON.stringify({ error: 'Budget nicht gefunden' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    if (!budget.isBudget) {
+      return new Response(
+        JSON.stringify({ error: 'Transaktion ist kein Budget' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    // Budget must belong to the transaction's plan
+    const effectivePlanId =
+      parsed.data.planId !== undefined ? parsed.data.planId : existing.planId
+    if (budget.planId !== effectivePlanId) {
+      return new Response(
+        JSON.stringify({ error: 'Budget gehört nicht zum zugewiesenen Plan' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+  }
+
   const updated = await updateBankTransactionFields(id, {
     ...(parsed.data.planId !== undefined && { planId: parsed.data.planId }),
     ...(parsed.data.note !== undefined && { note: parsed.data.note }),
+    ...(parsed.data.budgetId !== undefined && {
+      budgetId: parsed.data.budgetId,
+    }),
   })
 
   return new Response(JSON.stringify(updated), {

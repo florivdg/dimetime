@@ -102,6 +102,8 @@ export function useBankTransactions(
       planName: tx.planName,
       planDate: tx.planDate,
       planAssignment: tx.planAssignment,
+      budgetId: tx.budgetId,
+      budgetName: tx.budgetName,
     }
 
     // Optimistic update
@@ -117,6 +119,9 @@ export function useBankTransactions(
       tx.planDate = null
       tx.planAssignment = 'none'
     }
+    // Clear budget when plan changes
+    tx.budgetId = null
+    tx.budgetName = null
 
     try {
       const response = await fetch(`/api/bank-transactions/${id}`, {
@@ -132,6 +137,8 @@ export function useBankTransactions(
       tx.planName = original.planName
       tx.planDate = original.planDate
       tx.planAssignment = original.planAssignment
+      tx.budgetId = original.budgetId
+      tx.budgetName = original.budgetName
       return false
     }
   }
@@ -159,6 +166,37 @@ export function useBankTransactions(
     } catch {
       // Rollback
       tx.note = originalNote
+      return false
+    }
+  }
+
+  async function updateTransactionBudget(
+    id: string,
+    budgetId: string | null,
+    budgetName: string | null,
+  ): Promise<boolean> {
+    const tx = transactions.value.find((t) => t.id === id)
+    if (!tx) return false
+
+    const originalBudgetId = tx.budgetId
+    const originalBudgetName = tx.budgetName
+
+    // Optimistic update
+    tx.budgetId = budgetId
+    tx.budgetName = budgetName
+
+    try {
+      const response = await fetch(`/api/bank-transactions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budgetId }),
+      })
+      if (!response.ok) throw new Error('Update failed')
+      return true
+    } catch {
+      // Rollback
+      tx.budgetId = originalBudgetId
+      tx.budgetName = originalBudgetName
       return false
     }
   }
@@ -209,6 +247,54 @@ export function useBankTransactions(
     }
   }
 
+  async function bulkAssignBudget(
+    ids: string[],
+    budgetId: string | null,
+    budgetName: string | null,
+  ): Promise<boolean> {
+    const idSet = new Set(ids)
+    const originals = new Map<
+      string,
+      { budgetId: string | null; budgetName: string | null }
+    >()
+
+    // Optimistic update
+    for (const tx of transactions.value) {
+      if (idSet.has(tx.id)) {
+        originals.set(tx.id, {
+          budgetId: tx.budgetId,
+          budgetName: tx.budgetName,
+        })
+        tx.budgetId = budgetId
+        tx.budgetName = budgetName
+      }
+    }
+
+    try {
+      const response = await fetch(
+        '/api/bank-transactions/bulk-assign-budget',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids, budgetId }),
+        },
+      )
+      if (!response.ok) throw new Error('Bulk assign budget failed')
+      return true
+    } catch {
+      // Rollback
+      for (const tx of transactions.value) {
+        const orig = originals.get(tx.id)
+        if (orig) {
+          tx.budgetId = orig.budgetId
+          tx.budgetName = orig.budgetName
+        }
+      }
+      errorMessage.value = 'Budget konnte nicht zugewiesen werden.'
+      return false
+    }
+  }
+
   // Watch filters for changes and auto-fetch
   watch(
     () => ({ ...filters.state }),
@@ -228,7 +314,9 @@ export function useBankTransactions(
     loadPlans,
     updateTransactionPlan,
     updateTransactionNote,
+    updateTransactionBudget,
     bulkArchiveTransactions,
     bulkAssignPlan,
+    bulkAssignBudget,
   }
 }
