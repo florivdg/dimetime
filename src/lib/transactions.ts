@@ -436,6 +436,39 @@ export async function getBudgetsForPlan(planId: string) {
 }
 
 /**
+ * Get budget spending for a plan (sum of absolute bank transaction amounts grouped by budgetId)
+ */
+export async function getBudgetSpendingForPlan(
+  planId: string,
+): Promise<Record<string, number>> {
+  const result = await db
+    .select({
+      budgetId: bankTransaction.budgetId,
+      spent: sum(bankTransaction.amountCents),
+    })
+    .from(bankTransaction)
+    .innerJoin(
+      plannedTransaction,
+      eq(bankTransaction.budgetId, plannedTransaction.id),
+    )
+    .where(
+      and(
+        eq(plannedTransaction.planId, planId),
+        eq(plannedTransaction.isBudget, true),
+      ),
+    )
+    .groupBy(bankTransaction.budgetId)
+
+  const spending: Record<string, number> = {}
+  for (const row of result) {
+    if (row.budgetId) {
+      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
+    }
+  }
+  return spending
+}
+
+/**
  * Adjusts a dueDate to a new plan month while keeping the day.
  * Clamps day to the last day of the month if needed.
  * @param sourceDueDate - Source date in YYYY-MM-DD format

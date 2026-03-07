@@ -47,12 +47,18 @@ import {
 import { Copy, FileStack, Lock, MoreVertical, Plus } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
-const props = defineProps<{
-  plan: Plan
-  initialTransactions: TransactionWithCategory[]
-  initialBalance: PlanBalance
-  categories: Category[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    plan: Plan
+    initialTransactions: TransactionWithCategory[]
+    initialBalance: PlanBalance
+    initialBudgetSpending?: Record<string, number>
+    categories: Category[]
+  }>(),
+  {
+    initialBudgetSpending: () => ({}),
+  },
+)
 
 const displayName = computed(() =>
   getPlanDisplayName(props.plan.name, props.plan.date),
@@ -174,6 +180,7 @@ const sortDir = computed({
 // State
 const transactions = ref<TransactionWithCategory[]>(props.initialTransactions)
 const balance = ref<PlanBalance>(props.initialBalance)
+const budgetSpending = ref<Record<string, number>>(props.initialBudgetSpending)
 const net = computed(() => balance.value.income - balance.value.expense)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
@@ -251,15 +258,31 @@ async function loadBalance() {
   }
 }
 
+async function loadBudgetSpending() {
+  try {
+    const response = await fetch(`/api/plans/${props.plan.id}/budget-spending`)
+    if (!response.ok) return
+    const data = await response.json()
+    budgetSpending.value = data.spending
+  } catch {
+    // Ignore budget spending load errors
+  }
+}
+
 // Event handlers
 function handleEdit(transaction: TransactionWithCategory) {
   selectedTransaction.value = transaction
   editDialogOpen.value = true
 }
 
-function handleUpdated() {
+function reloadPlanData() {
   loadTransactions()
   loadBalance()
+  loadBudgetSpending()
+}
+
+function handleUpdated() {
+  reloadPlanData()
 }
 
 function handleMove(transaction: TransactionWithCategory) {
@@ -278,8 +301,9 @@ function handleMoved(_targetPlanId: string, targetPlanName: string) {
     `"${transactionToMove.value?.name}" wurde zu "${targetPlanName}" verschoben`,
   )
 
-  // Reload balance
+  // Reload aggregates
   loadBalance()
+  loadBudgetSpending()
 
   // Reset
   transactionToMove.value = null
@@ -343,13 +367,11 @@ async function handleToggleDone(id: string, isDone: boolean) {
 }
 
 function handleCreated() {
-  loadTransactions()
-  loadBalance()
+  reloadPlanData()
 }
 
 function handleDeleted() {
-  loadTransactions()
-  loadBalance()
+  reloadPlanData()
 }
 
 function handleError(message: string) {
@@ -386,8 +408,7 @@ function handleFillFromPresets() {
 }
 
 function handlePresetsApplied() {
-  loadTransactions()
-  loadBalance()
+  reloadPlanData()
 }
 
 function handleCopyFromPlan() {
@@ -395,8 +416,7 @@ function handleCopyFromPlan() {
 }
 
 function handleTransactionsCopied() {
-  loadTransactions()
-  loadBalance()
+  reloadPlanData()
 }
 
 function handleFilterReset() {
@@ -561,6 +581,7 @@ function handleFilterReset() {
         :sort-by="sortBy"
         :sort-dir="sortDir"
         :is-archived="plan.isArchived"
+        :budget-spending="budgetSpending"
         @edit="handleEdit"
         @move="handleMove"
         @deleted="handleDeleted"

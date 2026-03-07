@@ -3,7 +3,11 @@ import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import PlanDetailManager from '@/components/plans/PlanDetailManager.vue'
 import { getPlanById, getSidebarPlans } from '@/lib/plans'
-import { getTransactions, getPlanBalance } from '@/lib/transactions'
+import {
+  getTransactions,
+  getPlanBalance,
+  getBudgetSpendingForPlan,
+} from '@/lib/transactions'
 import { getAllCategories } from '@/lib/categories'
 import { getPlanDisplayName } from '@/lib/format'
 
@@ -20,24 +24,22 @@ if (!plan) {
   return Astro.redirect('/plans')
 }
 
-// Load all transactions for this plan
-const { transactions } = await getTransactions({
-  planId: id,
-  sortBy: 'dueDate',
-  sortDir: 'asc',
-  limit: -1,
-})
-
-// Load balance
-const balance = await getPlanBalance(id)
-
-// Load categories
-const categories = await getAllCategories()
+// Load all data in parallel
+const [
+  { transactions },
+  balance,
+  budgetSpending,
+  categories,
+  { currentMonth, latest },
+] = await Promise.all([
+  getTransactions({ planId: id, sortBy: 'dueDate', sortDir: 'asc', limit: -1 }),
+  getPlanBalance(id),
+  getBudgetSpendingForPlan(id),
+  getAllCategories(),
+  getSidebarPlans(),
+])
 
 const planDisplayName = getPlanDisplayName(plan.name, plan.date)
-
-// Sidebar plan items
-const { currentMonth, latest } = await getSidebarPlans()
 const planItems: { title: string; url: string }[] = []
 if (currentMonth) {
   planItems.push({
@@ -69,6 +71,7 @@ if (latest && latest.id !== currentMonth?.id) {
         plan={plan}
         initialTransactions={transactions}
         initialBalance={balance}
+        initialBudgetSpending={budgetSpending}
         categories={categories}
       />
     </div>
