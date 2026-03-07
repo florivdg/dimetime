@@ -16,6 +16,7 @@ function makePreset(
     endDate: null,
     categoryId: null,
     dayOfMonth: null,
+    isBudget: false,
     userId: 'user-1',
     lastUsedAt: null,
     createdAt: new Date('2024-01-01'),

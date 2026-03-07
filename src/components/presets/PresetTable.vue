@@ -221,6 +221,9 @@ function getSortIcon(column: string) {
             <TableCell>
               <div class="flex items-center gap-2">
                 {{ preset.name }}
+                <Badge v-if="preset.isBudget" variant="secondary">
+                  Budget
+                </Badge>
                 <Badge
                   v-if="isExpired(preset)"
                   variant="secondary"

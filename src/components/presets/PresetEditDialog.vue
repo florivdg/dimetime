@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, Minus, Plus } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -53,6 +54,7 @@ const editStartMonth = ref('')
 const editEndDate = ref('')
 const editCategoryId = ref<string | null>(null)
 const editDayOfMonth = ref<number | null>(null)
+const editIsBudget = ref(false)
 
 // Populate form when preset prop changes
 watch(
@@ -68,6 +70,7 @@ watch(
       editEndDate.value = newPreset.endDate || ''
       editCategoryId.value = newPreset.categoryId
       editDayOfMonth.value = newPreset.dayOfMonth ?? null
+      editIsBudget.value = newPreset.isBudget
     }
   },
   { immediate: true },
@@ -96,6 +99,7 @@ async function handleSubmit() {
         endDate: editEndDate.value || null,
         categoryId: editCategoryId.value,
         dayOfMonth: editDayOfMonth.value,
+        isBudget: editIsBudget.value,
       }),
     })
 
@@ -228,6 +232,15 @@ async function handleSubmit() {
               "
             />
           </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <Switch
+            id="edit-is-budget"
+            :model-value="editIsBudget"
+            @update:model-value="editIsBudget = $event"
+          />
+          <Label for="edit-is-budget" class="cursor-pointer">Budget</Label>
         </div>
 
         <div class="grid grid-cols-2 gap-4">

@@ -63,6 +63,9 @@ export const plannedTransaction = sqliteTable(
     amount: integer('amount').notNull().default(0), // Cents (e.g., 1234 = €12.34)
     isDone: integer('is_done', { mode: 'boolean' }).default(false).notNull(),
     completedAt: integer('completed_at', { mode: 'timestamp_ms' }), // When marked done
+    isBudget: integer('is_budget', { mode: 'boolean' })
+      .default(false)
+      .notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
       .$onUpdate(() => new Date())
@@ -224,6 +227,9 @@ export const bankTransaction = sqliteTable(
     })
       .notNull()
       .default('none'),
+    budgetId: text('budget_id').references(() => plannedTransaction.id, {
+      onDelete: 'set null',
+    }),
     isArchived: integer('is_archived', { mode: 'boolean' })
       .default(false)
       .notNull(),
@@ -245,6 +251,7 @@ export const bankTransaction = sqliteTable(
       table.externalTransactionId,
     ),
     index('bankTransaction_isArchived_idx').on(table.isArchived),
+    index('bankTransaction_budgetId_idx').on(table.budgetId),
   ],
 )
 
@@ -275,6 +282,9 @@ export const transactionPreset = sqliteTable(
       onDelete: 'set null',
     }),
     dayOfMonth: integer('day_of_month'), // 1-31, nullable; overrides plan date when applying
+    isBudget: integer('is_budget', { mode: 'boolean' })
+      .default(false)
+      .notNull(),
     lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
@@ -341,6 +351,10 @@ export const bankTransactionRelations = relations(
     plan: one(plan, {
       fields: [bankTransaction.planId],
       references: [plan.id],
+    }),
+    budget: one(plannedTransaction, {
+      fields: [bankTransaction.budgetId],
+      references: [plannedTransaction.id],
     }),
   }),
 )

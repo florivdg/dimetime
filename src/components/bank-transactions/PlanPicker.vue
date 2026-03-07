@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import type { Plan } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
-import { Check } from 'lucide-vue-next'
+import { Check, ChevronsUpDown } from 'lucide-vue-next'
 import {
   Command,
   CommandEmpty,
@@ -42,10 +42,20 @@ function handleSelect(selectedPlanId: string | null) {
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
       <button
-        class="text-left text-sm hover:underline"
-        :class="planId ? '' : 'text-muted-foreground'"
+        class="inline-flex items-center gap-1 rounded-md text-sm transition-colors"
+        :class="
+          planId
+            ? 'hover:underline'
+            : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50 border border-dashed px-1.5 py-0.5'
+        "
       >
-        {{ planId ? getPlanDisplayName(planName, planDate) : '-' }}
+        <template v-if="planId">
+          {{ getPlanDisplayName(planName, planDate) }}
+        </template>
+        <template v-else>
+          Zuweisen
+          <ChevronsUpDown class="size-3" />
+        </template>
       </button>
     </PopoverTrigger>
     <PopoverContent class="w-[250px] p-0" align="start">

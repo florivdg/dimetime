@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import type { Category } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -27,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, Minus, Plus } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -49,6 +49,7 @@ const newAmount = ref(0)
 const newType = ref<'income' | 'expense'>('expense')
 const newCategoryId = ref<string | null>(null)
 const newIsDone = ref(false)
+const newIsBudget = ref(false)
 
 function resetForm() {
   newName.value = ''
@@ -58,6 +59,7 @@ function resetForm() {
   newType.value = 'expense'
   newCategoryId.value = null
   newIsDone.value = false
+  newIsBudget.value = false
 }
 
 function toggleType() {
@@ -82,6 +84,7 @@ async function handleSubmit() {
         planId: props.planId,
         categoryId: newCategoryId.value,
         isDone: newIsDone.value,
+        isBudget: newIsBudget.value,
       }),
     })
 
@@ -197,9 +200,15 @@ async function handleSubmit() {
           </Select>
         </div>
 
-        <div class="flex items-center gap-2">
-          <Checkbox id="new-done" v-model="newIsDone" />
-          <Label for="new-done" class="cursor-pointer">Erledigt</Label>
+        <div class="flex items-center gap-6">
+          <div class="flex items-center gap-2">
+            <Switch id="new-done" v-model="newIsDone" />
+            <Label for="new-done" class="cursor-pointer">Erledigt</Label>
+          </div>
+          <div class="flex items-center gap-2">
+            <Switch id="new-is-budget" v-model="newIsBudget" />
+            <Label for="new-is-budget" class="cursor-pointer">Budget</Label>
+          </div>
         </div>
 
         <DialogFooter>

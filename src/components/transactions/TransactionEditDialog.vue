@@ -3,7 +3,6 @@ import { ref, watch } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -27,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, Minus, Plus } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -49,6 +49,7 @@ const editAmount = ref(0)
 const editType = ref<'income' | 'expense'>('expense')
 const editCategoryId = ref<string | null>(null)
 const editIsDone = ref(false)
+const editIsBudget = ref(false)
 
 watch(
   () => props.transaction,
@@ -71,6 +72,7 @@ watch(
       editType.value = transaction.type
       editCategoryId.value = transaction.categoryId
       editIsDone.value = Boolean(transaction.isDone)
+      editIsBudget.value = Boolean(transaction.isBudget)
     }
   },
   { immediate: true },
@@ -97,6 +99,7 @@ async function handleSubmit() {
         type: editType.value,
         categoryId: editCategoryId.value,
         isDone: editIsDone.value,
+        isBudget: editIsBudget.value,
       }),
     })
 
@@ -205,9 +208,15 @@ async function handleSubmit() {
           </Select>
         </div>
 
-        <div class="flex items-center gap-2">
-          <Checkbox id="edit-done" v-model="editIsDone" />
-          <Label for="edit-done" class="cursor-pointer">Erledigt</Label>
+        <div class="flex items-center gap-6">
+          <div class="flex items-center gap-2">
+            <Switch id="edit-done" v-model="editIsDone" />
+            <Label for="edit-done" class="cursor-pointer">Erledigt</Label>
+          </div>
+          <div class="flex items-center gap-2">
+            <Switch id="edit-is-budget" v-model="editIsBudget" />
+            <Label for="edit-is-budget" class="cursor-pointer">Budget</Label>
+          </div>
         </div>
 
         <DialogFooter>

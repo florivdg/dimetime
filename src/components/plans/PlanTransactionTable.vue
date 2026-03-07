@@ -4,6 +4,7 @@ import type { TransactionWithCategory } from '@/lib/transactions'
 import { ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import BudgetUtilizationBadge from './BudgetUtilizationBadge.vue'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,14 +52,20 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
-const props = defineProps<{
-  transactions: TransactionWithCategory[]
-  isLoading: boolean
-  searchQuery: string
-  sortBy: 'name' | 'dueDate' | 'categoryName' | 'amount'
-  sortDir: 'asc' | 'desc'
-  isArchived?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    transactions: TransactionWithCategory[]
+    isLoading: boolean
+    searchQuery: string
+    sortBy: 'name' | 'dueDate' | 'categoryName' | 'amount'
+    sortDir: 'asc' | 'desc'
+    isArchived?: boolean
+    budgetSpending?: Record<string, number>
+  }>(),
+  {
+    budgetSpending: () => ({}),
+  },
+)
 
 const emit = defineEmits<{
   edit: [transaction: TransactionWithCategory]
@@ -147,73 +154,73 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
   </div>
 
   <!-- Table -->
-  <div v-else class="rounded-md border">
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead class="w-12">
-            <span class="sr-only">Status</span>
-          </TableHead>
-          <TableHead>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="-ml-3"
-              @click="emit('sort', 'name')"
-            >
-              Name
-              <component :is="getSortIcon('name')" class="ml-2 size-4" />
-            </Button>
-          </TableHead>
-          <TableHead class="w-36">
-            <Button
-              variant="ghost"
-              size="sm"
-              class="-ml-3"
-              @click="emit('sort', 'dueDate')"
-            >
-              Datum
-              <component :is="getSortIcon('dueDate')" class="ml-2 size-4" />
-            </Button>
-          </TableHead>
-          <TableHead>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="-ml-3"
-              @click="emit('sort', 'categoryName')"
-            >
-              Kategorie
-              <component
-                :is="getSortIcon('categoryName')"
-                class="ml-2 size-4"
-              />
-            </Button>
-          </TableHead>
-          <TableHead class="w-36">
-            <Button
-              variant="ghost"
-              size="sm"
-              class="-ml-3"
-              @click="emit('sort', 'amount')"
-            >
-              Betrag
-              <component :is="getSortIcon('amount')" class="ml-2 size-4" />
-            </Button>
-          </TableHead>
-          <TableHead class="w-24 text-right">Aktionen</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        <TableRow
-          v-for="transaction in transactions"
-          :key="transaction.id"
-          :class="{ 'opacity-60': transaction.isDone }"
-        >
-          <!-- Status -->
-          <TableCell>
-            <TooltipProvider v-if="isTransactionReadOnly(transaction)">
-              <Tooltip>
+  <TooltipProvider v-else>
+    <div class="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-12">
+              <span class="sr-only">Status</span>
+            </TableHead>
+            <TableHead>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-3"
+                @click="emit('sort', 'name')"
+              >
+                Name
+                <component :is="getSortIcon('name')" class="ml-2 size-4" />
+              </Button>
+            </TableHead>
+            <TableHead class="w-36">
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-3"
+                @click="emit('sort', 'dueDate')"
+              >
+                Datum
+                <component :is="getSortIcon('dueDate')" class="ml-2 size-4" />
+              </Button>
+            </TableHead>
+            <TableHead>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-3"
+                @click="emit('sort', 'categoryName')"
+              >
+                Kategorie
+                <component
+                  :is="getSortIcon('categoryName')"
+                  class="ml-2 size-4"
+                />
+              </Button>
+            </TableHead>
+            <TableHead class="w-36">
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-3"
+                @click="emit('sort', 'amount')"
+              >
+                Betrag
+                <component :is="getSortIcon('amount')" class="ml-2 size-4" />
+              </Button>
+            </TableHead>
+            <TableHead class="w-24 text-right">Aktionen</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
+            v-for="transaction in transactions"
+            :key="transaction.id"
+            :class="{ 'opacity-60': transaction.isDone }"
+          >
+            <!-- Status -->
+            <TableCell>
+              <Tooltip v-if="isTransactionReadOnly(transaction)">
                 <TooltipTrigger as-child>
                   <div class="flex items-center">
                     <Lock class="text-muted-foreground size-4" />
@@ -223,60 +230,65 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
                   <p>Plan ist archiviert - Transaktion ist schreibgeschützt</p>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
-            <Checkbox
-              v-else
-              :model-value="Boolean(transaction.isDone)"
-              @update:model-value="handleToggleDone(transaction)"
-            />
-          </TableCell>
-
-          <!-- Name -->
-          <TableCell>
-            <span :class="{ 'line-through': transaction.isDone }">
-              {{ transaction.name }}
-            </span>
-          </TableCell>
-
-          <!-- Date -->
-          <TableCell>
-            {{ formatDate(transaction.dueDate) }}
-          </TableCell>
-
-          <!-- Category -->
-          <TableCell>
-            <div class="flex items-center gap-2">
-              <span
-                v-if="transaction.categoryColor"
-                class="size-3 shrink-0 rounded-full"
-                :style="{ backgroundColor: transaction.categoryColor }"
+              <Checkbox
+                v-else
+                :model-value="Boolean(transaction.isDone)"
+                @update:model-value="handleToggleDone(transaction)"
               />
-              <span>{{ transaction.categoryName || '-' }}</span>
-            </div>
-          </TableCell>
+            </TableCell>
 
-          <!-- Amount -->
-          <TableCell>
-            <span
-              :class="
-                transaction.type === 'income'
-                  ? 'text-lime-600 dark:text-lime-400'
-                  : 'text-rose-600 dark:text-rose-400'
-              "
-            >
-              {{ transaction.type === 'income' ? '+' : '-'
-              }}{{ formatAmount(transaction.amount) }}
-            </span>
-          </TableCell>
+            <!-- Name -->
+            <TableCell>
+              <div class="flex items-center gap-2">
+                <span :class="{ 'line-through': transaction.isDone }">
+                  {{ transaction.name }}
+                </span>
+                <BudgetUtilizationBadge
+                  v-if="transaction.isBudget"
+                  :budgeted-cents="transaction.amount"
+                  :spent-cents="budgetSpending[transaction.id] ?? 0"
+                />
+              </div>
+            </TableCell>
 
-          <!-- Actions -->
-          <TableCell class="text-right">
-            <!-- Read-only: show lock icon -->
-            <div
-              v-if="isTransactionReadOnly(transaction)"
-              class="flex justify-end"
-            >
-              <TooltipProvider>
+            <!-- Date -->
+            <TableCell>
+              {{ formatDate(transaction.dueDate) }}
+            </TableCell>
+
+            <!-- Category -->
+            <TableCell>
+              <div class="flex items-center gap-2">
+                <span
+                  v-if="transaction.categoryColor"
+                  class="size-3 shrink-0 rounded-full"
+                  :style="{ backgroundColor: transaction.categoryColor }"
+                />
+                <span>{{ transaction.categoryName || '-' }}</span>
+              </div>
+            </TableCell>
+
+            <!-- Amount -->
+            <TableCell>
+              <span
+                :class="
+                  transaction.type === 'income'
+                    ? 'text-lime-600 dark:text-lime-400'
+                    : 'text-rose-600 dark:text-rose-400'
+                "
+              >
+                {{ transaction.type === 'income' ? '+' : '-'
+                }}{{ formatAmount(transaction.amount) }}
+              </span>
+            </TableCell>
+
+            <!-- Actions -->
+            <TableCell class="text-right">
+              <!-- Read-only: show lock icon -->
+              <div
+                v-if="isTransactionReadOnly(transaction)"
+                class="flex justify-end"
+              >
                 <Tooltip>
                   <TooltipTrigger as-child>
                     <div class="text-muted-foreground flex items-center gap-1">
@@ -290,46 +302,48 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
                     </p>
                   </TooltipContent>
                 </Tooltip>
-              </TooltipProvider>
-            </div>
-            <!-- Editable: show dropdown menu -->
-            <div v-else class="flex justify-end">
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <Button size="icon-sm" variant="ghost">
-                    <MoreVertical class="size-4" />
-                    <span class="sr-only">Aktionen</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem @click="emit('edit', transaction)">
-                    <Pencil class="size-4" />
-                    Bearbeiten
-                  </DropdownMenuItem>
-                  <DropdownMenuItem @click="emit('move', transaction)">
-                    <ArrowRightLeft class="size-4" />
-                    Verschieben
-                  </DropdownMenuItem>
-                  <DropdownMenuItem @click="emit('saveAsPreset', transaction)">
-                    <BookmarkPlus class="size-4" />
-                    Als Vorlage speichern
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    class="text-destructive focus:text-destructive"
-                    @click="openDeleteDialog(transaction)"
-                  >
-                    <Trash2 class="size-4" />
-                    Löschen
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
-  </div>
+              </div>
+              <!-- Editable: show dropdown menu -->
+              <div v-else class="flex justify-end">
+                <DropdownMenu>
+                  <DropdownMenuTrigger as-child>
+                    <Button size="icon-sm" variant="ghost">
+                      <MoreVertical class="size-4" />
+                      <span class="sr-only">Aktionen</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem @click="emit('edit', transaction)">
+                      <Pencil class="size-4" />
+                      Bearbeiten
+                    </DropdownMenuItem>
+                    <DropdownMenuItem @click="emit('move', transaction)">
+                      <ArrowRightLeft class="size-4" />
+                      Verschieben
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      @click="emit('saveAsPreset', transaction)"
+                    >
+                      <BookmarkPlus class="size-4" />
+                      Als Vorlage speichern
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      class="text-destructive focus:text-destructive"
+                      @click="openDeleteDialog(transaction)"
+                    >
+                      <Trash2 class="size-4" />
+                      Löschen
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+  </TooltipProvider>
 
   <!-- Delete confirmation dialog -->
   <AlertDialog v-model:open="deleteDialogOpen">

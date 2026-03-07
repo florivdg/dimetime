@@ -1,5 +1,10 @@
 import { db } from '@/db/database'
-import { plannedTransaction, category, plan } from '@/db/schema/plans'
+import {
+  bankTransaction,
+  plannedTransaction,
+  category,
+  plan,
+} from '@/db/schema/plans'
 import {
   and,
   asc,
@@ -70,6 +75,7 @@ export interface CreateTransactionInput {
   dueDate: string
   amount: number
   isDone?: boolean
+  isBudget?: boolean
   planId: string
   categoryId?: string | null
 }
@@ -89,6 +95,7 @@ export interface UpdateTransactionInput {
   dueDate?: string
   amount?: number
   isDone?: boolean
+  isBudget?: boolean
   categoryId?: string | null
   planId?: string
 }
@@ -276,6 +283,7 @@ export async function updateTransaction(
   id: string,
   input: UpdateTransactionInput,
 ): Promise<Transaction | undefined> {
+  const now = new Date()
   const updateData: {
     name?: string
     note?: string | null
@@ -283,11 +291,12 @@ export async function updateTransaction(
     dueDate?: string
     amount?: number
     isDone?: boolean
+    isBudget?: boolean
     categoryId?: string | null
     planId?: string
     updatedAt: Date
   } = {
-    updatedAt: new Date(),
+    updatedAt: now,
   }
 
   if (input.name !== undefined) updateData.name = input.name
@@ -296,16 +305,45 @@ export async function updateTransaction(
   if (input.dueDate !== undefined) updateData.dueDate = input.dueDate
   if (input.amount !== undefined) updateData.amount = input.amount
   if (input.isDone !== undefined) updateData.isDone = input.isDone
+  if (input.isBudget !== undefined) updateData.isBudget = input.isBudget
   if (input.categoryId !== undefined) updateData.categoryId = input.categoryId
   if (input.planId !== undefined) updateData.planId = input.planId
 
-  const result = await db
-    .update(plannedTransaction)
-    .set(updateData)
-    .where(eq(plannedTransaction.id, id))
-    .returning()
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({
+        planId: plannedTransaction.planId,
+        isBudget: plannedTransaction.isBudget,
+      })
+      .from(plannedTransaction)
+      .where(eq(plannedTransaction.id, id))
+      .limit(1)
 
-  return result[0]
+    if (!existing) {
+      return undefined
+    }
+
+    const nextPlanId = input.planId ?? existing.planId
+    const nextIsBudget = input.isBudget ?? existing.isBudget
+
+    if (!nextIsBudget || nextPlanId !== existing.planId) {
+      await tx
+        .update(bankTransaction)
+        .set({
+          budgetId: null,
+          updatedAt: now,
+        })
+        .where(eq(bankTransaction.budgetId, id))
+    }
+
+    const result = await tx
+      .update(plannedTransaction)
+      .set(updateData)
+      .where(eq(plannedTransaction.id, id))
+      .returning()
+
+    return result[0]
+  })
 }
 
 /**
@@ -335,6 +373,7 @@ export async function createTransaction(
       dueDate: input.dueDate,
       amount: input.amount,
       isDone: input.isDone ?? false,
+      isBudget: input.isBudget ?? false,
       planId: input.planId,
       categoryId: input.categoryId ?? null,
       createdAt: now,
@@ -375,6 +414,58 @@ export async function getPlanBalance(planId: string): Promise<PlanBalance> {
     expense,
     net: income - expense,
   }
+}
+
+/**
+ * Get budget transactions for a plan
+ */
+export async function getBudgetsForPlan(planId: string) {
+  return db
+    .select({
+      id: plannedTransaction.id,
+      name: plannedTransaction.name,
+    })
+    .from(plannedTransaction)
+    .where(
+      and(
+        eq(plannedTransaction.planId, planId),
+        eq(plannedTransaction.isBudget, true),
+      ),
+    )
+    .orderBy(asc(plannedTransaction.name))
+}
+
+/**
+ * Get budget spending for a plan (sum of absolute bank transaction amounts grouped by budgetId)
+ */
+export async function getBudgetSpendingForPlan(
+  planId: string,
+): Promise<Record<string, number>> {
+  const result = await db
+    .select({
+      budgetId: bankTransaction.budgetId,
+      spent: sum(bankTransaction.amountCents),
+    })
+    .from(bankTransaction)
+    .innerJoin(
+      plannedTransaction,
+      eq(bankTransaction.budgetId, plannedTransaction.id),
+    )
+    .where(
+      and(
+        eq(plannedTransaction.planId, planId),
+        eq(plannedTransaction.isBudget, true),
+      ),
+    )
+    .groupBy(bankTransaction.budgetId)
+
+  const spending: Record<string, number> = {}
+  for (const row of result) {
+    if (row.budgetId) {
+      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
+    }
+  }
+  return spending
 }
 
 /**

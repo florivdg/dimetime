@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, Minus, Plus } from 'lucide-vue-next'
 
 export interface PresetInitialValues {
@@ -35,6 +36,7 @@ export interface PresetInitialValues {
   amount: number // in cents
   type: 'income' | 'expense'
   categoryId: string | null
+  isBudget: boolean
 }
 
 const props = defineProps<{
@@ -61,6 +63,7 @@ const newStartMonth = ref(getCurrentMonth())
 const newEndDate = ref('')
 const newCategoryId = ref<string | null>(null)
 const newDayOfMonth = ref<number | null>(null)
+const newIsBudget = ref(false)
 
 function getCurrentMonth(): string {
   const now = new Date()
@@ -77,6 +80,7 @@ function resetForm() {
   newEndDate.value = ''
   newCategoryId.value = null
   newDayOfMonth.value = null
+  newIsBudget.value = false
 }
 
 watch(open, (isOpen) => {
@@ -86,6 +90,7 @@ watch(open, (isOpen) => {
     newAmount.value = props.initialValues.amount / 100
     newType.value = props.initialValues.type
     newCategoryId.value = props.initialValues.categoryId
+    newIsBudget.value = props.initialValues.isBudget
     newRecurrence.value = 'monatlich'
     newStartMonth.value = getCurrentMonth()
     newEndDate.value = ''
@@ -117,6 +122,7 @@ async function handleSubmit() {
         endDate: newEndDate.value || null,
         categoryId: newCategoryId.value,
         dayOfMonth: newDayOfMonth.value,
+        isBudget: newIsBudget.value,
       }),
     })
 
@@ -259,6 +265,15 @@ async function handleSubmit() {
               "
             />
           </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <Switch
+            id="new-is-budget"
+            :model-value="newIsBudget"
+            @update:model-value="newIsBudget = $event"
+          />
+          <Label for="new-is-budget" class="cursor-pointer">Budget</Label>
         </div>
 
         <div class="grid grid-cols-2 gap-4">

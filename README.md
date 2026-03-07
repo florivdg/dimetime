@@ -2,7 +2,7 @@
 
 > **Work in Progress** - This project is under active development.
 
-A German-language personal financial planner web application for managing budgets, tracking transactions, importing bank statements, and organizing expenses by category. Includes transaction presets with recurrence support and mandatory two-factor authentication.
+A German-language personal financial planner web application for managing budgets, tracking transactions, importing bank statements, and organizing expenses by category. Includes budget tracking with utilization analysis, transaction presets with recurrence support, and mandatory two-factor authentication.
 
 ## Overview
 
@@ -10,6 +10,7 @@ DimeTime helps you plan and track your personal finances with:
 
 - **Monthly budget plans** - Create financial plans for specific periods
 - **Transaction tracking** - Record income and expenses with due dates
+- **Budget tracking** - Mark transactions as budgets, assign bank transactions to budgets, and track utilization
 - **Transaction presets** - Reusable templates with recurrence options, bulk-apply to plans
 - **Category management** - Organize transactions with color-coded categories
 - **Bank statement import** - Multi-step import wizard supporting ING CSV and Easybank XLSX formats, with deduplication
@@ -22,6 +23,8 @@ DimeTime helps you plan and track your personal finances with:
 - Plan management with archiving and search functionality
 - Transaction filtering by category, type, date range, and amount
 - Cross-plan transaction view for filtering transactions across all plans
+- Budget tracking with utilization badges and spending analysis
+- Bank transaction budget assignment with bulk support
 - Transaction presets with recurrence and bulk-apply support
 - Bank statement import with multi-step wizard and duplicate detection
 - Bank transaction reconciliation against planned entries
@@ -43,6 +46,7 @@ DimeTime helps you plan and track your personal finances with:
 - **TanStack Table** - Table management
 - **Unovis** - Data visualization / charts
 - **VeeValidate + Zod** - Form validation
+- **vue-sonner** - Toast notifications
 - **VueUse** - Vue composables
 
 ## Getting Started
@@ -144,8 +148,10 @@ docker pull ghcr.io/<owner>/dimetime:1.0.0
 src/
 ├── pages/                  # Astro file-based routing
 │   ├── 2fa/                # Two-factor setup & verification
+│   ├── account.astro       # Account management (passkeys, password)
 │   ├── bank-transactions/  # Bank transaction views
 │   ├── categories/         # Category management
+│   ├── help.astro          # Help page
 │   ├── import-sources/     # Import source configuration
 │   ├── plans/              # Plan listing & detail
 │   ├── presets/            # Preset management
@@ -161,11 +167,11 @@ src/
 │   ├── presets/            # Preset CRUD & bulk-apply
 │   ├── settings/           # Theme & user settings
 │   └── transactions/       # Transaction CRUD & table
-├── composables/            # Vue composables (filters, URL state, etc.)
+├── composables/            # Vue composables (URL state, filters, delete confirmation, etc.)
 ├── db/schema/              # Drizzle schema definitions
-├── lib/                    # Utilities and auth config
+├── lib/                    # Utilities, auth config, and bank-transactions
 │   └── bank-import/        # Bank import service
 │       └── parsers/        # ING CSV & Easybank XLSX parsers
 └── middleware.ts           # Route protection
-scripts/                    # CLI tools (migrations, user management)
+scripts/                    # CLI tools (migrations, user management, bank import checks, DB backup)
 ```

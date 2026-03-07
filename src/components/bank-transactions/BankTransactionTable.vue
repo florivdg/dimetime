@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { BankTransactionWithRelations } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import { formatAmount, formatDate } from '@/lib/format'
+import BudgetPicker from './BudgetPicker.vue'
 import NoteEditor from './NoteEditor.vue'
 import PlanPicker from './PlanPicker.vue'
 import { Badge } from '@/components/ui/badge'
@@ -45,6 +46,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   sort: [column: 'bookingDate' | 'amountCents' | 'createdAt']
   'update:plan': [transactionId: string, planId: string | null]
+  'update:budget': [
+    transactionId: string,
+    budgetId: string | null,
+    budgetName: string | null,
+  ]
   'update:note': [transactionId: string, note: string | null]
   'toggle-select': [id: string, shiftKey: boolean]
   'toggle-select-all': []
@@ -149,6 +155,7 @@ function statusVariant(
           <TableHead class="hidden lg:table-cell">Quelle</TableHead>
           <TableHead class="w-28">Status</TableHead>
           <TableHead class="hidden xl:table-cell">Plan</TableHead>
+          <TableHead class="hidden xl:table-cell">Budget</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -242,6 +249,19 @@ function statusVariant(
               :plan-name="tx.planName"
               :plan-date="tx.planDate"
               @select="emit('update:plan', tx.id, $event)"
+            />
+          </TableCell>
+
+          <!-- Budget -->
+          <TableCell class="hidden xl:table-cell">
+            <BudgetPicker
+              :plan-id="tx.planId"
+              :budget-id="tx.budgetId"
+              :budget-name="tx.budgetName"
+              @select="
+                (id: string | null, name: string | null) =>
+                  emit('update:budget', tx.id, id, name)
+              "
             />
           </TableCell>
         </TableRow>
