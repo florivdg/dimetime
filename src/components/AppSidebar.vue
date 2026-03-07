@@ -8,7 +8,6 @@ import {
   Landmark,
   LifeBuoy,
   PiggyBank,
-  Receipt,
   Settings,
   Tags,
 } from 'lucide-vue-next'
@@ -82,15 +81,12 @@ const data = computed(() => ({
       title: 'Pläne',
       url: '/plans',
       icon: CalendarDays,
-      isActive: isActiveSection('/plans'),
+      isActive: isActiveSection('/plans') || isActiveSection('/transactions'),
       defaultOpen: true,
-      items: props.planItems,
-    },
-    {
-      title: 'Transaktionen',
-      url: '/transactions',
-      icon: Receipt,
-      isActive: isActiveSection('/transactions'),
+      items: [
+        { title: 'Alle Transaktionen', url: '/transactions' },
+        ...(props.planItems ?? []),
+      ],
     },
     {
       title: 'Kontoauszüge',
