@@ -1,5 +1,5 @@
 import { betterAuth } from 'better-auth'
-import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { admin, twoFactor } from 'better-auth/plugins'
 import { passkey } from '@better-auth/passkey'
 import { db } from '@/db/database'
