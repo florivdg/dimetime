@@ -230,9 +230,16 @@ export const bankTransaction = sqliteTable(
     budgetId: text('budget_id').references(() => plannedTransaction.id, {
       onDelete: 'set null',
     }),
+    preSplitBudgetId: text('pre_split_budget_id').references(
+      () => plannedTransaction.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
     isArchived: integer('is_archived', { mode: 'boolean' })
       .default(false)
       .notNull(),
+    isSplit: integer('is_split', { mode: 'boolean' }).default(false).notNull(),
     importSeenCount: integer('import_seen_count').notNull().default(1),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
@@ -251,7 +258,40 @@ export const bankTransaction = sqliteTable(
       table.externalTransactionId,
     ),
     index('bankTransaction_isArchived_idx').on(table.isArchived),
+    index('bankTransaction_isSplit_idx').on(table.isSplit),
     index('bankTransaction_budgetId_idx').on(table.budgetId),
+    index('bankTransaction_preSplitBudgetId_idx').on(table.preSplitBudgetId),
+  ],
+)
+
+// Bank Transaction Splits
+export const bankTransactionSplit = sqliteTable(
+  'bank_transaction_split',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    bankTransactionId: text('bank_transaction_id')
+      .notNull()
+      .references(() => bankTransaction.id, { onDelete: 'cascade' }),
+    amountCents: integer('amount_cents').notNull(),
+    label: text('label'),
+    budgetId: text('budget_id').references(() => plannedTransaction.id, {
+      onDelete: 'set null',
+    }),
+    planId: text('plan_id').references(() => plan.id, { onDelete: 'set null' }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('bankTransactionSplit_bankTransactionId_idx').on(
+      table.bankTransactionId,
+    ),
+    index('bankTransactionSplit_budgetId_idx').on(table.budgetId),
+    index('bankTransactionSplit_planId_idx').on(table.planId),
   ],
 )
 
@@ -335,7 +375,7 @@ export const statementImportRelations = relations(
 
 export const bankTransactionRelations = relations(
   bankTransaction,
-  ({ one }) => ({
+  ({ one, many }) => ({
     source: one(importSource, {
       fields: [bankTransaction.sourceId],
       references: [importSource.id],
@@ -355,6 +395,29 @@ export const bankTransactionRelations = relations(
     budget: one(plannedTransaction, {
       fields: [bankTransaction.budgetId],
       references: [plannedTransaction.id],
+    }),
+    preSplitBudget: one(plannedTransaction, {
+      fields: [bankTransaction.preSplitBudgetId],
+      references: [plannedTransaction.id],
+    }),
+    splits: many(bankTransactionSplit),
+  }),
+)
+
+export const bankTransactionSplitRelations = relations(
+  bankTransactionSplit,
+  ({ one }) => ({
+    bankTransaction: one(bankTransaction, {
+      fields: [bankTransactionSplit.bankTransactionId],
+      references: [bankTransaction.id],
+    }),
+    budget: one(plannedTransaction, {
+      fields: [bankTransactionSplit.budgetId],
+      references: [plannedTransaction.id],
+    }),
+    plan: one(plan, {
+      fields: [bankTransactionSplit.planId],
+      references: [plan.id],
     }),
   }),
 )
