@@ -1,13 +1,10 @@
 import { ref, watch } from 'vue'
-import type {
-  BankTransactionWithRelations,
-  ImportSource,
-} from '@/lib/bank-transactions'
+import type { BankTransactionRow, ImportSource } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import type { useBankTransactionFilters } from '@/composables/useBankTransactionFilters'
 
 interface InitialData {
-  transactions: BankTransactionWithRelations[]
+  rows: BankTransactionRow[]
   pagination: {
     total: number
     page: number
@@ -22,9 +19,7 @@ export function useBankTransactions(
   filters: ReturnType<typeof useBankTransactionFilters>,
   initialData: InitialData,
 ) {
-  const transactions = ref<BankTransactionWithRelations[]>(
-    initialData.transactions,
-  )
+  const rows = ref<BankTransactionRow[]>(initialData.rows)
   const pagination = ref(initialData.pagination)
   const sources = ref<ImportSource[]>(initialData.sources)
   const plans = ref<Plan[]>(initialData.plans)
@@ -59,7 +54,7 @@ export function useBankTransactions(
       )
       if (!response.ok) throw new Error('Fehler beim Laden')
       const data = await response.json()
-      transactions.value = data.transactions
+      rows.value = data.rows
       pagination.value = data.pagination
     } catch {
       errorMessage.value = 'Kontoauszüge konnten nicht geladen werden.'
@@ -94,37 +89,37 @@ export function useBankTransactions(
     id: string,
     planId: string | null,
   ): Promise<boolean> {
-    const tx = transactions.value.find((t) => t.id === id)
-    if (!tx) return false
+    const row = rows.value.find((r) => r.id === id)
+    if (!row) return false
 
     const original = {
-      planId: tx.planId,
-      planName: tx.planName,
-      planDate: tx.planDate,
-      planAssignment: tx.planAssignment,
-      budgetId: tx.budgetId,
-      budgetName: tx.budgetName,
+      planId: row.planId,
+      planName: row.planName,
+      planDate: row.planDate,
+      budgetId: row.budgetId,
+      budgetName: row.budgetName,
     }
 
     // Optimistic update
     if (planId) {
       const targetPlan = plans.value.find((p) => p.id === planId)
-      tx.planId = planId
-      tx.planName = targetPlan?.name ?? null
-      tx.planDate = targetPlan?.date ?? null
-      tx.planAssignment = 'manual'
+      row.planId = planId
+      row.planName = targetPlan?.name ?? null
+      row.planDate = targetPlan?.date ?? null
     } else {
-      tx.planId = null
-      tx.planName = null
-      tx.planDate = null
-      tx.planAssignment = 'none'
+      row.planId = null
+      row.planName = null
+      row.planDate = null
     }
-    // Clear budget when plan changes
-    tx.budgetId = null
-    tx.budgetName = null
+    row.budgetId = null
+    row.budgetName = null
 
     try {
-      const response = await fetch(`/api/bank-transactions/${id}`, {
+      const endpoint =
+        row.rowType === 'split'
+          ? `/api/bank-transactions/splits/${id}`
+          : `/api/bank-transactions/${id}`
+      const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId }),
@@ -133,12 +128,11 @@ export function useBankTransactions(
       return true
     } catch {
       // Rollback
-      tx.planId = original.planId
-      tx.planName = original.planName
-      tx.planDate = original.planDate
-      tx.planAssignment = original.planAssignment
-      tx.budgetId = original.budgetId
-      tx.budgetName = original.budgetName
+      row.planId = original.planId
+      row.planName = original.planName
+      row.planDate = original.planDate
+      row.budgetId = original.budgetId
+      row.budgetName = original.budgetName
       return false
     }
   }
@@ -147,13 +141,13 @@ export function useBankTransactions(
     id: string,
     note: string | null,
   ): Promise<boolean> {
-    const tx = transactions.value.find((t) => t.id === id)
-    if (!tx) return false
+    const row = rows.value.find((r) => r.id === id)
+    if (!row) return false
 
-    const originalNote = tx.note
+    const originalNote = row.note
 
     // Optimistic update
-    tx.note = note
+    row.note = note
 
     try {
       const response = await fetch(`/api/bank-transactions/${id}`, {
@@ -165,7 +159,7 @@ export function useBankTransactions(
       return true
     } catch {
       // Rollback
-      tx.note = originalNote
+      row.note = originalNote
       return false
     }
   }
@@ -175,18 +169,22 @@ export function useBankTransactions(
     budgetId: string | null,
     budgetName: string | null,
   ): Promise<boolean> {
-    const tx = transactions.value.find((t) => t.id === id)
-    if (!tx) return false
+    const row = rows.value.find((r) => r.id === id)
+    if (!row) return false
 
-    const originalBudgetId = tx.budgetId
-    const originalBudgetName = tx.budgetName
+    const originalBudgetId = row.budgetId
+    const originalBudgetName = row.budgetName
 
     // Optimistic update
-    tx.budgetId = budgetId
-    tx.budgetName = budgetName
+    row.budgetId = budgetId
+    row.budgetName = budgetName
 
     try {
-      const response = await fetch(`/api/bank-transactions/${id}`, {
+      const endpoint =
+        row.rowType === 'split'
+          ? `/api/bank-transactions/splits/${id}`
+          : `/api/bank-transactions/${id}`
+      const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ budgetId }),
@@ -195,8 +193,8 @@ export function useBankTransactions(
       return true
     } catch {
       // Rollback
-      tx.budgetId = originalBudgetId
-      tx.budgetName = originalBudgetName
+      row.budgetId = originalBudgetId
+      row.budgetName = originalBudgetName
       return false
     }
   }
@@ -215,7 +213,7 @@ export function useBankTransactions(
       await loadTransactions()
       // If current page is now empty but there are still results, jump to last valid page
       if (
-        transactions.value.length === 0 &&
+        rows.value.length === 0 &&
         pagination.value.total > 0 &&
         filters.page.value > 1
       ) {
@@ -231,12 +229,13 @@ export function useBankTransactions(
   async function bulkAssignPlan(
     ids: string[],
     planId: string | null,
+    splitIds: string[] = [],
   ): Promise<boolean> {
     try {
       const response = await fetch('/api/bank-transactions/bulk-assign-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, planId }),
+        body: JSON.stringify({ ids, splitIds, planId }),
       })
       if (!response.ok) throw new Error('Bulk assign plan failed')
       await loadTransactions()
@@ -251,22 +250,24 @@ export function useBankTransactions(
     ids: string[],
     budgetId: string | null,
     budgetName: string | null,
+    splitIds: string[] = [],
   ): Promise<boolean> {
     const idSet = new Set(ids)
+    const splitIdSet = new Set(splitIds)
     const originals = new Map<
       string,
       { budgetId: string | null; budgetName: string | null }
     >()
 
-    // Optimistic update
-    for (const tx of transactions.value) {
-      if (idSet.has(tx.id)) {
-        originals.set(tx.id, {
-          budgetId: tx.budgetId,
-          budgetName: tx.budgetName,
+    // Optimistic update — all rows
+    for (const row of rows.value) {
+      if (idSet.has(row.id) || splitIdSet.has(row.id)) {
+        originals.set(row.id, {
+          budgetId: row.budgetId,
+          budgetName: row.budgetName,
         })
-        tx.budgetId = budgetId
-        tx.budgetName = budgetName
+        row.budgetId = budgetId
+        row.budgetName = budgetName
       }
     }
 
@@ -276,21 +277,57 @@ export function useBankTransactions(
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids, budgetId }),
+          body: JSON.stringify({ ids, splitIds, budgetId }),
         },
       )
       if (!response.ok) throw new Error('Bulk assign budget failed')
       return true
     } catch {
       // Rollback
-      for (const tx of transactions.value) {
-        const orig = originals.get(tx.id)
+      for (const row of rows.value) {
+        const orig = originals.get(row.id)
         if (orig) {
-          tx.budgetId = orig.budgetId
-          tx.budgetName = orig.budgetName
+          row.budgetId = orig.budgetId
+          row.budgetName = orig.budgetName
         }
       }
       errorMessage.value = 'Budget konnte nicht zugewiesen werden.'
+      return false
+    }
+  }
+
+  async function splitTransaction(
+    id: string,
+    splits: { amountCents: number; label?: string }[],
+  ): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/bank-transactions/${id}/split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ splits }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Fehler beim Aufteilen')
+      }
+      await loadTransactions()
+      return true
+    } catch {
+      errorMessage.value = 'Transaktion konnte nicht aufgeteilt werden.'
+      return false
+    }
+  }
+
+  async function unsplitTransaction(parentId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/bank-transactions/${parentId}/split`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) throw new Error('Unsplit failed')
+      await loadTransactions()
+      return true
+    } catch {
+      errorMessage.value = 'Aufteilung konnte nicht aufgehoben werden.'
       return false
     }
   }
@@ -303,7 +340,7 @@ export function useBankTransactions(
   )
 
   return {
-    transactions,
+    rows,
     pagination,
     sources,
     plans,
@@ -318,5 +355,7 @@ export function useBankTransactions(
     bulkArchiveTransactions,
     bulkAssignPlan,
     bulkAssignBudget,
+    splitTransaction,
+    unsplitTransaction,
   }
 }

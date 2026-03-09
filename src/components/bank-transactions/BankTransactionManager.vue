@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type {
-  BankTransactionWithRelations,
-  ImportSource,
-} from '@/lib/bank-transactions'
+import type { BankTransactionRow, ImportSource } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
 import { toast } from 'vue-sonner'
@@ -62,9 +59,10 @@ import {
 } from 'lucide-vue-next'
 import BankTransactionTable from './BankTransactionTable.vue'
 import BankImportDialog from './BankImportDialog.vue'
+import SplitTransactionDialog from './SplitTransactionDialog.vue'
 
 const props = defineProps<{
-  initialTransactions: BankTransactionWithRelations[]
+  initialRows: BankTransactionRow[]
   initialPagination: {
     total: number
     page: number
@@ -77,7 +75,7 @@ const props = defineProps<{
 
 const filters = useBankTransactionFilters()
 const {
-  transactions,
+  rows,
   pagination,
   sources,
   plans,
@@ -91,14 +89,18 @@ const {
   bulkArchiveTransactions,
   bulkAssignPlan,
   bulkAssignBudget,
+  splitTransaction,
+  unsplitTransaction,
 } = useBankTransactions(filters, {
-  transactions: props.initialTransactions,
+  rows: props.initialRows,
   pagination: props.initialPagination,
   sources: props.initialSources,
   plans: props.initialPlans,
 })
 
 const importDialogOpen = ref(false)
+const splitDialogOpen = ref(false)
+const splitTarget = ref<BankTransactionRow | null>(null)
 const bulkPlanPopoverOpen = ref(false)
 const bulkBudgetPopoverOpen = ref(false)
 const bulkBudgetPlanId = ref<string | null>(null)
@@ -106,16 +108,34 @@ const bulkBudgetList = ref<{ id: string; name: string }[]>([])
 const bulkBudgetLoading = ref(false)
 const activePlans = computed(() => plans.value.filter((p) => !p.isArchived))
 
-const selectedSharedPlanId = computed(() => {
-  if (selectedIds.value.size === 0) return null
-  const ids = Array.from(selectedIds.value)
-  const selectedTxs = transactions.value.filter((tx) => ids.includes(tx.id))
-  const planIds = new Set(selectedTxs.map((tx) => tx.planId).filter(Boolean))
-  if (planIds.size === 1) return [...planIds][0]!
-  return null
-})
 const selectedIds = ref<Set<string>>(new Set())
 const lastSelectedId = ref<string | null>(null)
+
+const selectedTransactionIds = computed(() =>
+  [...selectedIds.value].filter((id) => {
+    const row = rows.value.find((r) => r.id === id)
+    return row?.rowType === 'transaction'
+  }),
+)
+const selectedSplitIds = computed(() =>
+  [...selectedIds.value].filter((id) => {
+    const row = rows.value.find((r) => r.id === id)
+    return row?.rowType === 'split'
+  }),
+)
+
+const selectedSharedPlanId = computed(() => {
+  if (selectedIds.value.size === 0) return null
+
+  const planIds = new Set<string | null>()
+  for (const row of rows.value) {
+    if (selectedIds.value.has(row.id)) planIds.add(row.planId)
+  }
+
+  const nonNull = [...planIds].filter(Boolean)
+  if (nonNull.length === 1 && planIds.size === 1) return nonNull[0]!
+  return null
+})
 
 // Clear selection on filter/page changes
 watch(
@@ -130,16 +150,18 @@ watch(
 function toggleSelect(id: string, shiftKey: boolean) {
   const next = new Set(selectedIds.value)
   if (shiftKey && lastSelectedId.value) {
-    const txList = transactions.value
-    const anchorIdx = txList.findIndex((tx) => tx.id === lastSelectedId.value)
-    const currentIdx = txList.findIndex((tx) => tx.id === id)
+    const allRows = rows.value
+    const anchorIdx = allRows.findIndex(
+      (row) => row.id === lastSelectedId.value,
+    )
+    const currentIdx = allRows.findIndex((row) => row.id === id)
     if (anchorIdx !== -1 && currentIdx !== -1) {
       const [start, end] = [
         Math.min(anchorIdx, currentIdx),
         Math.max(anchorIdx, currentIdx),
       ]
       for (let i = start; i <= end; i++) {
-        next.add(txList[i].id)
+        next.add(allRows[i].id)
       }
     }
   } else {
@@ -154,13 +176,13 @@ function toggleSelect(id: string, shiftKey: boolean) {
 }
 
 function toggleSelectAll() {
-  const allSelected = transactions.value.every((tx) =>
-    selectedIds.value.has(tx.id),
-  )
+  const allRows = rows.value
+  const allSelected =
+    allRows.length > 0 && allRows.every((row) => selectedIds.value.has(row.id))
   if (allSelected) {
     selectedIds.value = new Set()
   } else {
-    selectedIds.value = new Set(transactions.value.map((tx) => tx.id))
+    selectedIds.value = new Set(allRows.map((row) => row.id))
   }
 }
 
@@ -171,15 +193,17 @@ function clearSelection() {
 
 async function handleBulkAssignPlan(planId: string | null) {
   bulkPlanPopoverOpen.value = false
-  const ids = Array.from(selectedIds.value)
-  if (ids.length === 0) return
+  const txIds = selectedTransactionIds.value
+  const spIds = selectedSplitIds.value
+  if (txIds.length === 0 && spIds.length === 0) return
 
-  const success = await bulkAssignPlan(ids, planId)
+  const totalCount = txIds.length + spIds.length
+  const success = await bulkAssignPlan(txIds, planId, spIds)
   if (success) {
     toast.success(
       planId
-        ? `${ids.length} Transaktion(en) Plan zugewiesen`
-        : `${ids.length} Transaktion(en) Plan entfernt`,
+        ? `${totalCount} Transaktion(en) Plan zugewiesen`
+        : `${totalCount} Transaktion(en) Plan entfernt`,
     )
     selectedIds.value = new Set()
   } else {
@@ -187,16 +211,21 @@ async function handleBulkAssignPlan(planId: string | null) {
   }
 }
 
+async function handlePlanUpdate(id: string, planId: string | null) {
+  const success = await updateTransactionPlan(id, planId)
+  if (success) {
+    toast.success(planId ? 'Plan zugewiesen' : 'Plan entfernt')
+  } else {
+    toast.error('Plan konnte nicht aktualisiert werden.')
+  }
+}
+
 async function handleBudgetUpdate(
-  transactionId: string,
+  id: string,
   budgetId: string | null,
   budgetName: string | null,
 ) {
-  const success = await updateTransactionBudget(
-    transactionId,
-    budgetId,
-    budgetName,
-  )
+  const success = await updateTransactionBudget(id, budgetId, budgetName)
   if (success) {
     toast.success(budgetId ? 'Budget zugewiesen' : 'Budget entfernt')
   } else {
@@ -205,9 +234,11 @@ async function handleBudgetUpdate(
 }
 
 async function openBulkBudgetPopover() {
+  const planId = selectedSharedPlanId.value
+  if (!planId) return
   bulkBudgetPopoverOpen.value = true
-  bulkBudgetPlanId.value = selectedSharedPlanId.value
-  await loadBulkBudgets(selectedSharedPlanId.value!)
+  bulkBudgetPlanId.value = planId
+  await loadBulkBudgets(planId)
 }
 
 async function loadBulkBudgets(planId: string) {
@@ -227,14 +258,15 @@ async function loadBulkBudgets(planId: string) {
 
 async function handleBulkAssignBudget(budgetId: string | null) {
   bulkBudgetPopoverOpen.value = false
-  const ids = Array.from(selectedIds.value)
-  if (ids.length === 0) return
+  const txIds = selectedTransactionIds.value
+  const spIds = selectedSplitIds.value
+  if (txIds.length === 0 && spIds.length === 0) return
 
-  // Verify all selected transactions belong to the budget's plan
+  // Verify all selected rows belong to the budget's plan
   if (bulkBudgetPlanId.value) {
-    const selectedTxs = transactions.value.filter((tx) => ids.includes(tx.id))
-    const wrongPlan = selectedTxs.some(
-      (tx) => tx.planId !== bulkBudgetPlanId.value,
+    const wrongPlan = rows.value.some(
+      (row) =>
+        selectedIds.value.has(row.id) && row.planId !== bulkBudgetPlanId.value,
     )
     if (wrongPlan) {
       toast.error(
@@ -244,14 +276,15 @@ async function handleBulkAssignBudget(budgetId: string | null) {
     }
   }
 
+  const totalCount = txIds.length + spIds.length
   const budgetName =
     bulkBudgetList.value.find((b) => b.id === budgetId)?.name ?? null
-  const success = await bulkAssignBudget(ids, budgetId, budgetName)
+  const success = await bulkAssignBudget(txIds, budgetId, budgetName, spIds)
   if (success) {
     toast.success(
       budgetId
-        ? `${ids.length} Transaktion(en) Budget zugewiesen`
-        : `${ids.length} Transaktion(en) Budget entfernt`,
+        ? `${totalCount} Transaktion(en) Budget zugewiesen`
+        : `${totalCount} Transaktion(en) Budget entfernt`,
     )
     selectedIds.value = new Set()
   } else {
@@ -260,15 +293,18 @@ async function handleBulkAssignBudget(budgetId: string | null) {
 }
 
 async function handleBulkArchive(isArchived: boolean) {
-  const ids = Array.from(selectedIds.value)
-  if (ids.length === 0) return
+  const txIds = selectedTransactionIds.value
+  if (txIds.length === 0) {
+    toast.error('Nur Transaktionen (keine Splits) können archiviert werden.')
+    return
+  }
 
-  const success = await bulkArchiveTransactions(ids, isArchived)
+  const success = await bulkArchiveTransactions(txIds, isArchived)
   if (success) {
     toast.success(
       isArchived
-        ? `${ids.length} Transaktion(en) archiviert`
-        : `${ids.length} Transaktion(en) entarchiviert`,
+        ? `${txIds.length} Transaktion(en) archiviert`
+        : `${txIds.length} Transaktion(en) entarchiviert`,
     )
     selectedIds.value = new Set()
   } else {
@@ -289,15 +325,6 @@ function handlePageChange(page: number) {
   filters.page.value = page
 }
 
-async function handlePlanUpdate(transactionId: string, planId: string | null) {
-  const success = await updateTransactionPlan(transactionId, planId)
-  if (success) {
-    toast.success(planId ? 'Plan zugewiesen' : 'Plan entfernt')
-  } else {
-    toast.error('Plan konnte nicht aktualisiert werden.')
-  }
-}
-
 async function handleNoteUpdate(transactionId: string, note: string | null) {
   const success = await updateTransactionNote(transactionId, note)
   if (success) {
@@ -310,6 +337,33 @@ async function handleNoteUpdate(transactionId: string, note: string | null) {
 function handleImported() {
   loadTransactions()
   loadSources()
+}
+
+function openSplitDialog(row: BankTransactionRow) {
+  splitTarget.value = row
+  splitDialogOpen.value = true
+}
+
+async function handleSplit(splits: { amountCents: number; label?: string }[]) {
+  if (!splitTarget.value) return
+  splitDialogOpen.value = false
+
+  const success = await splitTransaction(splitTarget.value.id, splits)
+  if (success) {
+    toast.success('Transaktion aufgeteilt')
+  } else {
+    toast.error('Transaktion konnte nicht aufgeteilt werden.')
+  }
+  splitTarget.value = null
+}
+
+async function handleUndoSplit(parentId: string) {
+  const success = await unsplitTransaction(parentId)
+  if (success) {
+    toast.success('Aufteilung aufgehoben')
+  } else {
+    toast.error('Aufteilung konnte nicht aufgehoben werden.')
+  }
 }
 </script>
 
@@ -430,7 +484,7 @@ function handleImported() {
 
       <!-- Table -->
       <BankTransactionTable
-        :transactions="transactions"
+        :rows="rows"
         :plans="plans"
         :is-loading="isLoading"
         :search-query="filters.search.value"
@@ -444,6 +498,8 @@ function handleImported() {
         @update:note="handleNoteUpdate"
         @toggle-select="toggleSelect"
         @toggle-select-all="toggleSelectAll"
+        @open-split="openSplitDialog"
+        @undo-split="handleUndoSplit"
       />
 
       <!-- Floating action bar -->
@@ -582,6 +638,13 @@ function handleImported() {
         v-model:open="importDialogOpen"
         :sources="sources"
         @imported="handleImported"
+      />
+
+      <!-- Split Dialog -->
+      <SplitTransactionDialog
+        v-model:open="splitDialogOpen"
+        :transaction="splitTarget"
+        @split="handleSplit"
       />
     </CardContent>
   </Card>
