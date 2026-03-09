@@ -2,14 +2,20 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { inArray } from 'drizzle-orm'
 import { bulkAssignBudgetToTransactions } from '@/lib/bank-transactions'
+import { bulkAssignBudgetToSplits } from '@/lib/bank-transaction-splits'
 import { getTransactionById } from '@/lib/transactions'
 import { db } from '@/db/database'
-import { bankTransaction } from '@/db/schema/plans'
+import { bankTransaction, bankTransactionSplit } from '@/db/schema/plans'
 
-const bulkAssignBudgetSchema = z.object({
-  ids: z.array(z.uuid()).min(1).max(100),
-  budgetId: z.uuid().nullable(),
-})
+const bulkAssignBudgetSchema = z
+  .object({
+    ids: z.array(z.uuid()).max(100).default([]),
+    splitIds: z.array(z.uuid()).max(100).default([]),
+    budgetId: z.uuid().nullable(),
+  })
+  .refine((data) => data.ids.length > 0 || data.splitIds.length > 0, {
+    message: 'Mindestens eine Transaktions- oder Split-ID ist erforderlich',
+  })
 
 export const POST: APIRoute = async ({ request }) => {
   let body
@@ -46,28 +52,56 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     // Verify all targeted transactions belong to the budget's plan
-    const targetTxs = await db
-      .select({ id: bankTransaction.id, planId: bankTransaction.planId })
-      .from(bankTransaction)
-      .where(inArray(bankTransaction.id, parsed.data.ids))
+    if (parsed.data.ids.length > 0) {
+      const targetTxs = await db
+        .select({ id: bankTransaction.id, planId: bankTransaction.planId })
+        .from(bankTransaction)
+        .where(inArray(bankTransaction.id, parsed.data.ids))
 
-    const mismatch = targetTxs.some((tx) => tx.planId !== budget.planId)
-    if (mismatch) {
-      return new Response(
-        JSON.stringify({
-          error:
-            'Alle Transaktionen müssen dem Plan des Budgets zugewiesen sein',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      )
+      const mismatch = targetTxs.some((tx) => tx.planId !== budget.planId)
+      if (mismatch) {
+        return new Response(
+          JSON.stringify({
+            error:
+              'Alle Transaktionen müssen dem Plan des Budgets zugewiesen sein',
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+    }
+
+    // Verify all targeted splits belong to the budget's plan
+    if (parsed.data.splitIds.length > 0) {
+      const targetSplits = await db
+        .select({
+          id: bankTransactionSplit.id,
+          planId: bankTransactionSplit.planId,
+        })
+        .from(bankTransactionSplit)
+        .where(inArray(bankTransactionSplit.id, parsed.data.splitIds))
+
+      const splitMismatch = targetSplits.some((s) => s.planId !== budget.planId)
+      if (splitMismatch) {
+        return new Response(
+          JSON.stringify({
+            error: 'Alle Splits müssen dem Plan des Budgets zugewiesen sein',
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
     }
   }
 
   try {
-    const count = await bulkAssignBudgetToTransactions(
-      parsed.data.ids,
-      parsed.data.budgetId,
-    )
+    const [txCount, splitCount] = await Promise.all([
+      parsed.data.ids.length > 0
+        ? bulkAssignBudgetToTransactions(parsed.data.ids, parsed.data.budgetId)
+        : 0,
+      parsed.data.splitIds.length > 0
+        ? bulkAssignBudgetToSplits(parsed.data.splitIds, parsed.data.budgetId)
+        : 0,
+    ])
+    const count = txCount + splitCount
 
     return new Response(JSON.stringify({ success: true, count }), {
       status: 200,

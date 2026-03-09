@@ -1,6 +1,7 @@
 import { db } from '@/db/database'
 import {
   bankTransaction,
+  bankTransactionSplit,
   importSource,
   plan,
   plannedTransaction,
@@ -11,13 +12,14 @@ import {
   count,
   desc,
   eq,
-  getTableColumns,
   gte,
   inArray,
   like,
   lte,
   or,
+  sql,
 } from 'drizzle-orm'
+import { unionAll } from 'drizzle-orm/sqlite-core'
 
 export type ImportSource = typeof importSource.$inferSelect
 export type NewImportSource = typeof importSource.$inferInsert
@@ -66,8 +68,31 @@ export type BankTransactionWithRelations = BankTransaction & {
   budgetName: string | null
 }
 
+export interface BankTransactionRow {
+  id: string
+  rowType: 'transaction' | 'split'
+  parentId: string | null
+  bookingDate: string
+  counterparty: string | null
+  description: string | null
+  amountCents: number
+  label: string | null
+  sourceName: string | null
+  status: string
+  planId: string | null
+  planDate: string | null
+  planName: string | null
+  budgetId: string | null
+  budgetName: string | null
+  isArchived: boolean
+  note: string | null
+  isSplit: boolean
+  createdAt: Date
+  sortOrder: number
+}
+
 export interface PaginatedBankTransactions {
-  transactions: BankTransactionWithRelations[]
+  rows: BankTransactionRow[]
   pagination: {
     total: number
     page: number
@@ -183,55 +208,54 @@ export async function getBankTransactions(
     limit = 20,
   } = options
 
-  const conditions = []
-  if (sourceId) conditions.push(eq(bankTransaction.sourceId, sourceId))
-  if (planId) conditions.push(eq(bankTransaction.planId, planId))
-  if (status) conditions.push(eq(bankTransaction.status, status))
-  if (dateFrom) conditions.push(gte(bankTransaction.bookingDate, dateFrom))
-  if (dateTo) conditions.push(lte(bankTransaction.bookingDate, dateTo))
+  // Base conditions applied to the parent bankTransaction in both branches
+  const parentConditions = []
+  if (sourceId) parentConditions.push(eq(bankTransaction.sourceId, sourceId))
+  if (status) parentConditions.push(eq(bankTransaction.status, status))
+  if (dateFrom)
+    parentConditions.push(gte(bankTransaction.bookingDate, dateFrom))
+  if (dateTo) parentConditions.push(lte(bankTransaction.bookingDate, dateTo))
   if (!options.showArchived) {
-    conditions.push(eq(bankTransaction.isArchived, false))
+    parentConditions.push(eq(bankTransaction.isArchived, false))
   }
-  if (search) {
-    conditions.push(
-      or(
+  const parentSearchCondition = search
+    ? or(
         like(bankTransaction.description, `%${search}%`),
         like(bankTransaction.counterparty, `%${search}%`),
         like(bankTransaction.purpose, `%${search}%`),
         like(bankTransaction.bookingText, `%${search}%`),
-      ),
-    )
-  }
+      )
+    : undefined
 
-  const whereClause =
-    conditions.length === 0
-      ? undefined
-      : conditions.length === 1
-        ? conditions[0]
-        : and(...conditions)
+  // Branch 1: regular (non-split) transactions
+  const txConditions = [...parentConditions, eq(bankTransaction.isSplit, false)]
+  if (parentSearchCondition) txConditions.push(parentSearchCondition)
+  if (planId) txConditions.push(eq(bankTransaction.planId, planId))
+  const txWhere = and(...txConditions)
 
-  const sortColumn =
-    sortBy === 'amountCents'
-      ? bankTransaction.amountCents
-      : sortBy === 'createdAt'
-        ? bankTransaction.createdAt
-        : bankTransaction.bookingDate
-  const orderBy = sortDir === 'asc' ? asc(sortColumn) : desc(sortColumn)
-
-  const countRows = await db
-    .select({ count: count() })
-    .from(bankTransaction)
-    .where(whereClause)
-  const total = countRows[0]?.count ?? 0
-  const totalPages = limit === -1 ? 1 : Math.ceil(total / limit)
-
-  const query = db
+  const txBranch = db
     .select({
-      ...getTableColumns(bankTransaction),
+      id: bankTransaction.id,
+      rowType: sql<string>`'transaction'`.as('row_type'),
+      parentId: sql<string | null>`null`.as('parent_id'),
+      bookingDate: bankTransaction.bookingDate,
+      counterparty: bankTransaction.counterparty,
+      description: bankTransaction.description,
+      amountCents: bankTransaction.amountCents,
+      label: sql<string | null>`null`.as('label'),
       sourceName: importSource.name,
+      status: bankTransaction.status,
+      planId: bankTransaction.planId,
       planDate: plan.date,
       planName: plan.name,
+      budgetId: bankTransaction.budgetId,
       budgetName: plannedTransaction.name,
+      isArchived: bankTransaction.isArchived,
+      note: bankTransaction.note,
+      isSplit: bankTransaction.isSplit,
+      createdAt: bankTransaction.createdAt,
+      sortOrder: sql<number>`0`.as('sort_order'),
+      sortGroup: sql`${bankTransaction.id}`.as('sort_group'),
     })
     .from(bankTransaction)
     .leftJoin(importSource, eq(bankTransaction.sourceId, importSource.id))
@@ -240,16 +264,103 @@ export async function getBankTransactions(
       plannedTransaction,
       eq(bankTransaction.budgetId, plannedTransaction.id),
     )
-    .where(whereClause)
-    .orderBy(orderBy)
+    .where(txWhere)
 
-  const transactions =
+  // Branch 2: split children (joined to their parent bankTransaction)
+  const splitParentConditions = [
+    ...parentConditions,
+    eq(bankTransaction.isSplit, true),
+  ]
+  if (parentSearchCondition || search) {
+    splitParentConditions.push(
+      or(
+        parentSearchCondition,
+        like(bankTransactionSplit.label, `%${search}%`),
+      )!,
+    )
+  }
+  if (planId)
+    splitParentConditions.push(eq(bankTransactionSplit.planId, planId))
+  const splitWhere = and(...splitParentConditions)
+
+  const splitBranch = db
+    .select({
+      id: bankTransactionSplit.id,
+      rowType: sql<string>`'split'`.as('row_type'),
+      parentId: bankTransactionSplit.bankTransactionId,
+      bookingDate: bankTransaction.bookingDate,
+      counterparty: bankTransaction.counterparty,
+      description: bankTransaction.description,
+      amountCents: bankTransactionSplit.amountCents,
+      label: bankTransactionSplit.label,
+      sourceName: importSource.name,
+      status: bankTransaction.status,
+      planId: bankTransactionSplit.planId,
+      planDate: plan.date,
+      planName: plan.name,
+      budgetId: bankTransactionSplit.budgetId,
+      budgetName: plannedTransaction.name,
+      isArchived: bankTransaction.isArchived,
+      note: sql<string | null>`null`.as('note'),
+      isSplit: sql<boolean>`0`.as('is_split'),
+      createdAt: bankTransactionSplit.createdAt,
+      sortOrder: bankTransactionSplit.sortOrder,
+      sortGroup: sql`${bankTransactionSplit.bankTransactionId}`.as(
+        'sort_group',
+      ),
+    })
+    .from(bankTransactionSplit)
+    .innerJoin(
+      bankTransaction,
+      eq(bankTransactionSplit.bankTransactionId, bankTransaction.id),
+    )
+    .leftJoin(importSource, eq(bankTransaction.sourceId, importSource.id))
+    .leftJoin(plan, eq(bankTransactionSplit.planId, plan.id))
+    .leftJoin(
+      plannedTransaction,
+      eq(bankTransactionSplit.budgetId, plannedTransaction.id),
+    )
+    .where(splitWhere)
+
+  // Count: sum both branches separately
+  const [txCountResult, splitCountResult] = await Promise.all([
+    db.select({ count: count() }).from(bankTransaction).where(txWhere),
+    db
+      .select({ count: count() })
+      .from(bankTransactionSplit)
+      .innerJoin(
+        bankTransaction,
+        eq(bankTransactionSplit.bankTransactionId, bankTransaction.id),
+      )
+      .where(splitWhere),
+  ])
+  const total =
+    (txCountResult[0]?.count ?? 0) + (splitCountResult[0]?.count ?? 0)
+  const totalPages = limit === -1 ? 1 : Math.ceil(total / limit)
+
+  // Sort column for the combined result
+  const sortColumn =
+    sortBy === 'amountCents'
+      ? sql`amount_cents`
+      : sortBy === 'createdAt'
+        ? sql`created_at`
+        : sql`booking_date`
+  const dirFn = sortDir === 'asc' ? asc : desc
+
+  // Combined UNION ALL query with ordering and pagination
+  const combined = unionAll(txBranch, splitBranch).orderBy(
+    dirFn(sortColumn),
+    sql`sort_group`,
+    asc(sql`sort_order`),
+  )
+
+  const rows =
     limit === -1
-      ? await query
-      : await query.limit(limit).offset((page - 1) * limit)
+      ? await combined
+      : await combined.limit(limit).offset((page - 1) * limit)
 
   return {
-    transactions,
+    rows: rows as BankTransactionRow[],
     pagination: {
       total,
       page,
