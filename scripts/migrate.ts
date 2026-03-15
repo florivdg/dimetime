@@ -8,5 +8,6 @@ if (!process.env.DB_FILE_NAME) {
 }
 
 const sqlite = new Database(process.env.DB_FILE_NAME)
+sqlite.run('PRAGMA journal_mode = WAL;')
 const db = drizzle(sqlite)
 migrate(db, { migrationsFolder: './drizzle' })
