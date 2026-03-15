@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.9.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.8.0...v0.9.0)
+
+### 🚀 Enhancements
+
+- **bank-transactions:** Add split transactions with per-split plan/budget assignment and archiving ([#12](https://github.com/florivdg/dimetime/pull/12))
+
+### 🩹 Fixes
+
+- **api:** Wrap bulk-assign-plan and bulk-assign-budget in DB transactions ([0940bc3](https://github.com/florivdg/dimetime/commit/0940bc3))
+- **bank-transactions:** Prevent table from overflowing viewport in sidebar layout ([f119cca](https://github.com/florivdg/dimetime/commit/f119cca))
+
+### 💅 Refactors
+
+- **api:** Use jsonResponse/jsonError helpers in bank transaction endpoints ([72f6cfb](https://github.com/florivdg/dimetime/commit/72f6cfb))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.8.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.7.1...v0.8.0)
