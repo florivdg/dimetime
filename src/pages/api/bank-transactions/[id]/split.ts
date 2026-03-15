@@ -51,6 +51,9 @@ export const DELETE: APIRoute = async ({ params }) => {
   const id = params.id
   if (!id) return jsonError('Transaktions-ID ist erforderlich')
 
+  const existing = await getBankTransactionById(id)
+  if (!existing) return jsonError('Banktransaktion nicht gefunden', 404)
+
   try {
     await unsplitBankTransaction(id)
     return jsonResponse({ success: true })

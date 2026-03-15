@@ -151,6 +151,7 @@ beforeAll(() => {
       "budget_id" text REFERENCES "planned_transaction"("id") ON DELETE set null,
       "plan_id" text REFERENCES "plan"("id") ON DELETE set null,
       "sort_order" integer DEFAULT 0 NOT NULL,
+      "is_archived" integer DEFAULT false NOT NULL,
       "created_at" integer NOT NULL,
       "updated_at" integer NOT NULL
     );
