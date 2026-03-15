@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getSplitById, updateSplitFields } from '@/lib/bank-transaction-splits'
 import { getTransactionById } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
+import { jsonError, jsonResponse } from '@/lib/bank-import/api-helpers'
 
 const patchSchema = z
   .object({
@@ -15,82 +16,42 @@ const patchSchema = z
 
 export const PATCH: APIRoute = async ({ params, request }) => {
   const splitId = params.splitId
-  if (!splitId) {
-    return new Response(
-      JSON.stringify({ error: 'Split-ID ist erforderlich' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  if (!splitId) return jsonError('Split-ID ist erforderlich')
 
   let body: unknown
   try {
     body = await request.json()
   } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonError('Ungültiges JSON')
   }
 
   const parsed = patchSchema.safeParse(body)
   if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
+    return jsonError(parsed.error.issues[0]?.message ?? 'Ungültige Eingabe')
   }
 
   const existingSplit = await getSplitById(splitId)
-  if (!existingSplit) {
-    return new Response(JSON.stringify({ error: 'Split nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!existingSplit) return jsonError('Split nicht gefunden', 404)
 
   const effectivePlanId =
     parsed.data.planId !== undefined ? parsed.data.planId : existingSplit.planId
 
   if (parsed.data.planId !== undefined && parsed.data.planId !== null) {
     const targetPlan = await getPlanById(parsed.data.planId)
-    if (!targetPlan) {
-      return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
+    if (!targetPlan) return jsonError('Plan nicht gefunden', 404)
     if (targetPlan.isArchived) {
-      return new Response(
-        JSON.stringify({
-          error:
-            'Splits können nicht einem archivierten Plan zugeordnet werden.',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      return jsonError(
+        'Splits können nicht einem archivierten Plan zugeordnet werden.',
       )
     }
   }
 
   if (parsed.data.budgetId != null) {
     const budget = await getTransactionById(parsed.data.budgetId)
-    if (!budget) {
-      return new Response(JSON.stringify({ error: 'Budget nicht gefunden' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-    if (!budget.isBudget) {
-      return new Response(
-        JSON.stringify({ error: 'Transaktion ist kein Budget' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
+    if (!budget) return jsonError('Budget nicht gefunden', 404)
+    if (!budget.isBudget) return jsonError('Transaktion ist kein Budget')
     if (budget.planId !== effectivePlanId) {
-      return new Response(
-        JSON.stringify({ error: 'Budget gehört nicht zum zugewiesenen Plan' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      )
+      return jsonError('Budget gehört nicht zum zugewiesenen Plan')
     }
   }
 
@@ -99,15 +60,7 @@ export const PATCH: APIRoute = async ({ params, request }) => {
   if (parsed.data.budgetId !== undefined) fields.budgetId = parsed.data.budgetId
 
   const updated = await updateSplitFields(splitId, fields)
-  if (!updated) {
-    return new Response(JSON.stringify({ error: 'Split nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!updated) return jsonError('Split nicht gefunden', 404)
 
-  return new Response(JSON.stringify(updated), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return jsonResponse(updated)
 }

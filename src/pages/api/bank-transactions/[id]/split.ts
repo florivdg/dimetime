@@ -5,6 +5,7 @@ import {
   splitBankTransaction,
   unsplitBankTransaction,
 } from '@/lib/bank-transaction-splits'
+import { jsonError, jsonResponse } from '@/lib/bank-import/api-helpers'
 
 const splitSchema = z.object({
   splits: z
@@ -20,77 +21,42 @@ const splitSchema = z.object({
 
 export const POST: APIRoute = async ({ params, request }) => {
   const id = params.id
-  if (!id) {
-    return new Response(
-      JSON.stringify({ error: 'Transaktions-ID ist erforderlich' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  if (!id) return jsonError('Transaktions-ID ist erforderlich')
 
   const existing = await getBankTransactionById(id)
-  if (!existing) {
-    return new Response(
-      JSON.stringify({ error: 'Banktransaktion nicht gefunden' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  if (!existing) return jsonError('Banktransaktion nicht gefunden', 404)
 
   let body: unknown
   try {
     body = await request.json()
   } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonError('Ungültiges JSON')
   }
 
   const parsed = splitSchema.safeParse(body)
   if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
+    return jsonError(parsed.error.issues[0]?.message ?? 'Ungültige Eingabe')
   }
 
   try {
     const splits = await splitBankTransaction(id, parsed.data.splits)
-    return new Response(JSON.stringify({ success: true, splits }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ success: true, splits })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Fehler beim Aufteilen'
-    return new Response(JSON.stringify({ error: message }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonError(message)
   }
 }
 
 export const DELETE: APIRoute = async ({ params }) => {
   const id = params.id
-  if (!id) {
-    return new Response(
-      JSON.stringify({ error: 'Transaktions-ID ist erforderlich' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  if (!id) return jsonError('Transaktions-ID ist erforderlich')
 
   try {
     await unsplitBankTransaction(id)
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ success: true })
   } catch (err) {
     const message =
       err instanceof Error ? err.message : 'Fehler beim Aufheben der Teilung'
-    return new Response(JSON.stringify({ error: message }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonError(message)
   }
 }

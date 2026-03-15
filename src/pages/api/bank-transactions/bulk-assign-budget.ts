@@ -6,6 +6,7 @@ import { bulkAssignBudgetToSplits } from '@/lib/bank-transaction-splits'
 import { getTransactionById } from '@/lib/transactions'
 import { db } from '@/db/database'
 import { bankTransaction, bankTransactionSplit } from '@/db/schema/plans'
+import { jsonError, jsonResponse } from '@/lib/bank-import/api-helpers'
 
 const bulkAssignBudgetSchema = z
   .object({
@@ -22,73 +23,45 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     body = await request.json()
   } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiger Request-Body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonError('Ungültiger Request-Body')
   }
 
   const parsed = bulkAssignBudgetSchema.safeParse(body)
   if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0]?.message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
+    return jsonError(parsed.error.issues[0]?.message ?? 'Ungültige Eingabe')
   }
 
   if (parsed.data.budgetId) {
     const budget = await getTransactionById(parsed.data.budgetId)
-    if (!budget) {
-      return new Response(JSON.stringify({ error: 'Budget nicht gefunden' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-    if (!budget.isBudget) {
-      return new Response(
-        JSON.stringify({ error: 'Transaktion ist kein Budget' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
+    if (!budget) return jsonError('Budget nicht gefunden', 404)
+    if (!budget.isBudget) return jsonError('Transaktion ist kein Budget')
+
+    // Verify all targeted transactions/splits belong to the budget's plan
+    const [targetTxs, targetSplits] = await Promise.all([
+      parsed.data.ids.length > 0
+        ? db
+            .select({ id: bankTransaction.id, planId: bankTransaction.planId })
+            .from(bankTransaction)
+            .where(inArray(bankTransaction.id, parsed.data.ids))
+        : [],
+      parsed.data.splitIds.length > 0
+        ? db
+            .select({
+              id: bankTransactionSplit.id,
+              planId: bankTransactionSplit.planId,
+            })
+            .from(bankTransactionSplit)
+            .where(inArray(bankTransactionSplit.id, parsed.data.splitIds))
+        : [],
+    ])
+
+    const mismatch =
+      targetTxs.some((tx) => tx.planId !== budget.planId) ||
+      targetSplits.some((s) => s.planId !== budget.planId)
+    if (mismatch) {
+      return jsonError(
+        'Alle Transaktionen/Splits müssen dem Plan des Budgets zugewiesen sein',
       )
-    }
-
-    // Verify all targeted transactions belong to the budget's plan
-    if (parsed.data.ids.length > 0) {
-      const targetTxs = await db
-        .select({ id: bankTransaction.id, planId: bankTransaction.planId })
-        .from(bankTransaction)
-        .where(inArray(bankTransaction.id, parsed.data.ids))
-
-      const mismatch = targetTxs.some((tx) => tx.planId !== budget.planId)
-      if (mismatch) {
-        return new Response(
-          JSON.stringify({
-            error:
-              'Alle Transaktionen müssen dem Plan des Budgets zugewiesen sein',
-          }),
-          { status: 400, headers: { 'Content-Type': 'application/json' } },
-        )
-      }
-    }
-
-    // Verify all targeted splits belong to the budget's plan
-    if (parsed.data.splitIds.length > 0) {
-      const targetSplits = await db
-        .select({
-          id: bankTransactionSplit.id,
-          planId: bankTransactionSplit.planId,
-        })
-        .from(bankTransactionSplit)
-        .where(inArray(bankTransactionSplit.id, parsed.data.splitIds))
-
-      const splitMismatch = targetSplits.some((s) => s.planId !== budget.planId)
-      if (splitMismatch) {
-        return new Response(
-          JSON.stringify({
-            error: 'Alle Splits müssen dem Plan des Budgets zugewiesen sein',
-          }),
-          { status: 400, headers: { 'Content-Type': 'application/json' } },
-        )
-      }
     }
   }
 
@@ -101,22 +74,15 @@ export const POST: APIRoute = async ({ request }) => {
         ? bulkAssignBudgetToSplits(parsed.data.splitIds, parsed.data.budgetId)
         : 0,
     ])
-    const count = txCount + splitCount
 
-    return new Response(JSON.stringify({ success: true, count }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ success: true, count: txCount + splitCount })
   } catch (error) {
     console.error('Error bulk assigning budget to bank transactions:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Zuweisen des Budgets',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    return jsonError(
+      error instanceof Error
+        ? error.message
+        : 'Fehler beim Zuweisen des Budgets',
+      500,
     )
   }
 }
