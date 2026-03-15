@@ -164,10 +164,10 @@ function statusVariant(
               <component :is="getSortIcon('amountCents')" class="ml-2 size-4" />
             </Button>
           </TableHead>
-          <TableHead class="hidden lg:table-cell">Quelle</TableHead>
+          <TableHead>Quelle</TableHead>
           <TableHead class="w-28">Status</TableHead>
-          <TableHead class="hidden xl:table-cell">Plan</TableHead>
-          <TableHead class="hidden xl:table-cell">Budget</TableHead>
+          <TableHead>Plan</TableHead>
+          <TableHead>Budget</TableHead>
           <TableHead class="w-10"></TableHead>
         </TableRow>
       </TableHeader>
@@ -244,7 +244,7 @@ function statusVariant(
             </TableCell>
 
             <!-- Source -->
-            <TableCell class="hidden lg:table-cell">
+            <TableCell>
               <span class="text-muted-foreground text-sm">{{
                 row.sourceName || '-'
               }}</span>
@@ -258,7 +258,7 @@ function statusVariant(
             </TableCell>
 
             <!-- Plan -->
-            <TableCell class="hidden xl:table-cell">
+            <TableCell>
               <PlanPicker
                 :plans="plans"
                 :plan-id="row.planId"
@@ -269,7 +269,7 @@ function statusVariant(
             </TableCell>
 
             <!-- Budget -->
-            <TableCell class="hidden xl:table-cell">
+            <TableCell>
               <BudgetPicker
                 :plan-id="row.planId"
                 :budget-id="row.budgetId"
@@ -354,7 +354,7 @@ function statusVariant(
             </TableCell>
 
             <!-- Source -->
-            <TableCell class="hidden lg:table-cell">
+            <TableCell>
               <span class="text-muted-foreground text-sm">{{
                 row.sourceName || '-'
               }}</span>
@@ -368,7 +368,7 @@ function statusVariant(
             </TableCell>
 
             <!-- Plan (per-split) -->
-            <TableCell class="hidden xl:table-cell">
+            <TableCell>
               <PlanPicker
                 :plans="plans"
                 :plan-id="row.planId"
@@ -379,7 +379,7 @@ function statusVariant(
             </TableCell>
 
             <!-- Budget (per-split) -->
-            <TableCell class="hidden xl:table-cell">
+            <TableCell>
               <BudgetPicker
                 :plan-id="row.planId"
                 :budget-id="row.budgetId"
