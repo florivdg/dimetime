@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.2
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.9.1...v0.9.2)
+
+### 🩹 Fixes
+
+- **db:** Add exclusive locking mode to prevent -shm file issues in Docker ([3697d1b](https://github.com/florivdg/dimetime/commit/3697d1b))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.9.1
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.9.0...v0.9.1)
