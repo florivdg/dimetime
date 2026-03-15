@@ -202,12 +202,13 @@ export function useBankTransactions(
   async function bulkArchiveTransactions(
     ids: string[],
     isArchived: boolean,
+    splitIds: string[] = [],
   ): Promise<boolean> {
     try {
       const response = await fetch('/api/bank-transactions/bulk-archive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, isArchived }),
+        body: JSON.stringify({ ids, splitIds, isArchived }),
       })
       if (!response.ok) throw new Error('Bulk archive failed')
       await loadTransactions()

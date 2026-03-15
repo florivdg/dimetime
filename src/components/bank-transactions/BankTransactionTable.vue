@@ -304,7 +304,11 @@ function statusVariant(
           </TableRow>
 
           <!-- Split child row -->
-          <TableRow v-else class="group/row border-l-2 border-l-blue-400/50">
+          <TableRow
+            v-else
+            class="group/row border-l-2 border-l-blue-400/50"
+            :class="{ 'opacity-60': row.isArchived }"
+          >
             <!-- Checkbox -->
             <TableCell
               class="cursor-pointer"
@@ -330,6 +334,9 @@ function statusVariant(
                 <span class="max-w-[240px] truncate font-medium">
                   {{ row.label || row.counterparty || row.description || '-' }}
                 </span>
+                <Badge v-if="row.isArchived" variant="outline"
+                  >Archiviert</Badge
+                >
               </div>
             </TableCell>
 
@@ -386,7 +393,7 @@ function statusVariant(
 
             <!-- Actions -->
             <TableCell>
-              <DropdownMenu v-if="row.parentId">
+              <DropdownMenu v-if="row.parentId && !row.isArchived">
                 <DropdownMenuTrigger as-child>
                   <Button
                     variant="ghost"

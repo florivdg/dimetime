@@ -111,31 +111,28 @@ const activePlans = computed(() => plans.value.filter((p) => !p.isArchived))
 const selectedIds = ref<Set<string>>(new Set())
 const lastSelectedId = ref<string | null>(null)
 
-const selectedTransactionIds = computed(() =>
-  [...selectedIds.value].filter((id) => {
-    const row = rows.value.find((r) => r.id === id)
-    return row?.rowType === 'transaction'
-  }),
-)
-const selectedSplitIds = computed(() =>
-  [...selectedIds.value].filter((id) => {
-    const row = rows.value.find((r) => r.id === id)
-    return row?.rowType === 'split'
-  }),
-)
-
-const selectedSharedPlanId = computed(() => {
-  if (selectedIds.value.size === 0) return null
-
+const selectedRowInfo = computed(() => {
+  const txIds: string[] = []
+  const splitIds: string[] = []
   const planIds = new Set<string | null>()
+
   for (const row of rows.value) {
-    if (selectedIds.value.has(row.id)) planIds.add(row.planId)
+    if (!selectedIds.value.has(row.id)) continue
+    if (row.rowType === 'transaction') txIds.push(row.id)
+    else if (row.rowType === 'split') splitIds.push(row.id)
+    planIds.add(row.planId)
   }
 
-  const nonNull = [...planIds].filter(Boolean)
-  if (nonNull.length === 1 && planIds.size === 1) return nonNull[0]!
-  return null
+  const nonNullPlans = [...planIds].filter(Boolean)
+  const sharedPlanId =
+    nonNullPlans.length === 1 && planIds.size === 1 ? nonNullPlans[0]! : null
+
+  return { txIds, splitIds, sharedPlanId }
 })
+
+const selectedTransactionIds = computed(() => selectedRowInfo.value.txIds)
+const selectedSplitIds = computed(() => selectedRowInfo.value.splitIds)
+const selectedSharedPlanId = computed(() => selectedRowInfo.value.sharedPlanId)
 
 // Clear selection on filter/page changes
 watch(
@@ -294,17 +291,16 @@ async function handleBulkAssignBudget(budgetId: string | null) {
 
 async function handleBulkArchive(isArchived: boolean) {
   const txIds = selectedTransactionIds.value
-  if (txIds.length === 0) {
-    toast.error('Nur Transaktionen (keine Splits) können archiviert werden.')
-    return
-  }
+  const spIds = selectedSplitIds.value
+  if (txIds.length === 0 && spIds.length === 0) return
 
-  const success = await bulkArchiveTransactions(txIds, isArchived)
+  const totalCount = txIds.length + spIds.length
+  const success = await bulkArchiveTransactions(txIds, isArchived, spIds)
   if (success) {
     toast.success(
       isArchived
-        ? `${txIds.length} Transaktion(en) archiviert`
-        : `${txIds.length} Transaktion(en) entarchiviert`,
+        ? `${totalCount} Transaktion(en) archiviert`
+        : `${totalCount} Transaktion(en) entarchiviert`,
     )
     selectedIds.value = new Set()
   } else {

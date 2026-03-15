@@ -1,4 +1,4 @@
-import { db } from '@/db/database'
+import { db, type DbOrTransaction } from '@/db/database'
 import {
   bankTransaction,
   bankTransactionSplit,
@@ -155,6 +155,7 @@ export async function getSplitsForTransactionIds(
       budgetId: bankTransactionSplit.budgetId,
       planId: bankTransactionSplit.planId,
       sortOrder: bankTransactionSplit.sortOrder,
+      isArchived: bankTransactionSplit.isArchived,
       createdAt: bankTransactionSplit.createdAt,
       updatedAt: bankTransactionSplit.updatedAt,
       budgetName: plannedTransaction.name,
@@ -202,6 +203,18 @@ export async function getSplitsForTransactionIds(
     }))
 }
 
+function buildSpendingRecord(
+  rows: { budgetId: string | null; spent: string | number | null }[],
+): Record<string, number> {
+  const spending: Record<string, number> = {}
+  for (const row of rows) {
+    if (row.budgetId) {
+      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
+    }
+  }
+  return spending
+}
+
 export async function getBudgetSpendingFromSplits(
   budgetIds: string[],
 ): Promise<Record<string, number>> {
@@ -216,13 +229,7 @@ export async function getBudgetSpendingFromSplits(
     .where(inArray(bankTransactionSplit.budgetId, budgetIds))
     .groupBy(bankTransactionSplit.budgetId)
 
-  const spending: Record<string, number> = {}
-  for (const row of result) {
-    if (row.budgetId) {
-      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
-    }
-  }
-  return spending
+  return buildSpendingRecord(result)
 }
 
 export async function updateSplitFields(
@@ -295,6 +302,20 @@ export async function bulkAssignPlanToSplits(
   })
 }
 
+export async function bulkArchiveSplits(
+  ids: string[],
+  isArchived: boolean,
+  txOrDb: DbOrTransaction = db,
+): Promise<number> {
+  if (ids.length === 0) return 0
+  const result = await txOrDb
+    .update(bankTransactionSplit)
+    .set({ isArchived, updatedAt: new Date() })
+    .where(inArray(bankTransactionSplit.id, ids))
+    .returning({ id: bankTransactionSplit.id })
+  return result.length
+}
+
 export async function bulkAssignBudgetToSplits(
   ids: string[],
   budgetId: string | null,
@@ -329,11 +350,5 @@ export async function getBudgetSpendingFromSplitsForPlan(
     )
     .groupBy(bankTransactionSplit.budgetId)
 
-  const spending: Record<string, number> = {}
-  for (const row of result) {
-    if (row.budgetId) {
-      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
-    }
-  }
-  return spending
+  return buildSpendingRecord(result)
 }

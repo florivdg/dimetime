@@ -17,4 +17,8 @@ const db = drizzle({
   schema: { ...authSchema, ...plansSchema, ...settingsSchema },
 })
 
+export type DbOrTransaction =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 export { db }

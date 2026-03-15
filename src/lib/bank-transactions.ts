@@ -1,4 +1,4 @@
-import { db } from '@/db/database'
+import { db, type DbOrTransaction } from '@/db/database'
 import {
   bankTransaction,
   bankTransactionSplit,
@@ -271,6 +271,9 @@ export async function getBankTransactions(
     ...parentConditions,
     eq(bankTransaction.isSplit, true),
   ]
+  if (!options.showArchived) {
+    splitParentConditions.push(eq(bankTransactionSplit.isArchived, false))
+  }
   if (parentSearchCondition || search) {
     splitParentConditions.push(
       or(
@@ -300,7 +303,7 @@ export async function getBankTransactions(
       planName: plan.name,
       budgetId: bankTransactionSplit.budgetId,
       budgetName: plannedTransaction.name,
-      isArchived: bankTransaction.isArchived,
+      isArchived: bankTransactionSplit.isArchived,
       note: sql<string | null>`null`.as('note'),
       isSplit: sql<boolean>`0`.as('is_split'),
       createdAt: bankTransactionSplit.createdAt,
@@ -322,22 +325,6 @@ export async function getBankTransactions(
     )
     .where(splitWhere)
 
-  // Count: sum both branches separately
-  const [txCountResult, splitCountResult] = await Promise.all([
-    db.select({ count: count() }).from(bankTransaction).where(txWhere),
-    db
-      .select({ count: count() })
-      .from(bankTransactionSplit)
-      .innerJoin(
-        bankTransaction,
-        eq(bankTransactionSplit.bankTransactionId, bankTransaction.id),
-      )
-      .where(splitWhere),
-  ])
-  const total =
-    (txCountResult[0]?.count ?? 0) + (splitCountResult[0]?.count ?? 0)
-  const totalPages = limit === -1 ? 1 : Math.ceil(total / limit)
-
   // Sort column for the combined result
   const sortColumn =
     sortBy === 'amountCents'
@@ -354,10 +341,22 @@ export async function getBankTransactions(
     asc(sql`sort_order`),
   )
 
-  const rows =
-    limit === -1
-      ? await combined
-      : await combined.limit(limit).offset((page - 1) * limit)
+  // Run count queries and data query in parallel
+  const [txCountResult, splitCountResult, rows] = await Promise.all([
+    db.select({ count: count() }).from(bankTransaction).where(txWhere),
+    db
+      .select({ count: count() })
+      .from(bankTransactionSplit)
+      .innerJoin(
+        bankTransaction,
+        eq(bankTransactionSplit.bankTransactionId, bankTransaction.id),
+      )
+      .where(splitWhere),
+    limit === -1 ? combined : combined.limit(limit).offset((page - 1) * limit),
+  ])
+  const total =
+    (txCountResult[0]?.count ?? 0) + (splitCountResult[0]?.count ?? 0)
+  const totalPages = limit === -1 ? 1 : Math.ceil(total / limit)
 
   return {
     rows: rows as BankTransactionRow[],
@@ -450,8 +449,9 @@ export async function updateBankTransactionFields(
 export async function bulkArchiveBankTransactions(
   ids: string[],
   isArchived: boolean,
+  txOrDb: DbOrTransaction = db,
 ): Promise<number> {
-  const result = await db
+  const result = await txOrDb
     .update(bankTransaction)
     .set({ isArchived, updatedAt: new Date() })
     .where(inArray(bankTransaction.id, ids))
