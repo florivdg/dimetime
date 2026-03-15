@@ -462,61 +462,61 @@ export async function bulkArchiveBankTransactions(
 export async function bulkAssignPlanToTransactions(
   ids: string[],
   planId: string | null,
+  txOrDb: DbOrTransaction = db,
 ): Promise<number> {
   const now = new Date()
 
-  return db.transaction(async (tx) => {
-    const targetTransactions = await tx
-      .select({
-        id: bankTransaction.id,
-        planId: bankTransaction.planId,
+  const targetTransactions = await txOrDb
+    .select({
+      id: bankTransaction.id,
+      planId: bankTransaction.planId,
+    })
+    .from(bankTransaction)
+    .where(inArray(bankTransaction.id, ids))
+
+  if (targetTransactions.length === 0) {
+    return 0
+  }
+
+  const idsToClearBudget = targetTransactions
+    .filter((transaction) => planId === null || transaction.planId !== planId)
+    .map((transaction) => transaction.id)
+  const idsToKeepBudget = targetTransactions
+    .filter((transaction) => planId !== null && transaction.planId === planId)
+    .map((transaction) => transaction.id)
+
+  if (idsToClearBudget.length > 0) {
+    await txOrDb
+      .update(bankTransaction)
+      .set({
+        planId,
+        planAssignment: planId ? 'manual' : 'none',
+        budgetId: null,
+        updatedAt: now,
       })
-      .from(bankTransaction)
-      .where(inArray(bankTransaction.id, ids))
+      .where(inArray(bankTransaction.id, idsToClearBudget))
+  }
 
-    if (targetTransactions.length === 0) {
-      return 0
-    }
+  if (idsToKeepBudget.length > 0) {
+    await txOrDb
+      .update(bankTransaction)
+      .set({
+        planId,
+        planAssignment: planId ? 'manual' : 'none',
+        updatedAt: now,
+      })
+      .where(inArray(bankTransaction.id, idsToKeepBudget))
+  }
 
-    const idsToClearBudget = targetTransactions
-      .filter((transaction) => planId === null || transaction.planId !== planId)
-      .map((transaction) => transaction.id)
-    const idsToKeepBudget = targetTransactions
-      .filter((transaction) => planId !== null && transaction.planId === planId)
-      .map((transaction) => transaction.id)
-
-    if (idsToClearBudget.length > 0) {
-      await tx
-        .update(bankTransaction)
-        .set({
-          planId,
-          planAssignment: planId ? 'manual' : 'none',
-          budgetId: null,
-          updatedAt: now,
-        })
-        .where(inArray(bankTransaction.id, idsToClearBudget))
-    }
-
-    if (idsToKeepBudget.length > 0) {
-      await tx
-        .update(bankTransaction)
-        .set({
-          planId,
-          planAssignment: planId ? 'manual' : 'none',
-          updatedAt: now,
-        })
-        .where(inArray(bankTransaction.id, idsToKeepBudget))
-    }
-
-    return targetTransactions.length
-  })
+  return targetTransactions.length
 }
 
 export async function bulkAssignBudgetToTransactions(
   ids: string[],
   budgetId: string | null,
+  txOrDb: DbOrTransaction = db,
 ): Promise<number> {
-  const result = await db
+  const result = await txOrDb
     .update(bankTransaction)
     .set({
       budgetId,

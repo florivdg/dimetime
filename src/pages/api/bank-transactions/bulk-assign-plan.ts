@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { bulkAssignPlanToTransactions } from '@/lib/bank-transactions'
 import { bulkAssignPlanToSplits } from '@/lib/bank-transaction-splits'
 import { getPlanById } from '@/lib/plans'
+import { db } from '@/db/database'
 import { jsonError, jsonResponse } from '@/lib/bank-import/api-helpers'
 
 const bulkAssignPlanSchema = z
@@ -39,16 +40,23 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   try {
-    const [txCount, splitCount] = await Promise.all([
-      parsed.data.ids.length > 0
-        ? bulkAssignPlanToTransactions(parsed.data.ids, parsed.data.planId)
-        : 0,
-      parsed.data.splitIds.length > 0
-        ? bulkAssignPlanToSplits(parsed.data.splitIds, parsed.data.planId)
-        : 0,
-    ])
+    const count = await db.transaction(async (tx) => {
+      const [txCount, splitCount] = await Promise.all([
+        parsed.data.ids.length > 0
+          ? bulkAssignPlanToTransactions(
+              parsed.data.ids,
+              parsed.data.planId,
+              tx,
+            )
+          : 0,
+        parsed.data.splitIds.length > 0
+          ? bulkAssignPlanToSplits(parsed.data.splitIds, parsed.data.planId, tx)
+          : 0,
+      ])
+      return txCount + splitCount
+    })
 
-    return jsonResponse({ success: true, count: txCount + splitCount })
+    return jsonResponse({ success: true, count })
   } catch (error) {
     console.error('Error bulk assigning plan to bank transactions:', error)
     return jsonError(

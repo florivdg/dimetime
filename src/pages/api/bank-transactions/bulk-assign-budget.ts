@@ -66,16 +66,27 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   try {
-    const [txCount, splitCount] = await Promise.all([
-      parsed.data.ids.length > 0
-        ? bulkAssignBudgetToTransactions(parsed.data.ids, parsed.data.budgetId)
-        : 0,
-      parsed.data.splitIds.length > 0
-        ? bulkAssignBudgetToSplits(parsed.data.splitIds, parsed.data.budgetId)
-        : 0,
-    ])
+    const count = await db.transaction(async (tx) => {
+      const [txCount, splitCount] = await Promise.all([
+        parsed.data.ids.length > 0
+          ? bulkAssignBudgetToTransactions(
+              parsed.data.ids,
+              parsed.data.budgetId,
+              tx,
+            )
+          : 0,
+        parsed.data.splitIds.length > 0
+          ? bulkAssignBudgetToSplits(
+              parsed.data.splitIds,
+              parsed.data.budgetId,
+              tx,
+            )
+          : 0,
+      ])
+      return txCount + splitCount
+    })
 
-    return jsonResponse({ success: true, count: txCount + splitCount })
+    return jsonResponse({ success: true, count })
   } catch (error) {
     console.error('Error bulk assigning budget to bank transactions:', error)
     return jsonError(
