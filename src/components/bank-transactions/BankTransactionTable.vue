@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { BankTransactionWithRelations } from '@/lib/bank-transactions'
+import type { BankTransactionRow } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import { formatAmount, formatDate } from '@/lib/format'
 import BudgetPicker from './BudgetPicker.vue'
@@ -9,6 +9,12 @@ import PlanPicker from './PlanPicker.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -27,13 +33,17 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  GitBranch,
   Landmark,
   Loader2,
+  MoreVertical,
   Search,
+  Split,
+  Undo2,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
-  transactions: BankTransactionWithRelations[]
+  rows: BankTransactionRow[]
   plans: Plan[]
   isLoading: boolean
   searchQuery: string
@@ -45,26 +55,28 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   sort: [column: 'bookingDate' | 'amountCents' | 'createdAt']
-  'update:plan': [transactionId: string, planId: string | null]
+  'update:plan': [id: string, planId: string | null]
   'update:budget': [
-    transactionId: string,
+    id: string,
     budgetId: string | null,
     budgetName: string | null,
   ]
   'update:note': [transactionId: string, note: string | null]
   'toggle-select': [id: string, shiftKey: boolean]
   'toggle-select-all': []
+  'open-split': [row: BankTransactionRow]
+  'undo-split': [parentId: string]
 }>()
 
 const allOnPageSelected = computed(
   () =>
-    props.transactions.length > 0 &&
-    props.transactions.every((tx) => props.selectedIds.has(tx.id)),
+    props.rows.length > 0 &&
+    props.rows.every((row) => props.selectedIds.has(row.id)),
 )
 const someOnPageSelected = computed(
   () =>
     !allOnPageSelected.value &&
-    props.transactions.some((tx) => props.selectedIds.has(tx.id)),
+    props.rows.some((row) => props.selectedIds.has(row.id)),
 )
 
 function getSortIcon(column: 'bookingDate' | 'amountCents' | 'createdAt') {
@@ -95,7 +107,7 @@ function statusVariant(
 
   <!-- Empty state -->
   <div
-    v-else-if="transactions.length === 0 && !searchQuery && !hasActiveFilters"
+    v-else-if="rows.length === 0 && !searchQuery && !hasActiveFilters"
     class="py-8 text-center"
   >
     <Landmark class="text-muted-foreground mx-auto mb-4 size-12" />
@@ -106,7 +118,7 @@ function statusVariant(
   </div>
 
   <!-- No results -->
-  <div v-else-if="transactions.length === 0" class="py-8 text-center">
+  <div v-else-if="rows.length === 0" class="py-8 text-center">
     <Search class="text-muted-foreground mx-auto mb-4 size-12" />
     <p class="text-muted-foreground">Keine Transaktionen gefunden.</p>
   </div>
@@ -156,115 +168,251 @@ function statusVariant(
           <TableHead class="w-28">Status</TableHead>
           <TableHead class="hidden xl:table-cell">Plan</TableHead>
           <TableHead class="hidden xl:table-cell">Budget</TableHead>
+          <TableHead class="w-10"></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow
-          v-for="tx in transactions"
-          :key="tx.id"
-          class="group/row"
-          :class="{ 'opacity-60': tx.isArchived }"
-        >
-          <!-- Checkbox -->
-          <TableCell
-            class="cursor-pointer"
-            @click="(e: MouseEvent) => emit('toggle-select', tx.id, e.shiftKey)"
+        <template v-for="row in rows" :key="row.id">
+          <!-- Regular transaction row -->
+          <TableRow
+            v-if="row.rowType === 'transaction'"
+            class="group/row"
+            :class="{ 'opacity-60': row.isArchived }"
           >
-            <Checkbox :model-value="selectedIds.has(tx.id)" />
-          </TableCell>
-
-          <!-- Date -->
-          <TableCell>{{ formatDate(tx.bookingDate) }}</TableCell>
-
-          <!-- Note -->
-          <TableCell class="px-0">
-            <NoteEditor
-              :note="tx.note"
-              :transaction-id="tx.id"
-              @update:note="(id, note) => emit('update:note', id, note)"
-            />
-          </TableCell>
-
-          <!-- Description -->
-          <TableCell>
-            <div>
-              <TooltipProvider v-if="tx.counterparty ?? tx.description">
-                <Tooltip>
-                  <span class="flex items-center gap-2">
-                    <TooltipTrigger as-child>
-                      <span class="max-w-[240px] truncate font-medium">{{
-                        tx.counterparty ?? tx.description
-                      }}</span>
-                    </TooltipTrigger>
-                    <Badge v-if="tx.isArchived" variant="outline"
-                      >Archiviert</Badge
-                    >
-                  </span>
-                  <TooltipContent v-if="tx.note">
-                    <p class="max-w-64">
-                      {{
-                        tx.note.length > 100
-                          ? tx.note.slice(0, 100) + '…'
-                          : tx.note
-                      }}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </TableCell>
-
-          <!-- Amount -->
-          <TableCell>
-            <span
-              :class="
-                tx.amountCents >= 0
-                  ? 'text-lime-600 dark:text-lime-400'
-                  : 'text-rose-600 dark:text-rose-400'
+            <!-- Checkbox -->
+            <TableCell
+              class="cursor-pointer"
+              @click="
+                (e: MouseEvent) => emit('toggle-select', row.id, e.shiftKey)
               "
             >
-              {{ formatAmount(tx.amountCents) }}
-            </span>
-          </TableCell>
+              <Checkbox :model-value="selectedIds.has(row.id)" />
+            </TableCell>
 
-          <!-- Source -->
-          <TableCell class="hidden lg:table-cell">
-            <span class="text-muted-foreground text-sm">{{
-              tx.sourceName || '-'
-            }}</span>
-          </TableCell>
+            <!-- Date -->
+            <TableCell>{{ formatDate(row.bookingDate) }}</TableCell>
 
-          <!-- Status -->
-          <TableCell>
-            <Badge :variant="statusVariant(tx.status)">
-              {{ statusLabel(tx.status) }}
-            </Badge>
-          </TableCell>
+            <!-- Note -->
+            <TableCell class="px-0">
+              <NoteEditor
+                :note="row.note"
+                :transaction-id="row.id"
+                @update:note="(id, note) => emit('update:note', id, note)"
+              />
+            </TableCell>
 
-          <!-- Plan -->
-          <TableCell class="hidden xl:table-cell">
-            <PlanPicker
-              :plans="plans"
-              :plan-id="tx.planId"
-              :plan-name="tx.planName"
-              :plan-date="tx.planDate"
-              @select="emit('update:plan', tx.id, $event)"
-            />
-          </TableCell>
+            <!-- Description -->
+            <TableCell>
+              <div>
+                <TooltipProvider v-if="row.counterparty ?? row.description">
+                  <Tooltip>
+                    <span class="flex items-center gap-2">
+                      <TooltipTrigger as-child>
+                        <span class="max-w-[240px] truncate font-medium">{{
+                          row.counterparty ?? row.description
+                        }}</span>
+                      </TooltipTrigger>
+                      <Badge v-if="row.isArchived" variant="outline"
+                        >Archiviert</Badge
+                      >
+                    </span>
+                    <TooltipContent v-if="row.note">
+                      <p class="max-w-64">
+                        {{
+                          row.note.length > 100
+                            ? row.note.slice(0, 100) + '…'
+                            : row.note
+                        }}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </TableCell>
 
-          <!-- Budget -->
-          <TableCell class="hidden xl:table-cell">
-            <BudgetPicker
-              :plan-id="tx.planId"
-              :budget-id="tx.budgetId"
-              :budget-name="tx.budgetName"
-              @select="
-                (id: string | null, name: string | null) =>
-                  emit('update:budget', tx.id, id, name)
+            <!-- Amount -->
+            <TableCell>
+              <span
+                :class="
+                  row.amountCents >= 0
+                    ? 'text-lime-600 dark:text-lime-400'
+                    : 'text-rose-600 dark:text-rose-400'
+                "
+              >
+                {{ formatAmount(row.amountCents) }}
+              </span>
+            </TableCell>
+
+            <!-- Source -->
+            <TableCell class="hidden lg:table-cell">
+              <span class="text-muted-foreground text-sm">{{
+                row.sourceName || '-'
+              }}</span>
+            </TableCell>
+
+            <!-- Status -->
+            <TableCell>
+              <Badge :variant="statusVariant(row.status)">
+                {{ statusLabel(row.status) }}
+              </Badge>
+            </TableCell>
+
+            <!-- Plan -->
+            <TableCell class="hidden xl:table-cell">
+              <PlanPicker
+                :plans="plans"
+                :plan-id="row.planId"
+                :plan-name="row.planName"
+                :plan-date="row.planDate"
+                @select="emit('update:plan', row.id, $event)"
+              />
+            </TableCell>
+
+            <!-- Budget -->
+            <TableCell class="hidden xl:table-cell">
+              <BudgetPicker
+                :plan-id="row.planId"
+                :budget-id="row.budgetId"
+                :budget-name="row.budgetName"
+                @select="
+                  (id: string | null, name: string | null) =>
+                    emit('update:budget', row.id, id, name)
+                "
+              />
+            </TableCell>
+
+            <!-- Actions -->
+            <TableCell>
+              <DropdownMenu v-if="!row.isArchived && !row.isSplit">
+                <DropdownMenuTrigger as-child>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 opacity-0 group-hover/row:opacity-100"
+                  >
+                    <MoreVertical class="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem @click="emit('open-split', row)">
+                    <Split class="mr-2 size-4" />
+                    Aufteilen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          </TableRow>
+
+          <!-- Split child row -->
+          <TableRow
+            v-else
+            class="group/row border-l-2 border-l-blue-400/50"
+            :class="{ 'opacity-60': row.isArchived }"
+          >
+            <!-- Checkbox -->
+            <TableCell
+              class="cursor-pointer"
+              @click="
+                (e: MouseEvent) => emit('toggle-select', row.id, e.shiftKey)
               "
-            />
-          </TableCell>
-        </TableRow>
+            >
+              <Checkbox :model-value="selectedIds.has(row.id)" />
+            </TableCell>
+
+            <!-- Date -->
+            <TableCell>
+              {{ formatDate(row.bookingDate) }}
+            </TableCell>
+
+            <!-- No note for splits -->
+            <TableCell class="px-0"></TableCell>
+
+            <!-- Description with split icon -->
+            <TableCell>
+              <div class="flex items-center gap-2">
+                <GitBranch class="text-muted-foreground size-4 shrink-0" />
+                <span class="max-w-[240px] truncate font-medium">
+                  {{ row.label || row.counterparty || row.description || '-' }}
+                </span>
+                <Badge v-if="row.isArchived" variant="outline"
+                  >Archiviert</Badge
+                >
+              </div>
+            </TableCell>
+
+            <!-- Amount -->
+            <TableCell>
+              <span
+                :class="
+                  row.amountCents >= 0
+                    ? 'text-lime-600 dark:text-lime-400'
+                    : 'text-rose-600 dark:text-rose-400'
+                "
+              >
+                {{ formatAmount(row.amountCents) }}
+              </span>
+            </TableCell>
+
+            <!-- Source -->
+            <TableCell class="hidden lg:table-cell">
+              <span class="text-muted-foreground text-sm">{{
+                row.sourceName || '-'
+              }}</span>
+            </TableCell>
+
+            <!-- Status -->
+            <TableCell>
+              <Badge :variant="statusVariant(row.status)">
+                {{ statusLabel(row.status) }}
+              </Badge>
+            </TableCell>
+
+            <!-- Plan (per-split) -->
+            <TableCell class="hidden xl:table-cell">
+              <PlanPicker
+                :plans="plans"
+                :plan-id="row.planId"
+                :plan-name="row.planName"
+                :plan-date="row.planDate"
+                @select="emit('update:plan', row.id, $event)"
+              />
+            </TableCell>
+
+            <!-- Budget (per-split) -->
+            <TableCell class="hidden xl:table-cell">
+              <BudgetPicker
+                :plan-id="row.planId"
+                :budget-id="row.budgetId"
+                :budget-name="row.budgetName"
+                @select="
+                  (id: string | null, name: string | null) =>
+                    emit('update:budget', row.id, id, name)
+                "
+              />
+            </TableCell>
+
+            <!-- Actions -->
+            <TableCell>
+              <DropdownMenu v-if="row.parentId && !row.isArchived">
+                <DropdownMenuTrigger as-child>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 opacity-0 group-hover/row:opacity-100"
+                  >
+                    <MoreVertical class="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem @click="emit('undo-split', row.parentId!)">
+                    <Undo2 class="mr-2 size-4" />
+                    Aufteilung aufheben
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          </TableRow>
+        </template>
       </TableBody>
     </Table>
   </div>

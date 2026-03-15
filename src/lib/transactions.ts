@@ -19,6 +19,10 @@ import {
   ne,
   sum,
 } from 'drizzle-orm'
+import {
+  getBudgetSpendingFromSplits,
+  getBudgetSpendingFromSplitsForPlan,
+} from '@/lib/bank-transaction-splits'
 
 // Infer types from Drizzle schema
 export type Transaction = typeof plannedTransaction.$inferSelect
@@ -442,23 +446,26 @@ export async function getBudgetsForPlan(planId: string) {
 export async function getBudgetSpendingForPlan(
   planId: string,
 ): Promise<Record<string, number>> {
-  const result = await db
-    .select({
-      budgetId: bankTransaction.budgetId,
-      spent: sum(bankTransaction.amountCents),
-    })
-    .from(bankTransaction)
-    .innerJoin(
-      plannedTransaction,
-      eq(bankTransaction.budgetId, plannedTransaction.id),
-    )
-    .where(
-      and(
-        eq(plannedTransaction.planId, planId),
-        eq(plannedTransaction.isBudget, true),
-      ),
-    )
-    .groupBy(bankTransaction.budgetId)
+  const [result, splitSpending] = await Promise.all([
+    db
+      .select({
+        budgetId: bankTransaction.budgetId,
+        spent: sum(bankTransaction.amountCents),
+      })
+      .from(bankTransaction)
+      .innerJoin(
+        plannedTransaction,
+        eq(bankTransaction.budgetId, plannedTransaction.id),
+      )
+      .where(
+        and(
+          eq(plannedTransaction.planId, planId),
+          eq(plannedTransaction.isBudget, true),
+        ),
+      )
+      .groupBy(bankTransaction.budgetId),
+    getBudgetSpendingFromSplitsForPlan(planId),
+  ])
 
   const spending: Record<string, number> = {}
   for (const row of result) {
@@ -466,6 +473,11 @@ export async function getBudgetSpendingForPlan(
       spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
     }
   }
+
+  for (const [budgetId, amount] of Object.entries(splitSpending)) {
+    spending[budgetId] = (spending[budgetId] ?? 0) + amount
+  }
+
   return spending
 }
 
@@ -478,14 +490,17 @@ export async function getBudgetSpendingForBudgets(
 ): Promise<Record<string, number>> {
   if (budgetIds.length === 0) return {}
 
-  const result = await db
-    .select({
-      budgetId: bankTransaction.budgetId,
-      spent: sum(bankTransaction.amountCents),
-    })
-    .from(bankTransaction)
-    .where(inArray(bankTransaction.budgetId, budgetIds))
-    .groupBy(bankTransaction.budgetId)
+  const [result, splitSpending] = await Promise.all([
+    db
+      .select({
+        budgetId: bankTransaction.budgetId,
+        spent: sum(bankTransaction.amountCents),
+      })
+      .from(bankTransaction)
+      .where(inArray(bankTransaction.budgetId, budgetIds))
+      .groupBy(bankTransaction.budgetId),
+    getBudgetSpendingFromSplits(budgetIds),
+  ])
 
   const spending: Record<string, number> = {}
   for (const row of result) {
@@ -493,6 +508,11 @@ export async function getBudgetSpendingForBudgets(
       spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
     }
   }
+
+  for (const [budgetId, amount] of Object.entries(splitSpending)) {
+    spending[budgetId] = (spending[budgetId] ?? 0) + amount
+  }
+
   return spending
 }
 

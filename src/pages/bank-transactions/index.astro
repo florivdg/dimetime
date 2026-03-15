@@ -7,7 +7,7 @@ import { getAllPlans, getSidebarPlans } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
 
 // Load initial data server-side
-const { transactions, pagination } = await getBankTransactions({
+const { rows, pagination } = await getBankTransactions({
   sortBy: 'bookingDate',
   sortDir: 'desc',
   page: 1,
@@ -46,7 +46,7 @@ if (latest && latest.id !== currentMonth?.id) {
       </div>
       <BankTransactionManager
         client:load
-        initialTransactions={transactions}
+        initialRows={rows}
         initialPagination={pagination}
         initialSources={sources}
         initialPlans={plans}
