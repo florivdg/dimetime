@@ -281,6 +281,9 @@ export const bankTransactionSplit = sqliteTable(
     }),
     planId: text('plan_id').references(() => plan.id, { onDelete: 'set null' }),
     sortOrder: integer('sort_order').notNull().default(0),
+    isArchived: integer('is_archived', { mode: 'boolean' })
+      .default(false)
+      .notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
       .$onUpdate(() => new Date())
@@ -292,6 +295,7 @@ export const bankTransactionSplit = sqliteTable(
     ),
     index('bankTransactionSplit_budgetId_idx').on(table.budgetId),
     index('bankTransactionSplit_planId_idx').on(table.planId),
+    index('bankTransactionSplit_isArchived_idx').on(table.isArchived),
   ],
 )
 

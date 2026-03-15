@@ -1,0 +1,2 @@
+ALTER TABLE `bank_transaction_split` ADD `is_archived` integer DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE INDEX `bankTransactionSplit_isArchived_idx` ON `bank_transaction_split` (`is_archived`);
