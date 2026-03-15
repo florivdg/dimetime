@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.1
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.9.0...v0.9.1)
+
+### 🩹 Fixes
+
+- **db:** Add WAL pragma to migration script to prevent SQLITE_IOERR_SHMSIZE in Docker ([a0bc5e1](https://github.com/florivdg/dimetime/commit/a0bc5e1))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.9.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.8.0...v0.9.0)
