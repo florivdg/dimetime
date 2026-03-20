@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import { buildDedupeKey, dedupeRowsInFile } from './dedupe'
+import {
+  buildDedupeKey,
+  buildSemanticKey,
+  dedupeByStatusUpgrade,
+  dedupeRowsInFile,
+} from './dedupe'
 import type { NormalizedBankTransactionInput } from './types'
 
 function makeRow(
@@ -107,5 +112,166 @@ describe('dedupeRowsInFile', () => {
     expect(uniqueRows).toHaveLength(1)
     expect(uniqueRows[0].counterparty).toBe('First')
     expect(uniqueRows[0].dedupeKey).toBeTypeOf('string')
+  })
+})
+
+describe('buildSemanticKey', () => {
+  it('produces deterministic output', () => {
+    const row = makeRow()
+    expect(buildSemanticKey(row)).toBe(buildSemanticKey(row))
+  })
+
+  it('is case-insensitive for description', () => {
+    const lower = makeRow({ description: 'test payment' })
+    const upper = makeRow({ description: 'TEST PAYMENT' })
+    expect(buildSemanticKey(lower)).toBe(buildSemanticKey(upper))
+  })
+
+  it('handles null description', () => {
+    const row = makeRow({ description: null })
+    const key = buildSemanticKey(row)
+    expect(key).toBeTypeOf('string')
+    expect(key).toContain('2024-01-15|-2000|')
+  })
+})
+
+describe('dedupeByStatusUpgrade', () => {
+  it('returns all rows when only booked rows exist', () => {
+    const rows = [
+      makeRow({ status: 'booked', externalTransactionId: 'B1' }),
+      makeRow({
+        status: 'booked',
+        externalTransactionId: 'B2',
+        amountCents: -500,
+      }),
+    ]
+    const result = dedupeByStatusUpgrade(rows)
+    expect(result.rows).toHaveLength(2)
+    expect(result.pendingDropped).toBe(0)
+  })
+
+  it('returns all rows when only pending rows exist', () => {
+    const rows = [
+      makeRow({ status: 'pending', externalTransactionId: 'P1' }),
+      makeRow({
+        status: 'pending',
+        externalTransactionId: 'P2',
+        amountCents: -500,
+      }),
+    ]
+    const result = dedupeByStatusUpgrade(rows)
+    expect(result.rows).toHaveLength(2)
+    expect(result.pendingDropped).toBe(0)
+  })
+
+  it('removes pending when matching booked exists (single pair)', () => {
+    const rows = [
+      makeRow({
+        status: 'pending',
+        externalTransactionId: 'P1',
+        description: 'Amazon',
+      }),
+      makeRow({
+        status: 'booked',
+        externalTransactionId: 'B1',
+        description: 'Amazon',
+      }),
+    ]
+    const result = dedupeByStatusUpgrade(rows)
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0].status).toBe('booked')
+    expect(result.pendingDropped).toBe(1)
+  })
+
+  it('removes all pending when multiple pairs match', () => {
+    const rows = [
+      makeRow({
+        status: 'pending',
+        externalTransactionId: 'P1',
+        description: 'Amazon',
+      }),
+      makeRow({
+        status: 'pending',
+        externalTransactionId: 'P2',
+        description: 'Netflix',
+        amountCents: -1500,
+      }),
+      makeRow({
+        status: 'booked',
+        externalTransactionId: 'B1',
+        description: 'Amazon',
+      }),
+      makeRow({
+        status: 'booked',
+        externalTransactionId: 'B2',
+        description: 'Netflix',
+        amountCents: -1500,
+      }),
+    ]
+    const result = dedupeByStatusUpgrade(rows)
+    expect(result.rows).toHaveLength(2)
+    expect(result.rows.every((r) => r.status === 'booked')).toBe(true)
+    expect(result.pendingDropped).toBe(2)
+  })
+
+  it('removes only one pending per matching booked (partial overlap)', () => {
+    const rows = [
+      makeRow({
+        status: 'pending',
+        externalTransactionId: 'P1',
+        description: 'Amazon',
+      }),
+      makeRow({
+        status: 'pending',
+        externalTransactionId: 'P2',
+        description: 'Amazon',
+      }),
+      makeRow({
+        status: 'booked',
+        externalTransactionId: 'B1',
+        description: 'Amazon',
+      }),
+    ]
+    const result = dedupeByStatusUpgrade(rows)
+    expect(result.rows).toHaveLength(2)
+    expect(result.rows.filter((r) => r.status === 'pending')).toHaveLength(1)
+    expect(result.rows.filter((r) => r.status === 'booked')).toHaveLength(1)
+    expect(result.pendingDropped).toBe(1)
+  })
+
+  it('keeps both when description differs', () => {
+    const rows = [
+      makeRow({
+        status: 'pending',
+        externalTransactionId: 'P1',
+        description: 'Amazon',
+      }),
+      makeRow({
+        status: 'booked',
+        externalTransactionId: 'B1',
+        description: 'Netflix',
+      }),
+    ]
+    const result = dedupeByStatusUpgrade(rows)
+    expect(result.rows).toHaveLength(2)
+    expect(result.pendingDropped).toBe(0)
+  })
+
+  it('keeps both when amount differs', () => {
+    const rows = [
+      makeRow({
+        status: 'pending',
+        externalTransactionId: 'P1',
+        amountCents: -1000,
+      }),
+      makeRow({
+        status: 'booked',
+        externalTransactionId: 'B1',
+        amountCents: -2000,
+      }),
+    ]
+    const result = dedupeByStatusUpgrade(rows)
+    expect(result.rows).toHaveLength(2)
+    expect(result.pendingDropped).toBe(0)
   })
 })

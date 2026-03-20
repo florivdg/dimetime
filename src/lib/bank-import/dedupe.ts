@@ -79,6 +79,57 @@ export async function dedupeRowsInFile(
   return { uniqueRows, duplicateInFile }
 }
 
+export function buildSemanticKey(row: {
+  bookingDate: string
+  amountCents: number
+  description: string | null | undefined
+}): string {
+  return `${row.bookingDate}|${row.amountCents}|${canonicalize(row.description)}`
+}
+
+export function dedupeByStatusUpgrade(rows: NormalizedBankTransactionInput[]): {
+  rows: NormalizedBankTransactionInput[]
+  pendingDropped: number
+} {
+  // Group rows by semantic key
+  const groups = new Map<string, NormalizedBankTransactionInput[]>()
+  for (const row of rows) {
+    const key = buildSemanticKey(row)
+    const group = groups.get(key)
+    if (group) {
+      group.push(row)
+    } else {
+      groups.set(key, [row])
+    }
+  }
+
+  const removedIndices = new Set<number>()
+  let pendingDropped = 0
+
+  for (const group of groups.values()) {
+    const bookedRows = group.filter((r) => r.status === 'booked')
+    const pendingRows = group.filter((r) => r.status === 'pending')
+
+    // One-for-one: remove one pending per matching booked
+    const removals = Math.min(bookedRows.length, pendingRows.length)
+    for (let i = 0; i < removals; i++) {
+      const pendingRow = pendingRows[i]
+      const idx = rows.indexOf(pendingRow)
+      if (idx !== -1) {
+        removedIndices.add(idx)
+        pendingDropped++
+      }
+    }
+  }
+
+  if (pendingDropped === 0) {
+    return { rows, pendingDropped: 0 }
+  }
+
+  const filtered = rows.filter((_, i) => !removedIndices.has(i))
+  return { rows: filtered, pendingDropped }
+}
+
 export async function hashFileSha256(bytes: Uint8Array): Promise<string> {
   const arrayBuffer = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(arrayBuffer).set(bytes)

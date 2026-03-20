@@ -12,7 +12,12 @@ import type {
   ImportTypeDescriptor,
 } from '@/lib/bank-import/types'
 import { monthFromIsoDate } from '@/lib/bank-import/normalize'
-import { dedupeRowsInFile, hashFileSha256 } from '@/lib/bank-import/dedupe'
+import {
+  buildSemanticKey,
+  dedupeByStatusUpgrade,
+  dedupeRowsInFile,
+  hashFileSha256,
+} from '@/lib/bank-import/dedupe'
 import { notFoundError, validationError } from '@/lib/bank-import/api-helpers'
 import { ING_CSV_IMPORT_TYPE, parseIngCsvFile } from './parsers/ing-csv'
 import {
@@ -26,6 +31,13 @@ const IMPORT_TYPE_DESCRIPTORS: ImportTypeDescriptor[] = [
 ]
 
 type ImportSourceRow = typeof importSource.$inferSelect
+
+interface ExistingTransactionMatch {
+  id: string
+  dedupeKey: string
+  planId: string | null
+  importSeenCount: number
+}
 
 interface AssignmentResult {
   planId: string | null
@@ -42,15 +54,8 @@ interface PreparedImportData {
   uniqueRows: Awaited<ReturnType<typeof dedupeRowsInFile>>['uniqueRows']
   duplicateInFile: number
   assignments: AssignmentResult[]
-  existingByDedupeKey: Map<
-    string,
-    {
-      id: string
-      dedupeKey: string
-      planId: string | null
-      importSeenCount: number
-    }
-  >
+  existingByDedupeKey: Map<string, ExistingTransactionMatch>
+  pendingUpgradeMatches: Map<string, ExistingTransactionMatch>
   warnings: string[]
 }
 
@@ -224,7 +229,12 @@ async function prepareImportData(
   const bytes = new Uint8Array(await file.arrayBuffer())
   const fileSha256 = await hashFileSha256(bytes)
   const parsed = await parseWithPreset(source.preset, fileName, bytes)
-  const { uniqueRows, duplicateInFile } = await dedupeRowsInFile(parsed.rows)
+  const { rows: statusDedupedRows, pendingDropped } = dedupeByStatusUpgrade(
+    parsed.rows,
+  )
+  const { uniqueRows, duplicateInFile: rawDuplicateInFile } =
+    await dedupeRowsInFile(statusDedupedRows)
+  const duplicateInFile = rawDuplicateInFile + pendingDropped
   const assignments = await resolveAssignments(
     uniqueRows.map((row) => row.bookingDate),
     source.defaultPlanAssignment as DefaultPlanAssignment,
@@ -261,6 +271,68 @@ async function prepareImportData(
     ]),
   )
 
+  // Cross-import: find pending DB rows that match unmatched booked import rows
+  const unmatchedBookedRows = uniqueRows.filter(
+    (row) => row.status === 'booked' && !existingByDedupeKey.has(row.dedupeKey),
+  )
+  const pendingUpgradeMatches = new Map<string, ExistingTransactionMatch>()
+
+  if (unmatchedBookedRows.length > 0) {
+    const bookingDatesForLookup = Array.from(
+      new Set(unmatchedBookedRows.map((r) => r.bookingDate)),
+    )
+    const pendingDbRows = await db
+      .select({
+        id: bankTransaction.id,
+        dedupeKey: bankTransaction.dedupeKey,
+        planId: bankTransaction.planId,
+        importSeenCount: bankTransaction.importSeenCount,
+        bookingDate: bankTransaction.bookingDate,
+        amountCents: bankTransaction.amountCents,
+        description: bankTransaction.description,
+      })
+      .from(bankTransaction)
+      .where(
+        and(
+          eq(bankTransaction.sourceId, source.id),
+          eq(bankTransaction.status, 'pending'),
+          inArray(bankTransaction.bookingDate, bookingDatesForLookup),
+        ),
+      )
+
+    if (pendingDbRows.length > 0) {
+      // Group pending DB rows by semantic key
+      const pendingDbBySemanticKey = new Map<string, typeof pendingDbRows>()
+      for (const dbRow of pendingDbRows) {
+        const semKey = buildSemanticKey(dbRow)
+        const group = pendingDbBySemanticKey.get(semKey)
+        if (group) {
+          group.push(dbRow)
+        } else {
+          pendingDbBySemanticKey.set(semKey, [dbRow])
+        }
+      }
+
+      // One-for-one matching
+      const usedDbIds = new Set<string>()
+      for (const bookedRow of unmatchedBookedRows) {
+        const semKey = buildSemanticKey(bookedRow)
+        const candidates = pendingDbBySemanticKey.get(semKey)
+        if (!candidates) continue
+        const match = candidates.find((c) => !usedDbIds.has(c.id))
+        if (match) {
+          usedDbIds.add(match.id)
+          pendingUpgradeMatches.set(bookedRow.dedupeKey, {
+            id: match.id,
+            dedupeKey: match.dedupeKey,
+            planId: match.planId,
+            importSeenCount: match.importSeenCount,
+          })
+        }
+      }
+    }
+  }
+
   const warnings = [...parsed.warnings]
   const unassignedCount = assignments.filter(
     (assignment) => !assignment.planId,
@@ -268,6 +340,11 @@ async function prepareImportData(
   if (unassignedCount > 0) {
     warnings.push(
       `${unassignedCount} Transaktionen konnten keinem eindeutigen Monatsplan zugeordnet werden.`,
+    )
+  }
+  if (pendingUpgradeMatches.size > 0) {
+    warnings.push(
+      `${pendingUpgradeMatches.size} ausstehende Transaktionen werden auf 'Gebucht' aktualisiert.`,
     )
   }
 
@@ -282,6 +359,7 @@ async function prepareImportData(
     duplicateInFile,
     assignments,
     existingByDedupeKey,
+    pendingUpgradeMatches,
     warnings,
   }
 }
@@ -327,9 +405,11 @@ export async function previewBankImport(input: {
     const preparedData = await prepareImportData(input.sourceId, input.file)
     prepared = preparedData
 
-    const wouldUpdate = preparedData.uniqueRows.filter((row) =>
+    const dedupeKeyMatches = preparedData.uniqueRows.filter((row) =>
       preparedData.existingByDedupeKey.has(row.dedupeKey),
     ).length
+    const wouldUpdate =
+      dedupeKeyMatches + preparedData.pendingUpgradeMatches.size
     const newCount = preparedData.uniqueRows.length - wouldUpdate
     const assigned = preparedData.assignments.filter(
       (assignment) => assignment.planId,
@@ -427,86 +507,114 @@ export async function commitBankImport(input: {
     let insertedCount = 0
     let updatedCount = 0
 
-    const allRows = preparedData.uniqueRows.map((row, index) => {
-      const assignment = preparedData.assignments[index]
-      const existing = preparedData.existingByDedupeKey.get(row.dedupeKey)
+    // Collect pending upgrade rows to handle separately
+    const pendingUpgradeRows: Array<{
+      row: (typeof preparedData.uniqueRows)[number]
+      assignment: AssignmentResult
+      existingDbRow: NonNullable<
+        ReturnType<typeof preparedData.pendingUpgradeMatches.get>
+      >
+    }> = []
 
-      if (existing) {
-        updatedCount += 1
-        const shouldAssignPlan = !existing.planId && Boolean(assignment.planId)
-        const planId = shouldAssignPlan ? assignment.planId : existing.planId
-        if (planId) assigned += 1
-        else unassigned += 1
+    const allRows = preparedData.uniqueRows
+      .map((row, index) => {
+        const assignment = preparedData.assignments[index]
+        const existing = preparedData.existingByDedupeKey.get(row.dedupeKey)
 
-        return {
-          id: existing.id,
-          sourceId: preparedData.source.id,
-          firstSeenImportId: importId, // ignored on conflict via SQL override
-          lastSeenImportId: importId,
-          externalTransactionId: row.externalTransactionId,
-          dedupeKey: row.dedupeKey,
-          bookingDate: row.bookingDate,
-          valueDate: row.valueDate,
-          amountCents: row.amountCents,
-          currency: row.currency,
-          originalAmountCents: row.originalAmountCents,
-          originalCurrency: row.originalCurrency,
-          counterparty: row.counterparty,
-          bookingText: row.bookingText,
-          description: row.description,
-          purpose: row.purpose,
-          status: row.status,
-          balanceAfterCents: row.balanceAfterCents,
-          balanceCurrency: row.balanceCurrency,
-          country: row.country,
-          cardLast4: row.cardLast4,
-          cardholder: row.cardholder,
-          rawDataJson: JSON.stringify(row.rawData),
-          planId,
-          planAssignment:
-            shouldAssignPlan && assignment.planAssignment === 'auto_month'
-              ? ('auto_month' as const)
-              : ('none' as const),
-          importSeenCount: existing.importSeenCount + 1,
-          createdAt: now,
-          updatedAt: now,
+        // Check for pending upgrade match
+        const pendingUpgrade = preparedData.pendingUpgradeMatches.get(
+          row.dedupeKey,
+        )
+        if (pendingUpgrade) {
+          updatedCount += 1
+          if (pendingUpgrade.planId || assignment.planId) assigned += 1
+          else unassigned += 1
+          pendingUpgradeRows.push({
+            row,
+            assignment,
+            existingDbRow: pendingUpgrade,
+          })
+          return null // exclude from main upsert
         }
-      } else {
-        insertedCount += 1
-        if (assignment.planId) assigned += 1
-        else unassigned += 1
 
-        return {
-          sourceId: preparedData.source.id,
-          firstSeenImportId: importId,
-          lastSeenImportId: importId,
-          externalTransactionId: row.externalTransactionId,
-          dedupeKey: row.dedupeKey,
-          bookingDate: row.bookingDate,
-          valueDate: row.valueDate,
-          amountCents: row.amountCents,
-          currency: row.currency,
-          originalAmountCents: row.originalAmountCents,
-          originalCurrency: row.originalCurrency,
-          counterparty: row.counterparty,
-          bookingText: row.bookingText,
-          description: row.description,
-          purpose: row.purpose,
-          status: row.status,
-          balanceAfterCents: row.balanceAfterCents,
-          balanceCurrency: row.balanceCurrency,
-          country: row.country,
-          cardLast4: row.cardLast4,
-          cardholder: row.cardholder,
-          rawDataJson: JSON.stringify(row.rawData),
-          planId: assignment.planId,
-          planAssignment: assignment.planAssignment,
-          importSeenCount: 1,
-          createdAt: now,
-          updatedAt: now,
+        if (existing) {
+          updatedCount += 1
+          const shouldAssignPlan =
+            !existing.planId && Boolean(assignment.planId)
+          const planId = shouldAssignPlan ? assignment.planId : existing.planId
+          if (planId) assigned += 1
+          else unassigned += 1
+
+          return {
+            id: existing.id,
+            sourceId: preparedData.source.id,
+            firstSeenImportId: importId, // ignored on conflict via SQL override
+            lastSeenImportId: importId,
+            externalTransactionId: row.externalTransactionId,
+            dedupeKey: row.dedupeKey,
+            bookingDate: row.bookingDate,
+            valueDate: row.valueDate,
+            amountCents: row.amountCents,
+            currency: row.currency,
+            originalAmountCents: row.originalAmountCents,
+            originalCurrency: row.originalCurrency,
+            counterparty: row.counterparty,
+            bookingText: row.bookingText,
+            description: row.description,
+            purpose: row.purpose,
+            status: row.status,
+            balanceAfterCents: row.balanceAfterCents,
+            balanceCurrency: row.balanceCurrency,
+            country: row.country,
+            cardLast4: row.cardLast4,
+            cardholder: row.cardholder,
+            rawDataJson: JSON.stringify(row.rawData),
+            planId,
+            planAssignment:
+              shouldAssignPlan && assignment.planAssignment === 'auto_month'
+                ? ('auto_month' as const)
+                : ('none' as const),
+            importSeenCount: existing.importSeenCount + 1,
+            createdAt: now,
+            updatedAt: now,
+          }
+        } else {
+          insertedCount += 1
+          if (assignment.planId) assigned += 1
+          else unassigned += 1
+
+          return {
+            sourceId: preparedData.source.id,
+            firstSeenImportId: importId,
+            lastSeenImportId: importId,
+            externalTransactionId: row.externalTransactionId,
+            dedupeKey: row.dedupeKey,
+            bookingDate: row.bookingDate,
+            valueDate: row.valueDate,
+            amountCents: row.amountCents,
+            currency: row.currency,
+            originalAmountCents: row.originalAmountCents,
+            originalCurrency: row.originalCurrency,
+            counterparty: row.counterparty,
+            bookingText: row.bookingText,
+            description: row.description,
+            purpose: row.purpose,
+            status: row.status,
+            balanceAfterCents: row.balanceAfterCents,
+            balanceCurrency: row.balanceCurrency,
+            country: row.country,
+            cardLast4: row.cardLast4,
+            cardholder: row.cardholder,
+            rawDataJson: JSON.stringify(row.rawData),
+            planId: assignment.planId,
+            planAssignment: assignment.planAssignment,
+            importSeenCount: 1,
+            createdAt: now,
+            updatedAt: now,
+          }
         }
-      }
-    })
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null)
 
     await db.transaction(async (tx) => {
       await tx.insert(statementImport).values({
@@ -525,6 +633,27 @@ export async function commitBankImport(input: {
         triggeredByUserId: input.triggeredByUserId ?? null,
         createdAt: now,
       })
+
+      // Upgrade pending → booked for cross-import matches
+      for (const upgrade of pendingUpgradeRows) {
+        const { row, existingDbRow } = upgrade
+        await tx
+          .update(bankTransaction)
+          .set({
+            dedupeKey: row.dedupeKey,
+            externalTransactionId: row.externalTransactionId,
+            status: 'booked',
+            valueDate: row.valueDate,
+            purpose: row.purpose,
+            bookingText: row.bookingText,
+            rawDataJson: JSON.stringify(row.rawData),
+            lastSeenImportId: importId,
+            importSeenCount: existingDbRow.importSeenCount + 1,
+            isArchived: false,
+            updatedAt: now,
+          })
+          .where(eq(bankTransaction.id, existingDbRow.id))
+      }
 
       if (allRows.length > 0) {
         await tx
