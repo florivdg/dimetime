@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Plan } from '@/lib/plans'
-import { formatDate, getPlanDisplayName } from '@/lib/format'
+import { formatDate, getPlanDisplayName, truncateText } from '@/lib/format'
 import { useDeleteConfirmation } from '@/composables/useDeleteConfirmation'
 import { useEditInputRefs } from '@/composables/useEditInputRefs'
 import { Button } from '@/components/ui/button'
@@ -132,12 +132,6 @@ async function deletePlan(id: string) {
     )
   }
 }
-
-function truncateNotes(notes: string | null, maxLength = 50): string {
-  if (!notes) return ''
-  if (notes.length <= maxLength) return notes
-  return notes.slice(0, maxLength) + '...'
-}
 </script>
 
 <template>
@@ -218,7 +212,7 @@ function truncateNotes(notes: string | null, maxLength = 50): string {
               @keyup.enter="updatePlan(plan.id)"
               @keyup.escape="cancelEditing"
             />
-            <span v-else>{{ truncateNotes(plan.notes) }}</span>
+            <span v-else>{{ truncateText(plan.notes, 50) }}</span>
           </TableCell>
 
           <!-- Status -->

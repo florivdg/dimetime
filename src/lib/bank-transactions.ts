@@ -86,6 +86,7 @@ export interface BankTransactionRow {
   budgetName: string | null
   isArchived: boolean
   note: string | null
+  purpose: string | null
   isSplit: boolean
   createdAt: Date
   sortOrder: number
@@ -252,6 +253,7 @@ export async function getBankTransactions(
       budgetName: plannedTransaction.name,
       isArchived: bankTransaction.isArchived,
       note: bankTransaction.note,
+      purpose: bankTransaction.purpose,
       isSplit: bankTransaction.isSplit,
       createdAt: bankTransaction.createdAt,
       sortOrder: sql<number>`0`.as('sort_order'),
@@ -305,6 +307,7 @@ export async function getBankTransactions(
       budgetName: plannedTransaction.name,
       isArchived: bankTransactionSplit.isArchived,
       note: sql<string | null>`null`.as('note'),
+      purpose: bankTransaction.purpose,
       isSplit: sql<boolean>`0`.as('is_split'),
       createdAt: bankTransactionSplit.createdAt,
       sortOrder: bankTransactionSplit.sortOrder,

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { BankTransactionRow } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
-import { formatAmount, formatDate } from '@/lib/format'
+import { formatAmount, formatDate, truncateText } from '@/lib/format'
 import BudgetPicker from './BudgetPicker.vue'
 import NoteEditor from './NoteEditor.vue'
 import PlanPicker from './PlanPicker.vue'
@@ -216,14 +216,15 @@ function statusVariant(
                         >Archiviert</Badge
                       >
                     </span>
-                    <TooltipContent v-if="row.note">
-                      <p class="max-w-64">
-                        {{
-                          row.note.length > 100
-                            ? row.note.slice(0, 100) + '…'
-                            : row.note
-                        }}
-                      </p>
+                    <TooltipContent v-if="row.purpose || row.note">
+                      <div class="max-w-64 space-y-1">
+                        <p v-if="row.purpose">
+                          {{ truncateText(row.purpose) }}
+                        </p>
+                        <p v-if="row.note" class="italic">
+                          {{ truncateText(row.note) }}
+                        </p>
+                      </div>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

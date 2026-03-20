@@ -59,6 +59,15 @@ export function getPlanDisplayName(
 }
 
 /**
+ * Truncate text to a maximum length, appending an ellipsis if needed
+ */
+export function truncateText(text: string | null, maxLength = 100): string {
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  return text.slice(0, maxLength) + '…'
+}
+
+/**
  * Format recurrence type to German display string
  * @param recurrence - Recurrence type
  * @returns Formatted recurrence string
