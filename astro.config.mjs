@@ -16,10 +16,8 @@ export default defineConfig({
   output: 'server',
 
   security: {
-    allowedDomains: [
-      { hostname: 'dimetime.flori.cloud' },
-      { hostname: 'dimetime.local' },
-    ],
+    checkOrigin: process.env.NODE_ENV === 'production',
+    allowedDomains: [{ hostname: 'dimetime.flori.cloud' }],
   },
 
   vite: {

@@ -34,8 +34,8 @@ RUN mkdir -p /data && chown bun:bun /data
 
 # Install curl for healthcheck
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
+  apt-get install -y --no-install-recommends curl && \
+  rm -rf /var/lib/apt/lists/*
 
 # Copy built application with proper ownership
 COPY --from=builder --chown=bun:bun /app/dist ./dist
@@ -52,6 +52,7 @@ USER bun
 ENV HOST=0.0.0.0
 ENV PORT=4321
 ENV DB_FILE_NAME=/data/sqlite.db
+ENV NODE_ENV=production
 
 # Expose port
 EXPOSE 4321
