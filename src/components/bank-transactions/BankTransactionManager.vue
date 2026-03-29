@@ -54,9 +54,20 @@ import {
   Landmark,
   Search,
   Upload,
+  Trash2,
   Wallet,
   X,
 } from 'lucide-vue-next'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import BankTransactionTable from './BankTransactionTable.vue'
 import BankImportDialog from './BankImportDialog.vue'
 import SplitTransactionDialog from './SplitTransactionDialog.vue'
@@ -89,6 +100,7 @@ const {
   bulkArchiveTransactions,
   bulkAssignPlan,
   bulkAssignBudget,
+  deleteTransaction,
   splitTransaction,
   unsplitTransaction,
 } = useBankTransactions(filters, {
@@ -101,6 +113,8 @@ const {
 const importDialogOpen = ref(false)
 const splitDialogOpen = ref(false)
 const splitTarget = ref<BankTransactionRow | null>(null)
+const deleteDialogOpen = ref(false)
+const transactionToDelete = ref<BankTransactionRow | null>(null)
 const bulkPlanPopoverOpen = ref(false)
 const bulkBudgetPopoverOpen = ref(false)
 const bulkBudgetPlanId = ref<string | null>(null)
@@ -186,6 +200,23 @@ function toggleSelectAll() {
 function clearSelection() {
   selectedIds.value = new Set()
   lastSelectedId.value = null
+}
+
+function openDeleteDialog(row: BankTransactionRow) {
+  transactionToDelete.value = row
+  deleteDialogOpen.value = true
+}
+
+async function handleDelete() {
+  if (!transactionToDelete.value) return
+  const success = await deleteTransaction(transactionToDelete.value.id)
+  if (success) {
+    toast.success('Banktransaktion gelöscht')
+  } else {
+    toast.error('Banktransaktion konnte nicht gelöscht werden.')
+  }
+  deleteDialogOpen.value = false
+  transactionToDelete.value = null
 }
 
 async function handleBulkAssignPlan(planId: string | null) {
@@ -496,6 +527,7 @@ async function handleUndoSplit(parentId: string) {
         @toggle-select-all="toggleSelectAll"
         @open-split="openSplitDialog"
         @undo-split="handleUndoSplit"
+        @delete="openDeleteDialog"
       />
 
       <!-- Floating action bar -->
@@ -642,6 +674,28 @@ async function handleUndoSplit(parentId: string) {
         :transaction="splitTarget"
         @split="handleSplit"
       />
+
+      <!-- Delete Dialog -->
+      <AlertDialog v-model:open="deleteDialogOpen">
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Banktransaktion löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Möchten Sie diese Banktransaktion wirklich löschen?
+              <template v-if="transactionToDelete?.isSplit">
+                Alle zugehörigen Teilbuchungen werden ebenfalls gelöscht.
+              </template>
+              Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction @click="handleDelete">
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </CardContent>
   </Card>
 </template>

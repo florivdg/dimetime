@@ -333,6 +333,26 @@ export function useBankTransactions(
     }
   }
 
+  async function deleteTransaction(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/bank-transactions/${id}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) throw new Error('Delete failed')
+      await loadTransactions()
+      if (
+        rows.value.length === 0 &&
+        pagination.value.total > 0 &&
+        filters.page.value > 1
+      ) {
+        filters.page.value = Math.max(1, pagination.value.totalPages)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
   // Watch filters for changes and auto-fetch
   watch(
     () => ({ ...filters.state }),
@@ -356,6 +376,7 @@ export function useBankTransactions(
     bulkArchiveTransactions,
     bulkAssignPlan,
     bulkAssignBudget,
+    deleteTransaction,
     splitTransaction,
     unsplitTransaction,
   }

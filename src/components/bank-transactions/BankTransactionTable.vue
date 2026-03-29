@@ -13,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -39,6 +40,7 @@ import {
   MoreVertical,
   Search,
   Split,
+  Trash2,
   Undo2,
 } from 'lucide-vue-next'
 
@@ -66,6 +68,7 @@ const emit = defineEmits<{
   'toggle-select-all': []
   'open-split': [row: BankTransactionRow]
   'undo-split': [parentId: string]
+  delete: [row: BankTransactionRow]
 }>()
 
 const allOnPageSelected = computed(
@@ -284,7 +287,7 @@ function statusVariant(
 
             <!-- Actions -->
             <TableCell>
-              <DropdownMenu v-if="!row.isArchived && !row.isSplit">
+              <DropdownMenu>
                 <DropdownMenuTrigger as-child>
                   <Button
                     variant="ghost"
@@ -295,9 +298,22 @@ function statusVariant(
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem @click="emit('open-split', row)">
+                  <DropdownMenuItem
+                    v-if="!row.isArchived && !row.isSplit"
+                    @click="emit('open-split', row)"
+                  >
                     <Split class="mr-2 size-4" />
                     Aufteilen
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator
+                    v-if="!row.isArchived && !row.isSplit"
+                  />
+                  <DropdownMenuItem
+                    class="text-destructive focus:text-destructive"
+                    @click="emit('delete', row)"
+                  >
+                    <Trash2 class="mr-2 size-4" />
+                    Löschen
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

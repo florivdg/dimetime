@@ -1,9 +1,11 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import {
+  deleteBankTransaction,
   getBankTransactionById,
   updateBankTransactionFields,
 } from '@/lib/bank-transactions'
+import { jsonError, jsonResponse } from '@/lib/bank-import/api-helpers'
 import { getPlanById } from '@/lib/plans'
 import { getTransactionById } from '@/lib/transactions'
 
@@ -23,6 +25,25 @@ const patchSchema = z
         'Mindestens ein Feld (planId, note oder budgetId) muss angegeben werden.',
     },
   )
+
+export const DELETE: APIRoute = async ({ params }) => {
+  const id = params.id
+  if (!id) {
+    return jsonError('Transaktions-ID ist erforderlich')
+  }
+
+  const existing = await getBankTransactionById(id)
+  if (!existing) {
+    return jsonError('Banktransaktion nicht gefunden', 404)
+  }
+
+  await deleteBankTransaction(id)
+
+  return jsonResponse({
+    success: true,
+    message: 'Banktransaktion wurde gelöscht',
+  })
+}
 
 export const PATCH: APIRoute = async ({ params, request }) => {
   const id = params.id

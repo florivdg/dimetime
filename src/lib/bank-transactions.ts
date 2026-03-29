@@ -193,6 +193,14 @@ export async function deleteImportSource(
   return { deleted: result.length > 0 }
 }
 
+export async function deleteBankTransaction(id: string): Promise<boolean> {
+  const result = await db
+    .delete(bankTransaction)
+    .where(eq(bankTransaction.id, id))
+    .returning({ id: bankTransaction.id })
+  return result.length > 0
+}
+
 export async function getBankTransactions(
   options: BankTransactionQueryOptions = {},
 ): Promise<PaginatedBankTransactions> {
