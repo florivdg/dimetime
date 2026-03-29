@@ -120,6 +120,13 @@
       "when": 1773587757223,
       "tag": "0016_nifty_loners",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1774777023808,
+      "tag": "0017_right_kinsey_walden",
+      "breakpoints": true
     }
   ]
 }

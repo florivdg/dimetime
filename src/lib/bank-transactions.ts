@@ -314,7 +314,7 @@ export async function getBankTransactions(
       budgetId: bankTransactionSplit.budgetId,
       budgetName: plannedTransaction.name,
       isArchived: bankTransactionSplit.isArchived,
-      note: sql<string | null>`null`.as('note'),
+      note: bankTransactionSplit.note,
       purpose: bankTransaction.purpose,
       isSplit: sql<boolean>`0`.as('is_split'),
       createdAt: bankTransactionSplit.createdAt,

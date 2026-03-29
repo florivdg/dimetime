@@ -76,7 +76,7 @@ export function useBankTransactions(
 
   async function loadPlans() {
     try {
-      const response = await fetch('/api/plans')
+      const response = await fetch('/api/plans?includeArchived=true')
       if (!response.ok) return
       const data = await response.json()
       plans.value = data.plans
@@ -150,7 +150,11 @@ export function useBankTransactions(
     row.note = note
 
     try {
-      const response = await fetch(`/api/bank-transactions/${id}`, {
+      const endpoint =
+        row.rowType === 'split'
+          ? `/api/bank-transactions/splits/${id}`
+          : `/api/bank-transactions/${id}`
+      const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note }),

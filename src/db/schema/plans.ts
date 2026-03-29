@@ -276,6 +276,7 @@ export const bankTransactionSplit = sqliteTable(
       .references(() => bankTransaction.id, { onDelete: 'cascade' }),
     amountCents: integer('amount_cents').notNull(),
     label: text('label'),
+    note: text('note'),
     budgetId: text('budget_id').references(() => plannedTransaction.id, {
       onDelete: 'set null',
     }),

@@ -152,6 +152,7 @@ export async function getSplitsForTransactionIds(
       bankTransactionId: bankTransactionSplit.bankTransactionId,
       amountCents: bankTransactionSplit.amountCents,
       label: bankTransactionSplit.label,
+      note: bankTransactionSplit.note,
       budgetId: bankTransactionSplit.budgetId,
       planId: bankTransactionSplit.planId,
       sortOrder: bankTransactionSplit.sortOrder,
@@ -234,7 +235,11 @@ export async function getBudgetSpendingFromSplits(
 
 export async function updateSplitFields(
   splitId: string,
-  fields: { planId?: string | null; budgetId?: string | null },
+  fields: {
+    planId?: string | null
+    budgetId?: string | null
+    note?: string | null
+  },
 ): Promise<BankTransactionSplit | undefined> {
   const setValues: Partial<typeof bankTransactionSplit.$inferInsert> = {
     updatedAt: new Date(),
@@ -248,6 +253,10 @@ export async function updateSplitFields(
 
   if (fields.budgetId !== undefined) {
     setValues.budgetId = fields.budgetId
+  }
+
+  if (fields.note !== undefined) {
+    setValues.note = fields.note
   }
 
   const [updated] = await db

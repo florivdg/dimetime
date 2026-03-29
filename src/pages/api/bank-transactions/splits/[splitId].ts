@@ -9,10 +9,18 @@ const patchSchema = z
   .object({
     budgetId: z.uuid().nullable().optional(),
     planId: z.uuid().nullable().optional(),
+    note: z.string().max(2000).nullable().optional(),
   })
-  .refine((data) => data.budgetId !== undefined || data.planId !== undefined, {
-    message: 'Mindestens ein Feld (budgetId oder planId) ist erforderlich',
-  })
+  .refine(
+    (data) =>
+      data.budgetId !== undefined ||
+      data.planId !== undefined ||
+      data.note !== undefined,
+    {
+      message:
+        'Mindestens ein Feld (budgetId, planId oder note) ist erforderlich',
+    },
+  )
 
 export const PATCH: APIRoute = async ({ params, request }) => {
   const splitId = params.splitId
@@ -55,9 +63,14 @@ export const PATCH: APIRoute = async ({ params, request }) => {
     }
   }
 
-  const fields: { planId?: string | null; budgetId?: string | null } = {}
+  const fields: {
+    planId?: string | null
+    budgetId?: string | null
+    note?: string | null
+  } = {}
   if (parsed.data.planId !== undefined) fields.planId = parsed.data.planId
   if (parsed.data.budgetId !== undefined) fields.budgetId = parsed.data.budgetId
+  if (parsed.data.note !== undefined) fields.note = parsed.data.note
 
   const updated = await updateSplitFields(splitId, fields)
   if (!updated) return jsonError('Split nicht gefunden', 404)
