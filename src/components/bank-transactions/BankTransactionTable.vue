@@ -31,6 +31,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  Archive,
+  ArchiveRestore,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
@@ -68,6 +70,7 @@ const emit = defineEmits<{
   'toggle-select-all': []
   'open-split': [row: BankTransactionRow]
   'undo-split': [parentId: string]
+  archive: [id: string, isArchived: boolean, rowType: 'transaction' | 'split']
   delete: [row: BankTransactionRow]
 }>()
 
@@ -305,9 +308,16 @@ function statusVariant(
                     <Split class="mr-2 size-4" />
                     Aufteilen
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator
-                    v-if="!row.isArchived && !row.isSplit"
-                  />
+                  <DropdownMenuItem
+                    @click="
+                      emit('archive', row.id, !row.isArchived, 'transaction')
+                    "
+                  >
+                    <ArchiveRestore v-if="row.isArchived" class="mr-2 size-4" />
+                    <Archive v-else class="mr-2 size-4" />
+                    {{ row.isArchived ? 'Entarchivieren' : 'Archivieren' }}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     class="text-destructive focus:text-destructive"
                     @click="emit('delete', row)"
@@ -341,8 +351,14 @@ function statusVariant(
               {{ formatDate(row.bookingDate) }}
             </TableCell>
 
-            <!-- No note for splits -->
-            <TableCell class="px-0"></TableCell>
+            <!-- Note -->
+            <TableCell class="px-0">
+              <NoteEditor
+                :note="row.note"
+                :transaction-id="row.id"
+                @update:note="(id, note) => emit('update:note', id, note)"
+              />
+            </TableCell>
 
             <!-- Description with split icon -->
             <TableCell>
@@ -410,7 +426,7 @@ function statusVariant(
 
             <!-- Actions -->
             <TableCell>
-              <DropdownMenu v-if="row.parentId && !row.isArchived">
+              <DropdownMenu v-if="row.parentId">
                 <DropdownMenuTrigger as-child>
                   <Button
                     variant="ghost"
@@ -421,9 +437,19 @@ function statusVariant(
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem @click="emit('undo-split', row.parentId!)">
+                  <DropdownMenuItem
+                    v-if="!row.isArchived"
+                    @click="emit('undo-split', row.parentId!)"
+                  >
                     <Undo2 class="mr-2 size-4" />
                     Aufteilung aufheben
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    @click="emit('archive', row.id, !row.isArchived, 'split')"
+                  >
+                    <ArchiveRestore v-if="row.isArchived" class="mr-2 size-4" />
+                    <Archive v-else class="mr-2 size-4" />
+                    {{ row.isArchived ? 'Entarchivieren' : 'Archivieren' }}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -392,6 +392,23 @@ async function handleUndoSplit(parentId: string) {
     toast.error('Aufteilung konnte nicht aufgehoben werden.')
   }
 }
+
+async function handleSingleArchive(
+  id: string,
+  isArchived: boolean,
+  rowType: 'transaction' | 'split',
+) {
+  const txIds = rowType === 'transaction' ? [id] : []
+  const spIds = rowType === 'split' ? [id] : []
+  const success = await bulkArchiveTransactions(txIds, isArchived, spIds)
+  if (success) {
+    toast.success(
+      isArchived ? 'Transaktion archiviert' : 'Transaktion entarchiviert',
+    )
+  } else {
+    toast.error('Archivierung konnte nicht durchgeführt werden.')
+  }
+}
 </script>
 
 <template>
@@ -512,7 +529,7 @@ async function handleUndoSplit(parentId: string) {
       <!-- Table -->
       <BankTransactionTable
         :rows="rows"
-        :plans="plans"
+        :plans="activePlans"
         :is-loading="isLoading"
         :search-query="filters.search.value"
         :sort-by="filters.sortBy.value"
@@ -527,6 +544,7 @@ async function handleUndoSplit(parentId: string) {
         @toggle-select-all="toggleSelectAll"
         @open-split="openSplitDialog"
         @undo-split="handleUndoSplit"
+        @archive="handleSingleArchive"
         @delete="openDeleteDialog"
       />
 
