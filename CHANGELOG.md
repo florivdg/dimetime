@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.9.3
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.9.2...v0.9.3)
+
+### 🚀 Enhancements
+
+- **bank-transactions:** Show purpose and note in transaction tooltip ([234e300](https://github.com/florivdg/dimetime/commit/234e300))
+- **bank-import:** Upgrade pending transactions to booked on re-import ([ec7365b](https://github.com/florivdg/dimetime/commit/ec7365b))
+- **bank-transactions:** Add delete functionality for individual transactions ([d4d1a9c](https://github.com/florivdg/dimetime/commit/d4d1a9c))
+- **bank-transactions:** Show all plans in filter and add archive action ([cdce772](https://github.com/florivdg/dimetime/commit/cdce772))
+- **bank-transactions:** Add notes support for split transactions ([bc85df4](https://github.com/florivdg/dimetime/commit/bc85df4))
+
+### 🩹 Fixes
+
+- **docker:** Set NODE_ENV and conditional origin check for local dev ([33c24b7](https://github.com/florivdg/dimetime/commit/33c24b7))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.9.2
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.9.1...v0.9.2)
