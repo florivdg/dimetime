@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import type { ImportSource } from '@/lib/bank-transactions'
 import type { ImportTypeDescriptor } from '@/lib/bank-import/types'
+import { hasActiveEnableBankingConnection } from '@/lib/enable-banking/status'
+import { formatDateTime } from '@/lib/format'
 import {
   Card,
   CardContent,
@@ -32,20 +34,23 @@ import {
 } from '@/components/ui/table'
 import {
   Database,
+  Link2Off,
   Loader2,
   Pencil,
-  Plus,
   Power,
   PowerOff,
+  RefreshCw,
   Trash2,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import ImportSourceCreateDialog from './ImportSourceCreateDialog.vue'
 import ImportSourceEditDialog from './ImportSourceEditDialog.vue'
+import ConnectBankDialog from './ConnectBankDialog.vue'
 
 const props = defineProps<{
   initialSources: ImportSource[]
   importTypes: ImportTypeDescriptor[]
+  enableBankingEnabled?: boolean
 }>()
 
 const sources = ref<ImportSource[]>(props.initialSources)
@@ -53,7 +58,13 @@ const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 const isCreateDialogOpen = ref(false)
 const isEditDialogOpen = ref(false)
+const isConnectDialogOpen = ref(false)
 const editingSource = ref<ImportSource | null>(null)
+const syncingSourceIds = ref<Set<string>>(new Set())
+
+function isSyncing(id: string): boolean {
+  return syncingSourceIds.value.has(id)
+}
 
 const sourceKindLabels: Record<string, string> = {
   bank_account: 'Bankkonto',
@@ -122,6 +133,59 @@ async function toggleActive(source: ImportSource) {
   }
 }
 
+async function syncSource(source: ImportSource) {
+  syncingSourceIds.value = new Set([...syncingSourceIds.value, source.id])
+  try {
+    const response = await fetch(
+      `/api/enable-banking/sources/${source.id}/sync`,
+      { method: 'POST' },
+    )
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(data.error ?? 'Synchronisation fehlgeschlagen.')
+    }
+    toast.success(
+      `${source.name}: ${data.inserted ?? 0} neu, ${data.updated ?? 0} aktualisiert`,
+    )
+    await loadSources()
+  } catch (error) {
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : 'Synchronisation fehlgeschlagen.',
+    )
+  } finally {
+    const next = new Set(syncingSourceIds.value)
+    next.delete(source.id)
+    syncingSourceIds.value = next
+  }
+}
+
+async function disconnectSource(source: ImportSource) {
+  try {
+    const response = await fetch(
+      `/api/enable-banking/sources/${source.id}/connection`,
+      { method: 'DELETE' },
+    )
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(data.error ?? 'Verbindung konnte nicht getrennt werden.')
+    }
+    toast.success(
+      Number(data.disconnectedCount ?? 1) > 1
+        ? `${data.disconnectedCount} Bankquellen wurden getrennt.`
+        : 'Bankverbindung getrennt.',
+    )
+    await loadSources()
+  } catch (error) {
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : 'Verbindung konnte nicht getrennt werden.',
+    )
+  }
+}
+
 async function deleteSource(id: string) {
   try {
     const response = await fetch(`/api/import-sources/${id}`, {
@@ -160,12 +224,19 @@ function handleError(message: string) {
             Verwalte deine Import-Quellen für Kontoauszüge.
           </CardDescription>
         </div>
-        <ImportSourceCreateDialog
-          v-model:open="isCreateDialogOpen"
-          :import-types="importTypes"
-          @created="handleCreated"
-          @error="handleError"
-        />
+        <div class="flex items-center gap-2">
+          <ConnectBankDialog
+            v-if="enableBankingEnabled"
+            v-model:open="isConnectDialogOpen"
+            @connected="handleCreated"
+          />
+          <ImportSourceCreateDialog
+            v-model:open="isCreateDialogOpen"
+            :import-types="importTypes"
+            @created="handleCreated"
+            @error="handleError"
+          />
+        </div>
       </div>
     </CardHeader>
     <CardContent>
@@ -223,7 +294,33 @@ function handleError(message: string) {
                 {{ sourceKindLabels[source.sourceKind] ?? source.sourceKind }}
               </TableCell>
               <TableCell class="text-muted-foreground">
-                {{ source.bankName || '–' }}
+                <div class="flex flex-col">
+                  <span>{{ source.bankName || '–' }}</span>
+                  <span
+                    v-if="hasActiveEnableBankingConnection(source)"
+                    class="text-xs"
+                  >
+                    Letzter Sync:
+                    {{
+                      source.lastSyncAt
+                        ? formatDateTime(source.lastSyncAt)
+                        : '–'
+                    }}
+                  </span>
+                  <span
+                    v-else-if="source.connectionType === 'enable_banking'"
+                    class="text-xs"
+                  >
+                    Nicht verbunden
+                  </span>
+                  <span
+                    v-if="source.lastSyncError"
+                    class="text-destructive text-xs"
+                    :title="source.lastSyncError"
+                  >
+                    ⚠ {{ source.lastSyncError }}
+                  </span>
+                </div>
               </TableCell>
               <TableCell class="text-muted-foreground">
                 {{ source.accountLabel || '–' }}
@@ -243,6 +340,51 @@ function handleError(message: string) {
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-1">
+                  <Button
+                    v-if="hasActiveEnableBankingConnection(source)"
+                    size="icon-sm"
+                    variant="ghost"
+                    title="Jetzt synchronisieren"
+                    :disabled="isSyncing(source.id)"
+                    @click="syncSource(source)"
+                  >
+                    <Loader2
+                      v-if="isSyncing(source.id)"
+                      class="size-4 animate-spin"
+                    />
+                    <RefreshCw v-else class="size-4" />
+                  </Button>
+                  <AlertDialog v-if="hasActiveEnableBankingConnection(source)">
+                    <AlertDialogTrigger as-child>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        title="Verbindung trennen"
+                      >
+                        <Link2Off class="size-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Verbindung trennen?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Die Enable-Banking-Session für "{{ source.name }}"
+                          wird beendet. Falls weitere Konten über dieselbe
+                          Bankfreigabe verbunden wurden, werden sie ebenfalls
+                          getrennt. Die bisher importierten Transaktionen
+                          bleiben erhalten.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                        <AlertDialogAction @click="disconnectSource(source)">
+                          Trennen
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                   <Button
                     size="icon-sm"
                     variant="ghost"

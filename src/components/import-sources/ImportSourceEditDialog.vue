@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import { computed } from 'vue'
 import { Loader2 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -45,6 +47,10 @@ const editAccountIdentifier = ref('')
 const editDefaultPlanAssignment = ref<string>('auto_month')
 const editIsActive = ref(true)
 
+const isEnableBankingSource = computed(
+  () => props.source?.connectionType === 'enable_banking',
+)
+
 watch(
   () => props.source,
   (newSource) => {
@@ -68,19 +74,23 @@ async function handleSubmit() {
   isSaving.value = true
 
   try {
+    const body: Record<string, unknown> = {
+      name: editName.value.trim(),
+      sourceKind: editSourceKind.value,
+      bankName: editBankName.value.trim() || null,
+      accountLabel: editAccountLabel.value.trim() || null,
+      accountIdentifier: editAccountIdentifier.value.trim() || null,
+      defaultPlanAssignment: editDefaultPlanAssignment.value,
+      isActive: editIsActive.value,
+    }
+    if (!isEnableBankingSource.value) {
+      body.preset = editPreset.value
+    }
+
     const response = await fetch(`/api/import-sources/${props.source.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: editName.value.trim(),
-        preset: editPreset.value,
-        sourceKind: editSourceKind.value,
-        bankName: editBankName.value.trim() || null,
-        accountLabel: editAccountLabel.value.trim() || null,
-        accountIdentifier: editAccountIdentifier.value.trim() || null,
-        defaultPlanAssignment: editDefaultPlanAssignment.value,
-        isActive: editIsActive.value,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!response.ok) {
@@ -126,7 +136,13 @@ async function handleSubmit() {
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
             <Label for="edit-preset">Import-Format *</Label>
-            <Select v-model="editPreset">
+            <div
+              v-if="isEnableBankingSource"
+              class="border-input flex h-9 items-center rounded-md border px-3"
+            >
+              <Badge variant="secondary">Enable Banking API</Badge>
+            </div>
+            <Select v-else v-model="editPreset">
               <SelectTrigger id="edit-preset">
                 <SelectValue placeholder="Format wählen..." />
               </SelectTrigger>
