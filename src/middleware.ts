@@ -1,6 +1,9 @@
 import { auth } from '@/lib/auth'
 import { getAllSettings } from '@/lib/settings'
+import { startEnableBankingScheduler } from '@/lib/enable-banking/scheduler'
 import { defineMiddleware } from 'astro:middleware'
+
+startEnableBankingScheduler()
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { pathname } = context.url
