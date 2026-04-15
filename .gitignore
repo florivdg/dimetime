@@ -31,3 +31,5 @@ sqlite.db
 data/
 
 .playwright-cli
+
+*.pem
