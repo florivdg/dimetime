@@ -5,6 +5,7 @@ import BankTransactionManager from '@/components/bank-transactions/BankTransacti
 import { getBankTransactions, getImportSources } from '@/lib/bank-transactions'
 import { getAllPlans, getSidebarPlans } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
+import { isEnableBankingConfigured } from '@/lib/enable-banking/config'
 
 // Load initial data server-side
 const { rows, pagination } = await getBankTransactions({
@@ -15,6 +16,7 @@ const { rows, pagination } = await getBankTransactions({
 })
 const sources = await getImportSources()
 const plans = await getAllPlans(true)
+const enableBankingEnabled = isEnableBankingConfigured()
 
 // Sidebar plan items
 const { currentMonth, latest } = await getSidebarPlans()
@@ -50,6 +52,7 @@ if (latest && latest.id !== currentMonth?.id) {
         initialPagination={pagination}
         initialSources={sources}
         initialPlans={plans}
+        enableBankingEnabled={enableBankingEnabled}
       />
     </div>
   </Dashboard>

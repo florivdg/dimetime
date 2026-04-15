@@ -127,6 +127,13 @@
       "when": 1774777023808,
       "tag": "0017_right_kinsey_walden",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1776066936854,
+      "tag": "0018_right_energizer",
+      "breakpoints": true
     }
   ]
 }

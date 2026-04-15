@@ -111,6 +111,35 @@ export const plannedTransactionRelations = relations(
   }),
 )
 
+// Enable Banking Sessions
+export const enableBankingSession = sqliteTable(
+  'enable_banking_session',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    sessionId: text('session_id').notNull(), // Enable Banking session UUID
+    aspspName: text('aspsp_name').notNull(),
+    aspspCountry: text('aspsp_country').notNull(),
+    psuType: text('psu_type', { enum: ['personal', 'business'] })
+      .notNull()
+      .default('personal'),
+    validUntil: integer('valid_until', { mode: 'timestamp_ms' }).notNull(),
+    rawSessionJson: text('raw_session_json').notNull(),
+    status: text('status', { enum: ['active', 'expired', 'revoked'] })
+      .notNull()
+      .default('active'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('enableBankingSession_status_idx').on(table.status),
+    index('enableBankingSession_validUntil_idx').on(table.validUntil),
+  ],
+)
+
 // Bank Import Sources
 export const importSource = sqliteTable(
   'import_source',
@@ -120,11 +149,16 @@ export const importSource = sqliteTable(
       .$defaultFn(() => crypto.randomUUID()),
     name: text('name').notNull(),
     preset: text('preset', {
-      enum: ['ing_csv_v1', 'easybank_xlsx_v1'],
+      enum: ['ing_csv_v1', 'easybank_xlsx_v1', 'enable_banking_v1'],
     }).notNull(),
     sourceKind: text('source_kind', {
       enum: ['bank_account', 'credit_card', 'other'],
     }).notNull(),
+    connectionType: text('connection_type', {
+      enum: ['file_upload', 'enable_banking'],
+    })
+      .notNull()
+      .default('file_upload'),
     bankName: text('bank_name'),
     accountLabel: text('account_label'),
     accountIdentifier: text('account_identifier'),
@@ -133,6 +167,14 @@ export const importSource = sqliteTable(
     })
       .notNull()
       .default('auto_month'),
+    enableBankingAccountUid: text('enable_banking_account_uid'),
+    enableBankingIdentificationHash: text('enable_banking_identification_hash'),
+    enableBankingSessionId: text('enable_banking_session_id').references(
+      () => enableBankingSession.id,
+      { onDelete: 'set null' },
+    ),
+    lastSyncAt: integer('last_sync_at', { mode: 'timestamp_ms' }),
+    lastSyncError: text('last_sync_error'),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
@@ -142,6 +184,10 @@ export const importSource = sqliteTable(
   (table) => [
     index('importSource_preset_idx').on(table.preset),
     index('importSource_isActive_idx').on(table.isActive),
+    index('importSource_connectionType_idx').on(table.connectionType),
+    index('importSource_enableBankingSessionId_idx').on(
+      table.enableBankingSessionId,
+    ),
   ],
 )
 
@@ -157,7 +203,7 @@ export const statementImport = sqliteTable(
       .references(() => importSource.id, { onDelete: 'cascade' }),
     fileName: text('file_name').notNull(),
     fileSha256: text('file_sha256').notNull(),
-    fileType: text('file_type', { enum: ['csv', 'xlsx'] }).notNull(),
+    fileType: text('file_type', { enum: ['csv', 'xlsx', 'api'] }).notNull(),
     phase: text('phase', { enum: ['preview', 'commit'] }).notNull(),
     status: text('status', { enum: ['success', 'failed'] }).notNull(),
     previewCount: integer('preview_count').notNull().default(0),
@@ -359,10 +405,24 @@ export const transactionPresetRelations = relations(
   }),
 )
 
-export const importSourceRelations = relations(importSource, ({ many }) => ({
-  statementImports: many(statementImport),
-  bankTransactions: many(bankTransaction),
-}))
+export const importSourceRelations = relations(
+  importSource,
+  ({ one, many }) => ({
+    statementImports: many(statementImport),
+    bankTransactions: many(bankTransaction),
+    enableBankingSession: one(enableBankingSession, {
+      fields: [importSource.enableBankingSessionId],
+      references: [enableBankingSession.id],
+    }),
+  }),
+)
+
+export const enableBankingSessionRelations = relations(
+  enableBankingSession,
+  ({ many }) => ({
+    sources: many(importSource),
+  }),
+)
 
 export const statementImportRelations = relations(
   statementImport,

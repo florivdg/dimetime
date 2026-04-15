@@ -1,10 +1,15 @@
-export type ImportPreset = 'ing_csv_v1' | 'easybank_xlsx_v1'
+export type ImportPreset =
+  | 'ing_csv_v1'
+  | 'easybank_xlsx_v1'
+  | 'enable_banking_v1'
 
 export type ImportSourceKind = 'bank_account' | 'credit_card' | 'other'
 
+export type ConnectionType = 'file_upload' | 'enable_banking'
+
 export type DefaultPlanAssignment = 'auto_month' | 'none'
 
-export type ImportFileType = 'csv' | 'xlsx'
+export type ImportFileType = 'csv' | 'xlsx' | 'api'
 
 export type ImportPhase = 'preview' | 'commit'
 

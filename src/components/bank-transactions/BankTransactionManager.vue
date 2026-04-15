@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { BankTransactionRow, ImportSource } from '@/lib/bank-transactions'
 import type { Plan } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
+import { hasActiveEnableBankingConnection } from '@/lib/enable-banking/status'
 import { toast } from 'vue-sonner'
 import { useBankTransactionFilters } from '@/composables/useBankTransactionFilters'
 import { useBankTransactions } from '@/composables/useBankTransactions'
@@ -52,6 +53,8 @@ import {
   ArchiveRestore,
   CalendarDays,
   Landmark,
+  Loader2,
+  RefreshCw,
   Search,
   Upload,
   Trash2,
@@ -82,6 +85,7 @@ const props = defineProps<{
   }
   initialSources: ImportSource[]
   initialPlans: Plan[]
+  enableBankingEnabled?: boolean
 }>()
 
 const filters = useBankTransactionFilters()
@@ -111,6 +115,58 @@ const {
 })
 
 const importDialogOpen = ref(false)
+const isSyncingAll = ref(false)
+
+const hasEnableBankingSources = computed(() =>
+  sources.value.some((s) => hasActiveEnableBankingConnection(s)),
+)
+
+async function syncAllEnableBankingSources() {
+  isSyncingAll.value = true
+  try {
+    const response = await fetch('/api/enable-banking/sync-all', {
+      method: 'POST',
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(data.error ?? 'Synchronisation fehlgeschlagen.')
+    }
+    const results: Array<{
+      sourceName: string
+      ok: boolean
+      inserted?: number
+      updated?: number
+      error?: string
+    }> = data.results ?? []
+    let successes = 0
+    let failures = 0
+    for (const r of results) {
+      if (r.ok) {
+        successes += 1
+        toast.success(
+          `${r.sourceName}: ${r.inserted ?? 0} neu, ${r.updated ?? 0} aktualisiert`,
+        )
+      } else {
+        failures += 1
+        toast.error(`${r.sourceName}: ${r.error ?? 'Fehler'}`)
+      }
+    }
+    if (results.length === 0) {
+      toast.message('Keine verbundenen Banken zum Synchronisieren.')
+    } else if (failures === 0) {
+      toast.success(`${successes} Banken synchronisiert`)
+    }
+    await Promise.all([loadSources(), loadTransactions()])
+  } catch (error) {
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : 'Synchronisation fehlgeschlagen.',
+    )
+  } finally {
+    isSyncingAll.value = false
+  }
+}
 const splitDialogOpen = ref(false)
 const splitTarget = ref<BankTransactionRow | null>(null)
 const deleteDialogOpen = ref(false)
@@ -424,10 +480,22 @@ async function handleSingleArchive(
             Importierte Transaktionen aus Bankauszügen.
           </CardDescription>
         </div>
-        <Button @click="importDialogOpen = true">
-          <Upload class="mr-2 size-4" />
-          Import
-        </Button>
+        <div class="flex items-center gap-2">
+          <Button
+            v-if="enableBankingEnabled && hasEnableBankingSources"
+            variant="outline"
+            :disabled="isSyncingAll"
+            @click="syncAllEnableBankingSources"
+          >
+            <Loader2 v-if="isSyncingAll" class="mr-2 size-4 animate-spin" />
+            <RefreshCw v-else class="mr-2 size-4" />
+            Alle Banken synchronisieren
+          </Button>
+          <Button @click="importDialogOpen = true">
+            <Upload class="mr-2 size-4" />
+            Import
+          </Button>
+        </div>
       </div>
     </CardHeader>
     <CardContent>

@@ -4,11 +4,13 @@ import Dashboard from '@/components/Dashboard.vue'
 import ImportSourceManager from '@/components/import-sources/ImportSourceManager.vue'
 import { getImportSources } from '@/lib/bank-transactions'
 import { getImportTypes } from '@/lib/bank-import/service'
+import { isEnableBankingConfigured } from '@/lib/enable-banking/config'
 import { getSidebarPlans } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
 
 const sources = await getImportSources()
 const importTypes = getImportTypes()
+const enableBankingEnabled = isEnableBankingConfigured()
 
 // Sidebar plan items
 const { currentMonth, latest } = await getSidebarPlans()
@@ -42,6 +44,7 @@ if (latest && latest.id !== currentMonth?.id) {
         client:load
         initialSources={sources}
         importTypes={importTypes}
+        enableBankingEnabled={enableBankingEnabled}
       />
     </div>
   </Dashboard>
