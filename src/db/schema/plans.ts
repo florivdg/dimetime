@@ -155,9 +155,9 @@ export const statementImport = sqliteTable(
     sourceId: text('source_id')
       .notNull()
       .references(() => importSource.id, { onDelete: 'cascade' }),
-    fileName: text('file_name').notNull(),
-    fileSha256: text('file_sha256').notNull(),
-    fileType: text('file_type', { enum: ['csv', 'xlsx'] }).notNull(),
+    fileName: text('file_name'),
+    fileSha256: text('file_sha256'),
+    fileType: text('file_type', { enum: ['csv', 'xlsx', 'api'] }).notNull(),
     phase: text('phase', { enum: ['preview', 'commit'] }).notNull(),
     status: text('status', { enum: ['success', 'failed'] }).notNull(),
     previewCount: integer('preview_count').notNull().default(0),

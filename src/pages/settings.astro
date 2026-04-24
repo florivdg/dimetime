@@ -3,6 +3,7 @@ import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
 import UserSettings from '@/components/settings/UserSettings.vue'
 import ThemeSettings from '@/components/settings/ThemeSettings.vue'
+import ApiKeyManager from '@/components/settings/ApiKeyManager.vue'
 import { getSidebarPlans } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
 import { getAllSettings } from '@/lib/settings'
@@ -45,6 +46,7 @@ const initialSettings = await getAllSettings(userId)
       <div class="flex flex-col gap-6">
         <ThemeSettings client:load initialSettings={initialSettings} />
         <UserSettings client:load initialSettings={initialSettings} />
+        <ApiKeyManager client:load />
       </div>
     </div>
   </Dashboard>

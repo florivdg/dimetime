@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { companionKeyPermissions } from '@/lib/companion-api'
 import { getAllSettings } from '@/lib/settings'
 import { defineMiddleware } from 'astro:middleware'
 
@@ -7,6 +8,45 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Allow auth API routes (must be first)
   if (pathname.startsWith('/api/auth')) {
+    return next()
+  }
+
+  // API-Key-geschützte Ingest-Routen (vor Session-Check)
+  if (pathname.startsWith('/api/ingest/')) {
+    const key = context.request.headers.get('x-api-key')
+    if (!key) {
+      return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    const result = await auth.api.verifyApiKey({
+      body: {
+        key,
+        permissions: companionKeyPermissions(),
+      },
+    })
+
+    if (!result.valid || !result.key) {
+      return new Response(
+        JSON.stringify({
+          error: result.error?.message ?? 'Ungültiger API-Key',
+        }),
+        {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    context.locals.apiKey = {
+      id: result.key.id,
+      referenceId: result.key.referenceId,
+      name: result.key.name,
+      permissions:
+        (result.key.permissions as Record<string, string[]> | null) ?? null,
+    }
     return next()
   }
 

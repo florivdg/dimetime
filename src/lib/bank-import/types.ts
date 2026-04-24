@@ -4,7 +4,7 @@ export type ImportSourceKind = 'bank_account' | 'credit_card' | 'other'
 
 export type DefaultPlanAssignment = 'auto_month' | 'none'
 
-export type ImportFileType = 'csv' | 'xlsx'
+export type ImportFileType = 'csv' | 'xlsx' | 'api'
 
 export type ImportPhase = 'preview' | 'commit'
 

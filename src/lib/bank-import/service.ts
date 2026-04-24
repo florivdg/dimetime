@@ -10,6 +10,7 @@ import type {
   DefaultPlanAssignment,
   ImportFileType,
   ImportTypeDescriptor,
+  NormalizedBankTransactionInput,
 } from '@/lib/bank-import/types'
 import { monthFromIsoDate } from '@/lib/bank-import/normalize'
 import {
@@ -202,36 +203,22 @@ async function getSourceById(sourceId: string): Promise<ImportSourceRow> {
   return source
 }
 
-async function prepareImportData(
-  sourceId: string,
-  file: File,
-): Promise<PreparedImportData> {
-  const source = await getSourceById(sourceId)
-  const descriptor = getImportTypeDescriptorByPreset(source.preset)
-  const fileName = file.name || 'upload'
-  const fileType = detectFileType(fileName, file.type)
-  if (!fileType) {
-    throw validationError(
-      'Dateityp wird nicht unterstützt. Erlaubt sind CSV oder XLSX.',
-    )
-  }
+interface PreparedRowsResult {
+  uniqueRows: Awaited<ReturnType<typeof dedupeRowsInFile>>['uniqueRows']
+  duplicateInFile: number
+  assignments: AssignmentResult[]
+  existingByDedupeKey: Map<string, ExistingTransactionMatch>
+  pendingUpgradeMatches: Map<string, ExistingTransactionMatch>
+  warnings: string[]
+}
 
-  const expectedExtensions = descriptor.extensions
-  const hasExpectedExtension = expectedExtensions.some((extension) =>
-    fileName.toLowerCase().endsWith(extension),
-  )
-  if (!hasExpectedExtension) {
-    throw validationError(
-      `Falscher Dateityp für ${descriptor.name}. Erwartet: ${expectedExtensions.join(', ')}.`,
-    )
-  }
-
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const fileSha256 = await hashFileSha256(bytes)
-  const parsed = await parseWithPreset(source.preset, fileName, bytes)
-  const { rows: statusDedupedRows, pendingDropped } = dedupeByStatusUpgrade(
-    parsed.rows,
-  )
+async function prepareFromNormalizedRows(
+  source: ImportSourceRow,
+  normalizedRows: Awaited<ReturnType<typeof parseIngCsvFile>>['rows'],
+  parserWarnings: string[],
+): Promise<PreparedRowsResult> {
+  const { rows: statusDedupedRows, pendingDropped } =
+    dedupeByStatusUpgrade(normalizedRows)
   const { uniqueRows, duplicateInFile: rawDuplicateInFile } =
     await dedupeRowsInFile(statusDedupedRows)
   const duplicateInFile = rawDuplicateInFile + pendingDropped
@@ -333,7 +320,7 @@ async function prepareImportData(
     }
   }
 
-  const warnings = [...parsed.warnings]
+  const warnings = [...parserWarnings]
   const unassignedCount = assignments.filter(
     (assignment) => !assignment.planId,
   ).length
@@ -349,12 +336,6 @@ async function prepareImportData(
   }
 
   return {
-    source,
-    fileName,
-    fileType,
-    fileSha256,
-    parserType: descriptor,
-    parsedRows: parsed.rows,
     uniqueRows,
     duplicateInFile,
     assignments,
@@ -364,11 +345,55 @@ async function prepareImportData(
   }
 }
 
+async function prepareImportData(
+  sourceId: string,
+  file: File,
+): Promise<PreparedImportData> {
+  const source = await getSourceById(sourceId)
+  const descriptor = getImportTypeDescriptorByPreset(source.preset)
+  const fileName = file.name || 'upload'
+  const fileType = detectFileType(fileName, file.type)
+  if (!fileType) {
+    throw validationError(
+      'Dateityp wird nicht unterstützt. Erlaubt sind CSV oder XLSX.',
+    )
+  }
+
+  const expectedExtensions = descriptor.extensions
+  const hasExpectedExtension = expectedExtensions.some((extension) =>
+    fileName.toLowerCase().endsWith(extension),
+  )
+  if (!hasExpectedExtension) {
+    throw validationError(
+      `Falscher Dateityp für ${descriptor.name}. Erwartet: ${expectedExtensions.join(', ')}.`,
+    )
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const fileSha256 = await hashFileSha256(bytes)
+  const parsed = await parseWithPreset(source.preset, fileName, bytes)
+  const prepared = await prepareFromNormalizedRows(
+    source,
+    parsed.rows,
+    parsed.warnings,
+  )
+
+  return {
+    source,
+    fileName,
+    fileType,
+    fileSha256,
+    parserType: descriptor,
+    parsedRows: parsed.rows,
+    ...prepared,
+  }
+}
+
 async function logFailedImport(input: {
   sourceId: string
-  fileName: string
+  fileName: string | null
   fileType: ImportFileType
-  fileSha256: string
+  fileSha256: string | null
   phase: 'preview' | 'commit'
   errorMessage: string
   triggeredByUserId?: string | null
@@ -388,6 +413,231 @@ async function logFailedImport(input: {
     triggeredByUserId: input.triggeredByUserId ?? null,
     createdAt: new Date(),
   })
+}
+
+interface StatementImportMeta {
+  fileName: string | null
+  fileSha256: string | null
+  fileType: ImportFileType
+  previewCount: number
+}
+
+async function persistUpsert(params: {
+  source: ImportSourceRow
+  prepared: PreparedRowsResult
+  statementImportMeta: StatementImportMeta
+  triggeredByUserId?: string | null
+}): Promise<BankImportCommitResult> {
+  const { source, prepared, statementImportMeta, triggeredByUserId } = params
+  const importId = crypto.randomUUID()
+  const now = new Date()
+
+  let assigned = 0
+  let unassigned = 0
+  let insertedCount = 0
+  let updatedCount = 0
+
+  const pendingUpgradeRows: Array<{
+    row: (typeof prepared.uniqueRows)[number]
+    assignment: AssignmentResult
+    existingDbRow: ExistingTransactionMatch
+  }> = []
+
+  function buildRowValues(
+    row: (typeof prepared.uniqueRows)[number],
+    planId: string | null,
+    planAssignment: 'auto_month' | 'none',
+    importSeenCount: number,
+  ) {
+    return {
+      sourceId: source.id,
+      firstSeenImportId: importId,
+      lastSeenImportId: importId,
+      externalTransactionId: row.externalTransactionId,
+      dedupeKey: row.dedupeKey,
+      bookingDate: row.bookingDate,
+      valueDate: row.valueDate,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      originalAmountCents: row.originalAmountCents,
+      originalCurrency: row.originalCurrency,
+      counterparty: row.counterparty,
+      bookingText: row.bookingText,
+      description: row.description,
+      purpose: row.purpose,
+      status: row.status,
+      balanceAfterCents: row.balanceAfterCents,
+      balanceCurrency: row.balanceCurrency,
+      country: row.country,
+      cardLast4: row.cardLast4,
+      cardholder: row.cardholder,
+      rawDataJson: JSON.stringify(row.rawData),
+      planId,
+      planAssignment,
+      importSeenCount,
+      createdAt: now,
+      updatedAt: now,
+    }
+  }
+
+  const allRows = prepared.uniqueRows
+    .map((row, index) => {
+      const assignment = prepared.assignments[index]
+      const existing = prepared.existingByDedupeKey.get(row.dedupeKey)
+
+      const pendingUpgrade = prepared.pendingUpgradeMatches.get(row.dedupeKey)
+      if (pendingUpgrade) {
+        updatedCount += 1
+        if (pendingUpgrade.planId || assignment.planId) assigned += 1
+        else unassigned += 1
+        pendingUpgradeRows.push({
+          row,
+          assignment,
+          existingDbRow: pendingUpgrade,
+        })
+        return null
+      }
+
+      if (existing) {
+        updatedCount += 1
+        const shouldAssignPlan = !existing.planId && Boolean(assignment.planId)
+        const planId = shouldAssignPlan ? assignment.planId : existing.planId
+        if (planId) assigned += 1
+        else unassigned += 1
+
+        return {
+          id: existing.id,
+          ...buildRowValues(
+            row,
+            planId,
+            shouldAssignPlan && assignment.planAssignment === 'auto_month'
+              ? 'auto_month'
+              : 'none',
+            existing.importSeenCount + 1,
+          ),
+        }
+      }
+
+      insertedCount += 1
+      if (assignment.planId) assigned += 1
+      else unassigned += 1
+
+      return buildRowValues(row, assignment.planId, assignment.planAssignment, 1)
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null)
+
+  await db.transaction(async (tx) => {
+    await tx.insert(statementImport).values({
+      id: importId,
+      sourceId: source.id,
+      fileName: statementImportMeta.fileName,
+      fileSha256: statementImportMeta.fileSha256,
+      fileType: statementImportMeta.fileType,
+      phase: 'commit',
+      status: 'success',
+      previewCount: statementImportMeta.previewCount,
+      importedCount: insertedCount,
+      updatedCount,
+      skippedCount: prepared.duplicateInFile,
+      errorMessage: null,
+      triggeredByUserId: triggeredByUserId ?? null,
+      createdAt: now,
+    })
+
+    for (const upgrade of pendingUpgradeRows) {
+      const { row, existingDbRow } = upgrade
+      await tx
+        .update(bankTransaction)
+        .set({
+          dedupeKey: row.dedupeKey,
+          externalTransactionId: row.externalTransactionId,
+          status: 'booked',
+          valueDate: row.valueDate,
+          purpose: row.purpose,
+          bookingText: row.bookingText,
+          rawDataJson: JSON.stringify(row.rawData),
+          lastSeenImportId: importId,
+          importSeenCount: existingDbRow.importSeenCount + 1,
+          isArchived: false,
+          updatedAt: now,
+        })
+        .where(eq(bankTransaction.id, existingDbRow.id))
+    }
+
+    if (allRows.length > 0) {
+      await tx
+        .insert(bankTransaction)
+        .values(allRows)
+        .onConflictDoUpdate({
+          target: [bankTransaction.sourceId, bankTransaction.dedupeKey],
+          set: {
+            externalTransactionId: sql.raw(
+              `excluded.${bankTransaction.externalTransactionId.name}`,
+            ),
+            bookingDate: sql.raw(
+              `excluded.${bankTransaction.bookingDate.name}`,
+            ),
+            valueDate: sql.raw(`excluded.${bankTransaction.valueDate.name}`),
+            amountCents: sql.raw(
+              `excluded.${bankTransaction.amountCents.name}`,
+            ),
+            currency: sql.raw(`excluded.${bankTransaction.currency.name}`),
+            originalAmountCents: sql.raw(
+              `excluded.${bankTransaction.originalAmountCents.name}`,
+            ),
+            originalCurrency: sql.raw(
+              `excluded.${bankTransaction.originalCurrency.name}`,
+            ),
+            counterparty: sql.raw(
+              `excluded.${bankTransaction.counterparty.name}`,
+            ),
+            bookingText: sql.raw(
+              `excluded.${bankTransaction.bookingText.name}`,
+            ),
+            description: sql.raw(
+              `excluded.${bankTransaction.description.name}`,
+            ),
+            purpose: sql.raw(`excluded.${bankTransaction.purpose.name}`),
+            status: sql.raw(`excluded.${bankTransaction.status.name}`),
+            balanceAfterCents: sql.raw(
+              `excluded.${bankTransaction.balanceAfterCents.name}`,
+            ),
+            balanceCurrency: sql.raw(
+              `excluded.${bankTransaction.balanceCurrency.name}`,
+            ),
+            country: sql.raw(`excluded.${bankTransaction.country.name}`),
+            cardLast4: sql.raw(`excluded.${bankTransaction.cardLast4.name}`),
+            cardholder: sql.raw(`excluded.${bankTransaction.cardholder.name}`),
+            rawDataJson: sql.raw(
+              `excluded.${bankTransaction.rawDataJson.name}`,
+            ),
+            lastSeenImportId: sql.raw(
+              `excluded.${bankTransaction.lastSeenImportId.name}`,
+            ),
+            importSeenCount: sql.raw(
+              `"bank_transaction"."${bankTransaction.importSeenCount.name}" + 1`,
+            ),
+            planAssignment: sql.raw(
+              `CASE WHEN "bank_transaction"."${bankTransaction.planAssignment.name}" = 'manual' OR "bank_transaction"."${bankTransaction.planId.name}" IS NOT NULL THEN "bank_transaction"."${bankTransaction.planAssignment.name}" ELSE excluded."${bankTransaction.planAssignment.name}" END`,
+            ),
+            planId: sql.raw(
+              `CASE WHEN "bank_transaction"."${bankTransaction.planAssignment.name}" = 'manual' OR "bank_transaction"."${bankTransaction.planId.name}" IS NOT NULL THEN "bank_transaction"."${bankTransaction.planId.name}" ELSE excluded."${bankTransaction.planId.name}" END`,
+            ),
+            updatedAt: sql.raw(`excluded.${bankTransaction.updatedAt.name}`),
+          },
+        })
+    }
+  })
+
+  return {
+    importId,
+    inserted: insertedCount,
+    updated: updatedCount,
+    skipped: prepared.duplicateInFile,
+    assigned,
+    unassigned,
+    warnings: prepared.warnings,
+  }
 }
 
 export function getImportTypes(): ImportTypeDescriptor[] {
@@ -499,238 +749,18 @@ export async function commitBankImport(input: {
   try {
     const preparedData = await prepareImportData(input.sourceId, input.file)
     prepared = preparedData
-    const importId = crypto.randomUUID()
-    const now = new Date()
 
-    let assigned = 0
-    let unassigned = 0
-    let insertedCount = 0
-    let updatedCount = 0
-
-    // Collect pending upgrade rows to handle separately
-    const pendingUpgradeRows: Array<{
-      row: (typeof preparedData.uniqueRows)[number]
-      assignment: AssignmentResult
-      existingDbRow: NonNullable<
-        ReturnType<typeof preparedData.pendingUpgradeMatches.get>
-      >
-    }> = []
-
-    const allRows = preparedData.uniqueRows
-      .map((row, index) => {
-        const assignment = preparedData.assignments[index]
-        const existing = preparedData.existingByDedupeKey.get(row.dedupeKey)
-
-        // Check for pending upgrade match
-        const pendingUpgrade = preparedData.pendingUpgradeMatches.get(
-          row.dedupeKey,
-        )
-        if (pendingUpgrade) {
-          updatedCount += 1
-          if (pendingUpgrade.planId || assignment.planId) assigned += 1
-          else unassigned += 1
-          pendingUpgradeRows.push({
-            row,
-            assignment,
-            existingDbRow: pendingUpgrade,
-          })
-          return null // exclude from main upsert
-        }
-
-        if (existing) {
-          updatedCount += 1
-          const shouldAssignPlan =
-            !existing.planId && Boolean(assignment.planId)
-          const planId = shouldAssignPlan ? assignment.planId : existing.planId
-          if (planId) assigned += 1
-          else unassigned += 1
-
-          return {
-            id: existing.id,
-            sourceId: preparedData.source.id,
-            firstSeenImportId: importId, // ignored on conflict via SQL override
-            lastSeenImportId: importId,
-            externalTransactionId: row.externalTransactionId,
-            dedupeKey: row.dedupeKey,
-            bookingDate: row.bookingDate,
-            valueDate: row.valueDate,
-            amountCents: row.amountCents,
-            currency: row.currency,
-            originalAmountCents: row.originalAmountCents,
-            originalCurrency: row.originalCurrency,
-            counterparty: row.counterparty,
-            bookingText: row.bookingText,
-            description: row.description,
-            purpose: row.purpose,
-            status: row.status,
-            balanceAfterCents: row.balanceAfterCents,
-            balanceCurrency: row.balanceCurrency,
-            country: row.country,
-            cardLast4: row.cardLast4,
-            cardholder: row.cardholder,
-            rawDataJson: JSON.stringify(row.rawData),
-            planId,
-            planAssignment:
-              shouldAssignPlan && assignment.planAssignment === 'auto_month'
-                ? ('auto_month' as const)
-                : ('none' as const),
-            importSeenCount: existing.importSeenCount + 1,
-            createdAt: now,
-            updatedAt: now,
-          }
-        } else {
-          insertedCount += 1
-          if (assignment.planId) assigned += 1
-          else unassigned += 1
-
-          return {
-            sourceId: preparedData.source.id,
-            firstSeenImportId: importId,
-            lastSeenImportId: importId,
-            externalTransactionId: row.externalTransactionId,
-            dedupeKey: row.dedupeKey,
-            bookingDate: row.bookingDate,
-            valueDate: row.valueDate,
-            amountCents: row.amountCents,
-            currency: row.currency,
-            originalAmountCents: row.originalAmountCents,
-            originalCurrency: row.originalCurrency,
-            counterparty: row.counterparty,
-            bookingText: row.bookingText,
-            description: row.description,
-            purpose: row.purpose,
-            status: row.status,
-            balanceAfterCents: row.balanceAfterCents,
-            balanceCurrency: row.balanceCurrency,
-            country: row.country,
-            cardLast4: row.cardLast4,
-            cardholder: row.cardholder,
-            rawDataJson: JSON.stringify(row.rawData),
-            planId: assignment.planId,
-            planAssignment: assignment.planAssignment,
-            importSeenCount: 1,
-            createdAt: now,
-            updatedAt: now,
-          }
-        }
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null)
-
-    await db.transaction(async (tx) => {
-      await tx.insert(statementImport).values({
-        id: importId,
-        sourceId: preparedData.source.id,
+    return await persistUpsert({
+      source: preparedData.source,
+      prepared: preparedData,
+      statementImportMeta: {
         fileName: preparedData.fileName,
         fileSha256: preparedData.fileSha256,
         fileType: preparedData.fileType,
-        phase: 'commit',
-        status: 'success',
         previewCount: preparedData.parsedRows.length,
-        importedCount: insertedCount,
-        updatedCount,
-        skippedCount: preparedData.duplicateInFile,
-        errorMessage: null,
-        triggeredByUserId: input.triggeredByUserId ?? null,
-        createdAt: now,
-      })
-
-      // Upgrade pending → booked for cross-import matches
-      for (const upgrade of pendingUpgradeRows) {
-        const { row, existingDbRow } = upgrade
-        await tx
-          .update(bankTransaction)
-          .set({
-            dedupeKey: row.dedupeKey,
-            externalTransactionId: row.externalTransactionId,
-            status: 'booked',
-            valueDate: row.valueDate,
-            purpose: row.purpose,
-            bookingText: row.bookingText,
-            rawDataJson: JSON.stringify(row.rawData),
-            lastSeenImportId: importId,
-            importSeenCount: existingDbRow.importSeenCount + 1,
-            isArchived: false,
-            updatedAt: now,
-          })
-          .where(eq(bankTransaction.id, existingDbRow.id))
-      }
-
-      if (allRows.length > 0) {
-        await tx
-          .insert(bankTransaction)
-          .values(allRows)
-          .onConflictDoUpdate({
-            target: [bankTransaction.sourceId, bankTransaction.dedupeKey],
-            set: {
-              externalTransactionId: sql.raw(
-                `excluded.${bankTransaction.externalTransactionId.name}`,
-              ),
-              bookingDate: sql.raw(
-                `excluded.${bankTransaction.bookingDate.name}`,
-              ),
-              valueDate: sql.raw(`excluded.${bankTransaction.valueDate.name}`),
-              amountCents: sql.raw(
-                `excluded.${bankTransaction.amountCents.name}`,
-              ),
-              currency: sql.raw(`excluded.${bankTransaction.currency.name}`),
-              originalAmountCents: sql.raw(
-                `excluded.${bankTransaction.originalAmountCents.name}`,
-              ),
-              originalCurrency: sql.raw(
-                `excluded.${bankTransaction.originalCurrency.name}`,
-              ),
-              counterparty: sql.raw(
-                `excluded.${bankTransaction.counterparty.name}`,
-              ),
-              bookingText: sql.raw(
-                `excluded.${bankTransaction.bookingText.name}`,
-              ),
-              description: sql.raw(
-                `excluded.${bankTransaction.description.name}`,
-              ),
-              purpose: sql.raw(`excluded.${bankTransaction.purpose.name}`),
-              status: sql.raw(`excluded.${bankTransaction.status.name}`),
-              balanceAfterCents: sql.raw(
-                `excluded.${bankTransaction.balanceAfterCents.name}`,
-              ),
-              balanceCurrency: sql.raw(
-                `excluded.${bankTransaction.balanceCurrency.name}`,
-              ),
-              country: sql.raw(`excluded.${bankTransaction.country.name}`),
-              cardLast4: sql.raw(`excluded.${bankTransaction.cardLast4.name}`),
-              cardholder: sql.raw(
-                `excluded.${bankTransaction.cardholder.name}`,
-              ),
-              rawDataJson: sql.raw(
-                `excluded.${bankTransaction.rawDataJson.name}`,
-              ),
-              lastSeenImportId: sql.raw(
-                `excluded.${bankTransaction.lastSeenImportId.name}`,
-              ),
-              importSeenCount: sql.raw(
-                `"bank_transaction"."${bankTransaction.importSeenCount.name}" + 1`,
-              ),
-              planAssignment: sql.raw(
-                `CASE WHEN "bank_transaction"."${bankTransaction.planAssignment.name}" = 'manual' OR "bank_transaction"."${bankTransaction.planId.name}" IS NOT NULL THEN "bank_transaction"."${bankTransaction.planAssignment.name}" ELSE excluded."${bankTransaction.planAssignment.name}" END`,
-              ),
-              planId: sql.raw(
-                `CASE WHEN "bank_transaction"."${bankTransaction.planAssignment.name}" = 'manual' OR "bank_transaction"."${bankTransaction.planId.name}" IS NOT NULL THEN "bank_transaction"."${bankTransaction.planId.name}" ELSE excluded."${bankTransaction.planId.name}" END`,
-              ),
-              updatedAt: sql.raw(`excluded.${bankTransaction.updatedAt.name}`),
-            },
-          })
-      }
+      },
+      triggeredByUserId: input.triggeredByUserId ?? null,
     })
-
-    return {
-      importId,
-      inserted: insertedCount,
-      updated: updatedCount,
-      skipped: preparedData.duplicateInFile,
-      assigned,
-      unassigned,
-      warnings: preparedData.warnings,
-    }
   } catch (error) {
     if (prepared) {
       await logFailedImport({
@@ -743,6 +773,47 @@ export async function commitBankImport(input: {
           error instanceof Error
             ? error.message
             : 'Unbekannter Fehler beim Import',
+        triggeredByUserId: input.triggeredByUserId ?? null,
+      })
+    }
+    throw error
+  }
+}
+
+export async function upsertNormalizedBankTransactions(input: {
+  sourceId: string
+  rows: NormalizedBankTransactionInput[]
+  triggeredByUserId?: string | null
+}): Promise<BankImportCommitResult> {
+  let source: ImportSourceRow | null = null
+
+  try {
+    source = await getSourceById(input.sourceId)
+    const prepared = await prepareFromNormalizedRows(source, input.rows, [])
+
+    return await persistUpsert({
+      source,
+      prepared,
+      statementImportMeta: {
+        fileName: null,
+        fileSha256: null,
+        fileType: 'api',
+        previewCount: input.rows.length,
+      },
+      triggeredByUserId: input.triggeredByUserId ?? null,
+    })
+  } catch (error) {
+    if (source) {
+      await logFailedImport({
+        sourceId: source.id,
+        fileName: null,
+        fileType: 'api',
+        fileSha256: null,
+        phase: 'commit',
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : 'Unbekannter Fehler beim API-Import',
         triggeredByUserId: input.triggeredByUserId ?? null,
       })
     }

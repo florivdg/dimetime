@@ -4,5 +4,11 @@ declare namespace App {
     user: import('better-auth').User | null
     session: import('better-auth').Session | null
     userSettings: import('@/lib/settings').UserSettings | null
+    apiKey: {
+      id: string
+      referenceId: string
+      name: string | null
+      permissions: Record<string, string[]> | null
+    } | null
   }
 }
