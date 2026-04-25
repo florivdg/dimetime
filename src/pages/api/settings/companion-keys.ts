@@ -57,10 +57,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       201,
     )
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'API-Key konnte nicht erstellt werden'
-    return jsonError(message, 500)
+    console.error('Fehler beim Erstellen eines Companion-API-Keys', error)
+    return jsonError('API-Key konnte nicht erstellt werden', 500)
   }
 }
