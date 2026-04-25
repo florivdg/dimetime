@@ -33,6 +33,12 @@ export function normalizeCurrency(
   return normalized.toUpperCase()
 }
 
+export function normalizeOptionalCurrency(
+  currency: string | null | undefined,
+): string | null {
+  return currency ? normalizeCurrency(currency) : null
+}
+
 export function parseGermanDateToIso(value: string): string | null {
   const normalized = normalizeText(value)
   if (!normalized) return null

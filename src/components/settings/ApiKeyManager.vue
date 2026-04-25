@@ -55,7 +55,7 @@ const isLoading = ref(true)
 const createOpen = ref(false)
 const isCreating = ref(false)
 const newName = ref('')
-const newExpiresIn = ref<string>('2592000') // 30 Tage in Sekunden
+const newExpiresIn = ref<string>('2592000')
 const generatedKey = ref<string | null>(null)
 const copied = ref(false)
 

@@ -50,6 +50,8 @@ POST /api/ingest/bank-transactions
 
 **Request-Body**
 
+Der JSON-Body darf maximal 1 MiB groß sein.
+
 ```jsonc
 {
   "sourceId": "94673667-8498-4eaf-8c38-4fb8e0bef704",
@@ -88,20 +90,20 @@ POST /api/ingest/bank-transactions
 | `rows[].bookingDate`           | string `YYYY-MM-DD`                    | ja      | Buchungsdatum.                                                                                                                                   |
 | `rows[].valueDate`             | string `YYYY-MM-DD` / null             | nein    | Wertstellungsdatum.                                                                                                                              |
 | `rows[].amountCents`           | integer                                | ja      | Betrag in Minor-Units (Cent). Negativ = Ausgabe, positiv = Eingang.                                                                              |
-| `rows[].currency`              | string(3)                              | nein    | ISO-4217-Code, Default `"EUR"`.                                                                                                                  |
+| `rows[].currency`              | string(3)                              | nein    | ISO-4217-Code, Default `"EUR"`. Wird vor Persistenz und Dedup auf Großschreibung normalisiert.                                                   |
 | `rows[].counterparty`          | string / null                          | nein    | Empfänger/Auftraggeber.                                                                                                                          |
 | `rows[].bookingText`           | string / null                          | nein    | Buchungstext der Bank (z.B. `"SEPA-ÜBERWEISUNG"`).                                                                                               |
 | `rows[].description`           | string / null                          | nein    | Zusätzliche Beschreibung.                                                                                                                        |
 | `rows[].purpose`               | string / null                          | nein    | Verwendungszweck.                                                                                                                                |
 | `rows[].status`                | `"booked"` / `"pending"` / `"unknown"` | nein    | Default `"unknown"`. Für das pending→booked-Upgrade relevant.                                                                                    |
 | `rows[].balanceAfterCents`     | integer / null                         | nein    | Kontostand nach der Buchung (in Cent).                                                                                                           |
-| `rows[].balanceCurrency`       | string(3) / null                       | nein    | Währung des Saldos.                                                                                                                              |
+| `rows[].balanceCurrency`       | string(3) / null                       | nein    | Währung des Saldos. Wird auf Großschreibung normalisiert.                                                                                        |
 | `rows[].country`               | string / null                          | nein    | Ländercode der Transaktion (z.B. Kartenzahlung im Ausland).                                                                                      |
 | `rows[].cardLast4`             | string / null                          | nein    | Letzte 4 Stellen der verwendeten Karte.                                                                                                          |
 | `rows[].cardholder`            | string / null                          | nein    | Kartenhalter.                                                                                                                                    |
 | `rows[].originalAmountCents`   | integer / null                         | nein    | Betrag in Originalwährung (z.B. Fremdwährungszahlung).                                                                                           |
-| `rows[].originalCurrency`      | string(3) / null                       | nein    | Originalwährung.                                                                                                                                 |
-| `rows[].rawData`               | `Record<string, string\|null>`         | nein    | Beliebige Rohfelder aus der Quell-API. Wird als JSON im `rawDataJson`-Feld persistiert — nützlich für Debugging und spätere Reconciliation.      |
+| `rows[].originalCurrency`      | string(3) / null                       | nein    | Originalwährung. Wird auf Großschreibung normalisiert.                                                                                           |
+| `rows[].rawData`               | `Record<string, string\|null>`         | nein    | Rohfelder aus der Quell-API. Maximal 50 Felder, Schlüssel maximal 100 Zeichen, Werte maximal 2000 Zeichen. Wird als JSON persistiert.            |
 
 ### Response (200)
 
@@ -137,6 +139,7 @@ POST /api/ingest/bank-transactions
 | 401  | `"Nicht autorisiert"`                            | Kein `x-api-key`-Header gesetzt.                                           |
 | 401  | `"Invalid API key."` bzw. `"Ungültiger API-Key"` | Key unbekannt, widerrufen, abgelaufen oder ohne `bank_transactions:write`. |
 | 404  | `"Import-Quelle nicht gefunden"`                 | `sourceId` existiert nicht.                                                |
+| 413  | `"JSON-Body ist zu groß"`                        | JSON-Body überschreitet 1 MiB.                                             |
 
 ## Deduplikation
 
