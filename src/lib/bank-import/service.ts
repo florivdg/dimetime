@@ -37,12 +37,40 @@ interface ExistingTransactionMatch {
   id: string
   dedupeKey: string
   planId: string | null
+  planAssignment: 'auto_month' | 'manual' | 'none'
   importSeenCount: number
 }
 
 interface AssignmentResult {
   planId: string | null
   planAssignment: 'auto_month' | 'none'
+}
+
+function resolvePersistedAssignment(
+  existing: Pick<ExistingTransactionMatch, 'planId' | 'planAssignment'>,
+  assignment: AssignmentResult,
+): {
+  planId: string | null
+  planAssignment: 'auto_month' | 'manual' | 'none'
+} {
+  if (existing.planAssignment === 'manual' || existing.planId) {
+    return {
+      planId: existing.planId,
+      planAssignment: existing.planAssignment,
+    }
+  }
+
+  if (assignment.planId) {
+    return {
+      planId: assignment.planId,
+      planAssignment: assignment.planAssignment,
+    }
+  }
+
+  return {
+    planId: null,
+    planAssignment: existing.planAssignment,
+  }
 }
 
 interface PreparedImportData {
@@ -236,6 +264,7 @@ async function prepareFromNormalizedRows(
             id: bankTransaction.id,
             dedupeKey: bankTransaction.dedupeKey,
             planId: bankTransaction.planId,
+            planAssignment: bankTransaction.planAssignment,
             importSeenCount: bankTransaction.importSeenCount,
           })
           .from(bankTransaction)
@@ -253,6 +282,7 @@ async function prepareFromNormalizedRows(
         id: row.id,
         dedupeKey: row.dedupeKey,
         planId: row.planId,
+        planAssignment: row.planAssignment,
         importSeenCount: row.importSeenCount,
       },
     ]),
@@ -273,6 +303,7 @@ async function prepareFromNormalizedRows(
         id: bankTransaction.id,
         dedupeKey: bankTransaction.dedupeKey,
         planId: bankTransaction.planId,
+        planAssignment: bankTransaction.planAssignment,
         importSeenCount: bankTransaction.importSeenCount,
         bookingDate: bankTransaction.bookingDate,
         amountCents: bankTransaction.amountCents,
@@ -313,6 +344,7 @@ async function prepareFromNormalizedRows(
             id: match.id,
             dedupeKey: match.dedupeKey,
             planId: match.planId,
+            planAssignment: match.planAssignment,
             importSeenCount: match.importSeenCount,
           })
         }
@@ -439,14 +471,17 @@ async function persistUpsert(params: {
 
   const pendingUpgradeRows: Array<{
     row: (typeof prepared.uniqueRows)[number]
-    assignment: AssignmentResult
+    assignment: {
+      planId: string | null
+      planAssignment: 'auto_month' | 'manual' | 'none'
+    }
     existingDbRow: ExistingTransactionMatch
   }> = []
 
   function buildRowValues(
     row: (typeof prepared.uniqueRows)[number],
     planId: string | null,
-    planAssignment: 'auto_month' | 'none',
+    planAssignment: 'auto_month' | 'manual' | 'none',
     importSeenCount: number,
   ) {
     return {
@@ -488,11 +523,15 @@ async function persistUpsert(params: {
       const pendingUpgrade = prepared.pendingUpgradeMatches.get(row.dedupeKey)
       if (pendingUpgrade) {
         updatedCount += 1
-        if (pendingUpgrade.planId || assignment.planId) assigned += 1
+        const persistedAssignment = resolvePersistedAssignment(
+          pendingUpgrade,
+          assignment,
+        )
+        if (persistedAssignment.planId) assigned += 1
         else unassigned += 1
         pendingUpgradeRows.push({
           row,
-          assignment,
+          assignment: persistedAssignment,
           existingDbRow: pendingUpgrade,
         })
         return null
@@ -500,19 +539,19 @@ async function persistUpsert(params: {
 
       if (existing) {
         updatedCount += 1
-        const shouldAssignPlan = !existing.planId && Boolean(assignment.planId)
-        const planId = shouldAssignPlan ? assignment.planId : existing.planId
-        if (planId) assigned += 1
+        const persistedAssignment = resolvePersistedAssignment(
+          existing,
+          assignment,
+        )
+        if (persistedAssignment.planId) assigned += 1
         else unassigned += 1
 
         return {
           id: existing.id,
           ...buildRowValues(
             row,
-            planId,
-            shouldAssignPlan && assignment.planAssignment === 'auto_month'
-              ? 'auto_month'
-              : 'none',
+            persistedAssignment.planId,
+            persistedAssignment.planAssignment,
             existing.importSeenCount + 1,
           ),
         }
@@ -522,7 +561,12 @@ async function persistUpsert(params: {
       if (assignment.planId) assigned += 1
       else unassigned += 1
 
-      return buildRowValues(row, assignment.planId, assignment.planAssignment, 1)
+      return buildRowValues(
+        row,
+        assignment.planId,
+        assignment.planAssignment,
+        1,
+      )
     })
     .filter((row): row is NonNullable<typeof row> => row !== null)
 
@@ -545,7 +589,7 @@ async function persistUpsert(params: {
     })
 
     for (const upgrade of pendingUpgradeRows) {
-      const { row, existingDbRow } = upgrade
+      const { row, assignment, existingDbRow } = upgrade
       await tx
         .update(bankTransaction)
         .set({
@@ -556,6 +600,8 @@ async function persistUpsert(params: {
           purpose: row.purpose,
           bookingText: row.bookingText,
           rawDataJson: JSON.stringify(row.rawData),
+          planId: assignment.planId,
+          planAssignment: assignment.planAssignment,
           lastSeenImportId: importId,
           importSeenCount: existingDbRow.importSeenCount + 1,
           isArchived: false,
