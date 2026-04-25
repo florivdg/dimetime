@@ -148,6 +148,7 @@ beforeAll(() => {
       "bank_transaction_id" text NOT NULL REFERENCES "bank_transaction"("id") ON DELETE cascade,
       "amount_cents" integer NOT NULL,
       "label" text,
+      "note" text,
       "budget_id" text REFERENCES "planned_transaction"("id") ON DELETE set null,
       "plan_id" text REFERENCES "plan"("id") ON DELETE set null,
       "sort_order" integer DEFAULT 0 NOT NULL,
