@@ -4,21 +4,36 @@ import * as authSchema from './schema/auth'
 import * as plansSchema from './schema/plans'
 import * as settingsSchema from './schema/settings'
 
-const sqlite = new Database(process.env.DB_FILE_NAME!)
+function createDb() {
+  const sqlite = new Database(process.env.DB_FILE_NAME!)
 
-// Enable foreign key constraints
-sqlite.run('PRAGMA foreign_keys = ON;')
+  sqlite.run('PRAGMA foreign_keys = ON;')
 
-// Use exclusive locking to avoid -shm file (required for Docker volumes that don't support mmap)
-sqlite.run('PRAGMA locking_mode = EXCLUSIVE;')
+  // Use exclusive locking to avoid -shm file (required for Docker volumes that
+  // don't support mmap). Skipped in dev because Vite HMR re-evaluates this
+  // module and a second connection would deadlock against the held lock.
+  if (import.meta.env.PROD) {
+    sqlite.run('PRAGMA locking_mode = EXCLUSIVE;')
+  }
 
-// Enable write ahead logging for better concurrency
-sqlite.run('PRAGMA journal_mode = WAL;')
+  sqlite.run('PRAGMA journal_mode = WAL;')
 
-const db = drizzle({
-  client: sqlite,
-  schema: { ...authSchema, ...plansSchema, ...settingsSchema },
-})
+  return drizzle({
+    client: sqlite,
+    schema: { ...authSchema, ...plansSchema, ...settingsSchema },
+  })
+}
+
+type Db = ReturnType<typeof createDb>
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __dimetimeDb: Db | undefined
+}
+
+// Cache on globalThis so HMR re-execution reuses the same connection
+// instead of opening a new one against the held SQLite lock.
+const db: Db = globalThis.__dimetimeDb ?? (globalThis.__dimetimeDb = createDb())
 
 export type DbOrTransaction =
   | typeof db
