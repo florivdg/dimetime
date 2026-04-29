@@ -202,6 +202,18 @@ function clearSelection() {
   lastSelectedId.value = null
 }
 
+function pruneSelectionToVisibleRows() {
+  const visibleIds = new Set(rows.value.map((r) => r.id))
+  const next = new Set<string>()
+  for (const id of selectedIds.value) {
+    if (visibleIds.has(id)) next.add(id)
+  }
+  selectedIds.value = next
+  if (lastSelectedId.value && !visibleIds.has(lastSelectedId.value)) {
+    lastSelectedId.value = null
+  }
+}
+
 function openDeleteDialog(row: BankTransactionRow) {
   transactionToDelete.value = row
   deleteDialogOpen.value = true
@@ -233,7 +245,7 @@ async function handleBulkAssignPlan(planId: string | null) {
         ? `${totalCount} Transaktion(en) Plan zugewiesen`
         : `${totalCount} Transaktion(en) Plan entfernt`,
     )
-    selectedIds.value = new Set()
+    pruneSelectionToVisibleRows()
   } else {
     toast.error('Plan konnte nicht zugewiesen werden.')
   }
@@ -314,7 +326,7 @@ async function handleBulkAssignBudget(budgetId: string | null) {
         ? `${totalCount} Transaktion(en) Budget zugewiesen`
         : `${totalCount} Transaktion(en) Budget entfernt`,
     )
-    selectedIds.value = new Set()
+    pruneSelectionToVisibleRows()
   } else {
     toast.error('Budget konnte nicht zugewiesen werden.')
   }
@@ -333,7 +345,7 @@ async function handleBulkArchive(isArchived: boolean) {
         ? `${totalCount} Transaktion(en) archiviert`
         : `${totalCount} Transaktion(en) entarchiviert`,
     )
-    selectedIds.value = new Set()
+    pruneSelectionToVisibleRows()
   } else {
     toast.error('Archivierung konnte nicht durchgeführt werden.')
   }

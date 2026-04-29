@@ -308,6 +308,7 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
                   v-if="transaction.isBudget"
                   :budgeted-cents="transaction.amount"
                   :spent-cents="budgetSpending[transaction.id] ?? 0"
+                  :plan-date="transaction.planDate"
                 />
               </div>
             </TableCell>

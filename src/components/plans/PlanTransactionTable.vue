@@ -61,6 +61,7 @@ const props = withDefaults(
     sortDir: 'asc' | 'desc'
     isArchived?: boolean
     budgetSpending?: Record<string, number>
+    planDate?: string
   }>(),
   {
     budgetSpending: () => ({}),
@@ -247,6 +248,7 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
                   v-if="transaction.isBudget"
                   :budgeted-cents="transaction.amount"
                   :spent-cents="budgetSpending[transaction.id] ?? 0"
+                  :plan-date="planDate"
                 />
               </div>
             </TableCell>

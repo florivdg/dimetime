@@ -582,6 +582,7 @@ function handleFilterReset() {
         :sort-dir="sortDir"
         :is-archived="plan.isArchived"
         :budget-spending="budgetSpending"
+        :plan-date="plan.date"
         @edit="handleEdit"
         @move="handleMove"
         @deleted="handleDeleted"
