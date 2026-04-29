@@ -67,6 +67,45 @@ export function truncateText(text: string | null, maxLength = 100): string {
   return text.slice(0, maxLength) + '…'
 }
 
+export interface MonthPacing {
+  daysElapsed: number
+  totalDays: number
+  percentElapsed: number
+  isCurrent: boolean
+}
+
+/**
+ * Compute time pacing within the calendar month of a plan date.
+ * `planDate` is YYYY-MM-DD; the month containing it defines the period.
+ */
+export function getMonthPacing(
+  planDate: string,
+  today: Date = new Date(),
+): MonthPacing {
+  const [yearStr, monthStr] = planDate.split('-')
+  const year = Number(yearStr)
+  const monthIdx = Number(monthStr) - 1
+  const totalDays = new Date(year, monthIdx + 1, 0).getDate()
+
+  const isCurrent =
+    today.getFullYear() === year && today.getMonth() === monthIdx
+  const isPast =
+    today.getFullYear() > year ||
+    (today.getFullYear() === year && today.getMonth() > monthIdx)
+
+  let daysElapsed: number
+  if (isCurrent) daysElapsed = today.getDate()
+  else if (isPast) daysElapsed = totalDays
+  else daysElapsed = 0
+
+  return {
+    daysElapsed,
+    totalDays,
+    percentElapsed: (daysElapsed / totalDays) * 100,
+    isCurrent,
+  }
+}
+
 /**
  * Format recurrence type to German display string
  * @param recurrence - Recurrence type
