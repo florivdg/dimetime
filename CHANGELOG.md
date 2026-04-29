@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.10.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.9.3...v0.10.0)
+
+### 🚀 Enhancements
+
+- **budgets:** Add progress bar and monthly pacing tooltip to budget badge across plans and transactions ([bcb6e30](https://github.com/florivdg/dimetime/commit/bcb6e30), [098fa21](https://github.com/florivdg/dimetime/commit/098fa21))
+- **bank-transactions:** Persist bulk selection across actions ([ea20e1c](https://github.com/florivdg/dimetime/commit/ea20e1c))
+
+### 🩹 Fixes
+
+- **db:** Prevent SQLite lock errors in dev by caching connection across HMR ([2a39592](https://github.com/florivdg/dimetime/commit/2a39592))
+
+### 🏡 Chore
+
+- **tsconfig:** Add bun types to tsconfig.json ([69d7a0a](https://github.com/florivdg/dimetime/commit/69d7a0a))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.9.3
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.9.2...v0.9.3)
