@@ -1,4 +1,14 @@
 {
+  "entry": [
+    "**/*.test.ts",
+    "src/lib/bank-import/parsers/__fixtures__/generate-easybank-fixture.ts"
+  ],
   "ignorePatterns": ["src/components/ui/**"],
-  "ignoreDependencies": ["@tanstack/vue-table", "class-variance-authority"]
+  "ignoreDependencies": [
+    "@tanstack/vue-table",
+    "class-variance-authority",
+    "@astrojs/node",
+    "@astrojs/vue",
+    "@tailwindcss/vite"
+  ]
 }

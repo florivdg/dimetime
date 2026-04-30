@@ -15,7 +15,7 @@ import { getPlanById } from './plans'
 
 // Infer types from Drizzle schema
 export type TransactionPreset = typeof transactionPreset.$inferSelect
-export type NewTransactionPreset = typeof transactionPreset.$inferInsert
+type NewTransactionPreset = typeof transactionPreset.$inferInsert
 
 // Preset with enriched data for display
 export type PresetWithTags = TransactionPreset & {

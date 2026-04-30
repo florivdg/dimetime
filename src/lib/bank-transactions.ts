@@ -22,7 +22,7 @@ import {
 import { unionAll } from 'drizzle-orm/sqlite-core'
 
 export type ImportSource = typeof importSource.$inferSelect
-export type NewImportSource = typeof importSource.$inferInsert
+type NewImportSource = typeof importSource.$inferInsert
 export type BankTransaction = typeof bankTransaction.$inferSelect
 
 export interface CreateImportSourceInput {
@@ -59,13 +59,6 @@ export interface BankTransactionQueryOptions {
   sortDir?: 'asc' | 'desc'
   page?: number
   limit?: number
-}
-
-export type BankTransactionWithRelations = BankTransaction & {
-  sourceName: string | null
-  planDate: string | null
-  planName: string | null
-  budgetName: string | null
 }
 
 export interface BankTransactionRow {
@@ -386,39 +379,6 @@ export async function getBankTransactionById(
   return db.query.bankTransaction.findFirst({
     where: eq(bankTransaction.id, id),
   })
-}
-
-export async function updateBankTransactionPlan(
-  id: string,
-  planId: string | null,
-): Promise<BankTransaction | undefined> {
-  const [updated] = await db
-    .update(bankTransaction)
-    .set({
-      planId,
-      planAssignment: planId ? 'manual' : 'none',
-      updatedAt: new Date(),
-    })
-    .where(eq(bankTransaction.id, id))
-    .returning()
-
-  return updated
-}
-
-export async function updateBankTransactionNote(
-  id: string,
-  note: string | null,
-): Promise<BankTransaction | undefined> {
-  const [updated] = await db
-    .update(bankTransaction)
-    .set({
-      note,
-      updatedAt: new Date(),
-    })
-    .where(eq(bankTransaction.id, id))
-    .returning()
-
-  return updated
 }
 
 export async function updateBankTransactionFields(

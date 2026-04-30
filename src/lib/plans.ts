@@ -177,7 +177,7 @@ export async function getCurrentMonthPlan(): Promise<Plan | undefined> {
 /**
  * Get the latest (most recent by date) non-archived plan
  */
-export async function getLatestPlan(): Promise<Plan | undefined> {
+async function getLatestPlan(): Promise<Plan | undefined> {
   return db.query.plan.findFirst({
     where: eq(plan.isArchived, false),
     orderBy: desc(plan.date),

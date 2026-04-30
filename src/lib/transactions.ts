@@ -26,7 +26,6 @@ import {
 
 // Infer types from Drizzle schema
 export type Transaction = typeof plannedTransaction.$inferSelect
-export type NewTransaction = typeof plannedTransaction.$inferInsert
 
 // Transaction with category and plan details for display
 export type TransactionWithCategory = Transaction & {

@@ -2,37 +2,11 @@ import { db, type DbOrTransaction } from '@/db/database'
 import {
   bankTransaction,
   bankTransactionSplit,
-  plan,
   plannedTransaction,
 } from '@/db/schema/plans'
 import { and, eq, inArray, sum } from 'drizzle-orm'
 
 export type BankTransactionSplit = typeof bankTransactionSplit.$inferSelect
-
-export interface SplitWithBudget extends BankTransactionSplit {
-  budgetName: string | null
-  planDate: string | null
-  planName: string | null
-}
-
-export interface SplitParentInfo {
-  id: string
-  bookingDate: string
-  counterparty: string | null
-  description: string | null
-  sourceName: string | null
-  status: string
-  planId: string | null
-  planDate: string | null
-  planName: string | null
-  isArchived: boolean
-}
-
-export interface SplitGroup {
-  parentId: string
-  parent: SplitParentInfo
-  children: SplitWithBudget[]
-}
 
 function assertValidSplitAmounts(
   parentAmountCents: number,
@@ -138,70 +112,6 @@ export async function getSplitById(
   return db.query.bankTransactionSplit.findFirst({
     where: eq(bankTransactionSplit.id, splitId),
   })
-}
-
-export async function getSplitsForTransactionIds(
-  ids: string[],
-  parentInfoMap?: Map<string, SplitParentInfo>,
-): Promise<SplitGroup[]> {
-  if (ids.length === 0) return []
-
-  const rows = await db
-    .select({
-      id: bankTransactionSplit.id,
-      bankTransactionId: bankTransactionSplit.bankTransactionId,
-      amountCents: bankTransactionSplit.amountCents,
-      label: bankTransactionSplit.label,
-      note: bankTransactionSplit.note,
-      budgetId: bankTransactionSplit.budgetId,
-      planId: bankTransactionSplit.planId,
-      sortOrder: bankTransactionSplit.sortOrder,
-      isArchived: bankTransactionSplit.isArchived,
-      createdAt: bankTransactionSplit.createdAt,
-      updatedAt: bankTransactionSplit.updatedAt,
-      budgetName: plannedTransaction.name,
-      planDate: plan.date,
-      planName: plan.name,
-    })
-    .from(bankTransactionSplit)
-    .leftJoin(
-      plannedTransaction,
-      eq(bankTransactionSplit.budgetId, plannedTransaction.id),
-    )
-    .leftJoin(plan, eq(bankTransactionSplit.planId, plan.id))
-    .where(inArray(bankTransactionSplit.bankTransactionId, ids))
-    .orderBy(bankTransactionSplit.sortOrder)
-
-  const grouped = new Map<string, SplitWithBudget[]>()
-  for (const row of rows) {
-    const parentId = row.bankTransactionId
-    if (!grouped.has(parentId)) grouped.set(parentId, [])
-    grouped.get(parentId)!.push({
-      ...row,
-      budgetName: row.budgetName ?? null,
-      planDate: row.planDate ?? null,
-      planName: row.planName ?? null,
-    })
-  }
-
-  return Array.from(grouped.entries())
-    .filter(([parentId]) => !parentInfoMap || parentInfoMap.has(parentId))
-    .map(([parentId, children]) => ({
-      parentId,
-      parent: parentInfoMap?.get(parentId) ?? {
-        id: parentId,
-        bookingDate: '',
-        counterparty: null,
-        description: null,
-        sourceName: null,
-        status: 'unknown',
-        planId: null,
-        planDate: null,
-        planName: null,
-        isArchived: false,
-      },
-      children,
-    }))
 }
 
 function buildSpendingRecord(

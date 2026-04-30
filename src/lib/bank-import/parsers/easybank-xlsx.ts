@@ -28,10 +28,6 @@ export const EASYBANK_XLSX_IMPORT_TYPE: ImportTypeDescriptor = {
   requiredColumns: REQUIRED_COLUMNS,
 }
 
-function normalizeHeader(value: unknown): string {
-  return normalizeText(value)?.toLowerCase() ?? ''
-}
-
 function findHeaderRow(rows: unknown[][]): {
   headerRowIndex: number
   headerCells: string[]
@@ -265,6 +261,3 @@ export async function parseEasybankXlsxFile(
     },
   }
 }
-
-// Keep export used by unit-like checks and endpoint metadata.
-export const EASYBANK_HEADER_NORMALIZER = normalizeHeader
