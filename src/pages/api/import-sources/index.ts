@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { createImportSource, getImportSources } from '@/lib/bank-transactions'
+import { error, json, parseJson, validate } from '@/lib/api/responses'
 
 const createSourceSchema = z.object({
   name: z.string().min(1).max(200),
@@ -15,49 +16,26 @@ const createSourceSchema = z.object({
 
 export const GET: APIRoute = async () => {
   const sources = await getImportSources()
-  return new Response(JSON.stringify({ sources }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json({ sources })
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
 
-  const parsed = createSourceSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(createSourceSchema, body)
+  if (data instanceof Response) return data
 
   try {
-    const source = await createImportSource(parsed.data)
-    return new Response(JSON.stringify(source), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Import-Quelle konnte nicht erstellt werden:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Import-Quelle konnte nicht erstellt werden',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    const source = await createImportSource(data)
+    return json(source, 201)
+  } catch (err) {
+    console.error('Import-Quelle konnte nicht erstellt werden:', err)
+    return error(
+      err instanceof Error
+        ? err.message
+        : 'Import-Quelle konnte nicht erstellt werden',
+      500,
     )
   }
 }

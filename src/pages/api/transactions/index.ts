@@ -7,6 +7,7 @@ import {
 } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
 import { getSetting } from '@/lib/settings'
+import { error, json, parseJson, validate } from '@/lib/api/responses'
 
 const querySchema = z.object({
   search: z.string().optional(),
@@ -73,13 +74,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
     limit: url.searchParams.get('limit') || undefined,
   }
 
-  const parsed = querySchema.safeParse(rawParams)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(querySchema, rawParams)
+  if (data instanceof Response) return data
 
   const userId = locals.user?.id
   const groupByType = userId
@@ -87,7 +83,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
     : false
 
   const result = await getTransactions({
-    ...parsed.data,
+    ...data,
     groupByType,
   })
 
@@ -97,61 +93,31 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const budgetSpending =
     budgetIds.length > 0 ? await getBudgetSpendingForBudgets(budgetIds) : {}
 
-  return new Response(JSON.stringify({ ...result, budgetSpending }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json({ ...result, budgetSpending })
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
 
-  const parsed = createSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(createSchema, body)
+  if (data instanceof Response) return data
 
-  // Check if the target plan exists and is not archived
-  const targetPlan = await getPlanById(parsed.data.planId)
-  if (!targetPlan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const targetPlan = await getPlanById(data.planId)
+  if (!targetPlan) return error('Plan nicht gefunden', 404)
 
   if (targetPlan.isArchived) {
-    return new Response(
-      JSON.stringify({
-        error:
-          'Transaktionen können nicht zu einem archivierten Plan hinzugefügt werden.',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    return error(
+      'Transaktionen können nicht zu einem archivierten Plan hinzugefügt werden.',
+      403,
     )
   }
 
   try {
-    const transaction = await createTransaction(parsed.data)
-    return new Response(JSON.stringify(transaction), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Failed to create transaction:', error)
-    return new Response(
-      JSON.stringify({ error: 'Transaktion konnte nicht erstellt werden' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    const transaction = await createTransaction(data)
+    return json(transaction, 201)
+  } catch (err) {
+    console.error('Failed to create transaction:', err)
+    return error('Transaktion konnte nicht erstellt werden', 500)
   }
 }

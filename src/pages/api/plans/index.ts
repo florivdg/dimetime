@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { createPlan, getAllPlans, searchPlans } from '@/lib/plans'
+import { json, parseJson, validate } from '@/lib/api/responses'
 
 const createPlanSchema = z.object({
   name: z.string().max(200, 'Name ist zu lang').nullable().optional(),
@@ -19,7 +20,6 @@ export const GET: APIRoute = async ({ url }) => {
   const includeArchived = url.searchParams.get('includeArchived') === 'true'
   const yearParam = url.searchParams.get('year')
 
-  // Parse year parameter: null/"all" = undefined, otherwise parse as number
   const year =
     yearParam === 'all' || !yearParam ? undefined : parseInt(yearParam, 10)
 
@@ -27,35 +27,16 @@ export const GET: APIRoute = async ({ url }) => {
     ? await searchPlans(search, includeArchived, year)
     : await getAllPlans(includeArchived, year)
 
-  return new Response(JSON.stringify({ plans }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json({ plans })
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
 
-  const parsed = createPlanSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(createPlanSchema, body)
+  if (data instanceof Response) return data
 
-  const plan = await createPlan(parsed.data)
-
-  return new Response(JSON.stringify(plan), {
-    status: 201,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  const plan = await createPlan(data)
+  return json(plan, 201)
 }

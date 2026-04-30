@@ -1,6 +1,13 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { createPreset, getPresets } from '@/lib/presets'
+import {
+  error,
+  json,
+  parseJson,
+  unauthorized,
+  validate,
+} from '@/lib/api/responses'
 
 const querySchema = z.object({
   search: z.string().optional(),
@@ -54,12 +61,7 @@ const createSchema = z.object({
 
 export const GET: APIRoute = async ({ url, locals }) => {
   const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!userId) return unauthorized()
 
   const rawParams = {
     search: url.searchParams.get('search') || undefined,
@@ -73,77 +75,39 @@ export const GET: APIRoute = async ({ url, locals }) => {
     limit: url.searchParams.get('limit') || undefined,
   }
 
-  const parsed = querySchema.safeParse(rawParams)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(querySchema, rawParams)
+  if (data instanceof Response) return data
 
   try {
-    const result = await getPresets(userId, parsed.data)
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Error fetching presets:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Laden der Vorlagen',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    const result = await getPresets(userId, data)
+    return json(result)
+  } catch (err) {
+    console.error('Error fetching presets:', err)
+    return error(
+      err instanceof Error ? err.message : 'Fehler beim Laden der Vorlagen',
+      500,
     )
   }
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!userId) return unauthorized()
 
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiger Request-Body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
 
-  const parsed = createSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(createSchema, body)
+  if (data instanceof Response) return data
 
   try {
-    const preset = await createPreset(userId, parsed.data)
-    return new Response(JSON.stringify(preset), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Error creating preset:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Erstellen der Vorlage',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    const preset = await createPreset(userId, data)
+    return json(preset, 201)
+  } catch (err) {
+    console.error('Error creating preset:', err)
+    return error(
+      err instanceof Error ? err.message : 'Fehler beim Erstellen der Vorlage',
+      500,
     )
   }
 }

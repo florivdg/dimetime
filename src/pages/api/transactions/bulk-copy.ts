@@ -5,6 +5,13 @@ import { plannedTransaction, plan } from '@/db/schema/plans'
 import { eq, inArray } from 'drizzle-orm'
 import { adjustDueDateToMonth } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
+import {
+  error,
+  json,
+  parseJson,
+  unauthorized,
+  validate,
+} from '@/lib/api/responses'
 
 const bulkCopySchema = z.object({
   targetPlanId: z.uuid(),
@@ -13,49 +20,20 @@ const bulkCopySchema = z.object({
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!userId) return unauthorized()
 
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiger Request-Body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
 
-  const parsed = bulkCopySchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(bulkCopySchema, body)
+  if (data instanceof Response) return data
 
-  const transactionIds = Array.from(new Set(parsed.data.transactionIds))
+  const transactionIds = Array.from(new Set(data.transactionIds))
 
-  // Validate target plan
-  const targetPlan = await getPlanById(parsed.data.targetPlanId)
-  if (!targetPlan) {
-    return new Response(JSON.stringify({ error: 'Zielplan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-  if (targetPlan.isArchived) {
-    return new Response(JSON.stringify({ error: 'Zielplan ist archiviert' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const targetPlan = await getPlanById(data.targetPlanId)
+  if (!targetPlan) return error('Zielplan nicht gefunden', 404)
+  if (targetPlan.isArchived) return error('Zielplan ist archiviert', 400)
 
-  // Get all source transactions with their plan info
   const sourceTransactions = await db
     .select({
       id: plannedTransaction.id,
@@ -72,18 +50,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .where(inArray(plannedTransaction.id, transactionIds))
 
   if (sourceTransactions.length === 0) {
-    return new Response(
-      JSON.stringify({ error: 'Keine gültigen Transaktionen gefunden' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
-    )
+    return error('Keine gültigen Transaktionen gefunden', 404)
   }
 
   if (sourceTransactions.length !== transactionIds.length) {
-    return new Response(
-      JSON.stringify({
-        error: 'Einige der ausgewählten Transaktionen wurden nicht gefunden',
-      }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
+    return error(
+      'Einige der ausgewählten Transaktionen wurden nicht gefunden',
+      404,
     )
   }
 
@@ -97,7 +70,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       dueDate: adjustDueDateToMonth(source.dueDate, targetPlan.date),
       amount: source.amount,
       isDone: false,
-      planId: parsed.data.targetPlanId,
+      planId: data.targetPlanId,
       categoryId: source.categoryId,
       createdAt: now,
       updatedAt: now,
@@ -105,25 +78,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     await db.insert(plannedTransaction).values(valuesToInsert)
 
-    const count = valuesToInsert.length
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        count,
-      }),
-      { status: 201, headers: { 'Content-Type': 'application/json' } },
-    )
-  } catch (error) {
-    console.error('Error bulk copying transactions:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Kopieren der Transaktionen',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    return json({ success: true, count: valuesToInsert.length }, 201)
+  } catch (err) {
+    console.error('Error bulk copying transactions:', err)
+    return error(
+      err instanceof Error
+        ? err.message
+        : 'Fehler beim Kopieren der Transaktionen',
+      500,
     )
   }
 }

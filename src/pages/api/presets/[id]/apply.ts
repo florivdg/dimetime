@@ -1,6 +1,13 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { applyPresetToPlan, getPresetById } from '@/lib/presets'
+import {
+  error,
+  json,
+  parseJson,
+  unauthorized,
+  validate,
+} from '@/lib/api/responses'
 
 const applySchema = z.object({
   planId: z.uuid(),
@@ -12,71 +19,29 @@ const applySchema = z.object({
 
 export const POST: APIRoute = async ({ params, request, locals }) => {
   const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!userId) return unauthorized()
 
   const { id } = params
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Fehlende Preset-ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!id) return error('Fehlende Preset-ID', 400)
 
-  // Verify preset exists and belongs to user
   const existing = await getPresetById(id)
-  if (!existing) {
-    return new Response(JSON.stringify({ error: 'Vorlage nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!existing) return error('Vorlage nicht gefunden', 404)
+  if (existing.userId !== userId) return error('Nicht autorisiert', 403)
 
-  if (existing.userId !== userId) {
-    return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
 
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiger Request-Body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = applySchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(applySchema, body)
+  if (data instanceof Response) return data
 
   try {
-    const transaction = await applyPresetToPlan(id, parsed.data)
-    return new Response(JSON.stringify(transaction), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Error applying preset:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Anwenden der Vorlage',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    const transaction = await applyPresetToPlan(id, data)
+    return json(transaction, 201)
+  } catch (err) {
+    console.error('Error applying preset:', err)
+    return error(
+      err instanceof Error ? err.message : 'Fehler beim Anwenden der Vorlage',
+      500,
     )
   }
 }

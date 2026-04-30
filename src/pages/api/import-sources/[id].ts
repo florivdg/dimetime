@@ -5,6 +5,7 @@ import {
   getImportSourceById,
   updateImportSource,
 } from '@/lib/bank-transactions'
+import { error, json, parseJson, validate } from '@/lib/api/responses'
 
 const updateSourceSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -19,103 +20,51 @@ const updateSourceSchema = z.object({
 
 export const PUT: APIRoute = async ({ params, request }) => {
   const id = params.id
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Import-Quellen-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!id) return error('Import-Quellen-ID fehlt', 400)
 
   const existing = await getImportSourceById(id)
-  if (!existing) {
-    return new Response(
-      JSON.stringify({ error: 'Import-Quelle nicht gefunden' }),
-      {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      },
-    )
-  }
+  if (!existing) return error('Import-Quelle nicht gefunden', 404)
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
 
-  const parsed = updateSourceSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Eingabe',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(updateSourceSchema, body)
+  if (data instanceof Response) return data
 
   try {
-    const updated = await updateImportSource(id, parsed.data)
-    return new Response(JSON.stringify(updated), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Import-Quelle konnte nicht aktualisiert werden:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Import-Quelle konnte nicht aktualisiert werden',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    const updated = await updateImportSource(id, data)
+    return json(updated)
+  } catch (err) {
+    console.error('Import-Quelle konnte nicht aktualisiert werden:', err)
+    return error(
+      err instanceof Error
+        ? err.message
+        : 'Import-Quelle konnte nicht aktualisiert werden',
+      500,
     )
   }
 }
 
 export const DELETE: APIRoute = async ({ params }) => {
   const id = params.id
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Import-Quellen-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!id) return error('Import-Quellen-ID fehlt', 400)
 
   const existing = await getImportSourceById(id)
-  if (!existing) {
-    return new Response(
-      JSON.stringify({ error: 'Import-Quelle nicht gefunden' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  if (!existing) return error('Import-Quelle nicht gefunden', 404)
 
   try {
     const result = await deleteImportSource(id)
     if (!result.deleted) {
-      return new Response(
-        JSON.stringify({ error: result.error ?? 'Löschen fehlgeschlagen' }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } },
-      )
+      return error(result.error ?? 'Löschen fehlgeschlagen', 409)
     }
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Import-Quelle konnte nicht gelöscht werden:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Import-Quelle konnte nicht gelöscht werden',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    return json({ success: true })
+  } catch (err) {
+    console.error('Import-Quelle konnte nicht gelöscht werden:', err)
+    return error(
+      err instanceof Error
+        ? err.message
+        : 'Import-Quelle konnte nicht gelöscht werden',
+      500,
     )
   }
 }

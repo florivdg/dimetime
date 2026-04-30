@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro'
 import { createCategory, getCategoryBySlug } from '@/lib/categories'
+import { json } from '@/lib/api/responses'
 
 const DEFAULT_CATEGORIES = [
   { name: 'Einkommen', slug: 'einkommen', color: '#22c55e' },
@@ -33,8 +34,5 @@ export const POST: APIRoute = async () => {
     inserted++
   }
 
-  return new Response(JSON.stringify({ inserted, skipped }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json({ inserted, skipped })
 }

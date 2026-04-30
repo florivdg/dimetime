@@ -2,6 +2,13 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { applyMultiplePresetsToPlan, getPresetById } from '@/lib/presets'
 import { getPlanById } from '@/lib/plans'
+import {
+  error,
+  json,
+  parseJson,
+  unauthorized,
+  validate,
+} from '@/lib/api/responses'
 
 const bulkApplySchema = z.object({
   planId: z.uuid(),
@@ -14,83 +21,47 @@ const bulkApplySchema = z.object({
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!userId) return unauthorized()
 
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiger Request-Body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
 
-  const parsed = bulkApplySchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(bulkApplySchema, body)
+  if (data instanceof Response) return data
 
-  // Validate plan
-  const plan = await getPlanById(parsed.data.planId)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-  if (plan.isArchived) {
-    return new Response(JSON.stringify({ error: 'Plan ist archiviert' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const plan = await getPlanById(data.planId)
+  if (!plan) return error('Plan nicht gefunden', 404)
+  if (plan.isArchived) return error('Plan ist archiviert', 400)
 
-  // Verify all presets belong to user
-  for (const presetId of parsed.data.presetIds) {
+  for (const presetId of data.presetIds) {
     const preset = await getPresetById(presetId)
     if (!preset || preset.userId !== userId) {
-      return new Response(
-        JSON.stringify({
-          error: `Vorlage ${presetId} nicht gefunden oder nicht autorisiert`,
-        }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } },
+      return error(
+        `Vorlage ${presetId} nicht gefunden oder nicht autorisiert`,
+        403,
       )
     }
   }
 
   try {
-    const result = await applyMultiplePresetsToPlan(parsed.data.presetIds, {
-      planId: parsed.data.planId,
-      dueDate: parsed.data.dueDate,
+    const result = await applyMultiplePresetsToPlan(data.presetIds, {
+      planId: data.planId,
+      dueDate: data.dueDate,
     })
 
-    return new Response(
-      JSON.stringify({
+    return json(
+      {
         success: true,
         count: result.count,
         transactions: result.transactions,
-      }),
-      { status: 201, headers: { 'Content-Type': 'application/json' } },
+      },
+      201,
     )
-  } catch (error) {
-    console.error('Error bulk applying presets:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Anwenden der Vorlagen',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
+  } catch (err) {
+    console.error('Error bulk applying presets:', err)
+    return error(
+      err instanceof Error ? err.message : 'Fehler beim Anwenden der Vorlagen',
+      500,
     )
   }
 }
