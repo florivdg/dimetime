@@ -29,7 +29,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { ShieldCheck, Copy, Check, Loader2, RefreshCw } from 'lucide-vue-next'
+import { ShieldCheck, Loader2, RefreshCw } from 'lucide-vue-next'
+import TwoFactorBackupCodes from '@/components/TwoFactorBackupCodes.vue'
 
 const session = authClient.useSession()
 const isTwoFactorEnabled = computed(
@@ -43,7 +44,6 @@ const errorMessage = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
 const backupCodes = ref<string[]>([])
 const showBackupCodes = ref(false)
-const copiedIndex = ref<number | null>(null)
 const dialogOpen = ref(false)
 
 const passwordSchema = z.object({
@@ -84,22 +84,6 @@ async function regenerateBackupCodes(password: string) {
   } finally {
     isLoading.value = false
   }
-}
-
-async function copyBackupCode(code: string, index: number) {
-  await navigator.clipboard.writeText(code)
-  copiedIndex.value = index
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
-}
-
-async function copyAllBackupCodes() {
-  await navigator.clipboard.writeText(backupCodes.value.join('\n'))
-  copiedIndex.value = -1
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
 }
 
 const onSubmit = passwordForm.handleSubmit((values) => {
@@ -150,39 +134,15 @@ function closeBackupCodes() {
       </div>
 
       <!-- Backup Codes Display -->
-      <div v-if="showBackupCodes" class="mb-6 space-y-4">
-        <div
-          class="rounded-md border bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+      <div v-if="showBackupCodes" class="mb-6">
+        <TwoFactorBackupCodes
+          :codes="backupCodes"
+          warning-text="Dies sind Ihre neuen Backup-Codes. Die alten Codes sind nicht mehr gültig."
         >
-          <strong>Wichtig:</strong> Dies sind Ihre neuen Backup-Codes. Die alten
-          Codes sind nicht mehr gültig.
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div
-            v-for="(code, index) in backupCodes"
-            :key="code"
-            class="bg-muted flex items-center justify-between rounded px-3 py-2"
-          >
-            <code class="text-sm">{{ code }}</code>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-6"
-              @click="copyBackupCode(code, index)"
-            >
-              <Check v-if="copiedIndex === index" class="size-3" />
-              <Copy v-else class="size-3" />
-            </Button>
-          </div>
-        </div>
-        <Button variant="outline" class="w-full" @click="copyAllBackupCodes">
-          <Check v-if="copiedIndex === -1" class="size-4" />
-          <Copy v-else class="size-4" />
-          Alle Codes kopieren
-        </Button>
-        <Button variant="ghost" class="w-full" @click="closeBackupCodes">
-          Schließen
-        </Button>
+          <Button variant="ghost" class="w-full" @click="closeBackupCodes">
+            Schließen
+          </Button>
+        </TwoFactorBackupCodes>
       </div>
 
       <!-- Regenerate Backup Codes Form -->

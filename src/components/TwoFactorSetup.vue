@@ -33,6 +33,7 @@ import {
   InputGroupInput,
 } from '@/components/ui/input-group'
 import { ShieldCheck, Copy, Check, Loader2 } from 'lucide-vue-next'
+import TwoFactorBackupCodes from '@/components/TwoFactorBackupCodes.vue'
 
 type SetupStep = 'password' | 'qrcode' | 'verify' | 'backup'
 
@@ -42,7 +43,6 @@ const errorMessage = ref<string | null>(null)
 const totpUri = ref<string | null>(null)
 const totpSecret = ref<string | null>(null)
 const backupCodes = ref<string[]>([])
-const copiedIndex = ref<number | null>(null)
 const { copy: copySecret, copied: secretCopied } = useClipboard()
 
 const passwordSchema = z.object({
@@ -120,22 +120,6 @@ async function verifyTotp() {
   } finally {
     isLoading.value = false
   }
-}
-
-async function copyBackupCode(code: string, index: number) {
-  await navigator.clipboard.writeText(code)
-  copiedIndex.value = index
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
-}
-
-async function copyAllBackupCodes() {
-  await navigator.clipboard.writeText(backupCodes.value.join('\n'))
-  copiedIndex.value = -1
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
 }
 
 function finishSetup() {
@@ -273,41 +257,15 @@ function handlePinComplete(value: string[]) {
       </div>
 
       <!-- Step 4: Backup Codes -->
-      <div v-else class="space-y-4">
-        <div
-          class="rounded-md border bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200"
-        >
-          <strong>Wichtig:</strong> Speichern Sie diese Codes sicher. Sie können
-          diese nutzen, wenn Sie keinen Zugriff auf Ihre Authenticator-App
-          haben.
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div
-            v-for="(code, index) in backupCodes"
-            :key="code"
-            class="bg-muted flex items-center justify-between rounded px-3 py-2"
-          >
-            <code class="text-sm">{{ code }}</code>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-6"
-              @click="copyBackupCode(code, index)"
-            >
-              <Check v-if="copiedIndex === index" class="size-3" />
-              <Copy v-else class="size-3" />
-            </Button>
-          </div>
-        </div>
-        <Button variant="outline" class="w-full" @click="copyAllBackupCodes">
-          <Check v-if="copiedIndex === -1" class="size-4" />
-          <Copy v-else class="size-4" />
-          Alle Codes kopieren
-        </Button>
+      <TwoFactorBackupCodes
+        v-else
+        :codes="backupCodes"
+        warning-text="Speichern Sie diese Codes sicher. Sie können diese nutzen, wenn Sie keinen Zugriff auf Ihre Authenticator-App haben."
+      >
         <Button class="w-full" @click="finishSetup">
           Einrichtung abschließen
         </Button>
-      </div>
+      </TwoFactorBackupCodes>
     </CardContent>
   </Card>
 </template>
