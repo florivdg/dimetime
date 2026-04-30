@@ -2,6 +2,7 @@ import { db } from '@/db/database'
 import { plannedTransaction, category } from '@/db/schema/plans'
 import { and, asc, count, desc, eq, gte, sql, sum } from 'drizzle-orm'
 import { getCurrentMonthPlan } from '@/lib/plans'
+import { getPlanBalance } from '@/lib/transactions'
 
 // Dashboard stats types
 export interface CurrentPlanStats {
@@ -40,34 +41,6 @@ export interface MonthlyChartData {
 }
 
 export type ChartRange = '6m' | '12m' | 'year'
-
-/**
- * Get balance for a plan (income, expense, net)
- */
-async function getPlanBalance(planId: string) {
-  const result = await db
-    .select({
-      type: plannedTransaction.type,
-      total: sum(plannedTransaction.amount),
-    })
-    .from(plannedTransaction)
-    .where(eq(plannedTransaction.planId, planId))
-    .groupBy(plannedTransaction.type)
-
-  let income = 0
-  let expense = 0
-
-  for (const row of result) {
-    const total = Number(row.total) || 0
-    if (row.type === 'income') {
-      income = total
-    } else {
-      expense = total
-    }
-  }
-
-  return { income, expense, net: income - expense }
-}
 
 /**
  * Get pending transactions stats for a plan
