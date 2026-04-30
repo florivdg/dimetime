@@ -7,6 +7,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 import { user } from './auth'
+import { timestamps } from './_columns'
 
 export const category = sqliteTable(
   'category',
@@ -17,10 +18,7 @@ export const category = sqliteTable(
     name: text('name').notNull(),
     slug: text('slug').notNull(), // URL-friendly identifier (e.g., "miete", "lebensmittel")
     color: text('color'), // Hex color for UI display
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     index('category_name_idx').on(table.name),
@@ -40,10 +38,7 @@ export const plan = sqliteTable(
     isArchived: integer('is_archived', { mode: 'boolean' })
       .default(false)
       .notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [index('plan_date_idx').on(table.date)],
 )
@@ -66,10 +61,7 @@ export const plannedTransaction = sqliteTable(
     isBudget: integer('is_budget', { mode: 'boolean' })
       .default(false)
       .notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
     planId: text('plan_id').references(() => plan.id, { onDelete: 'cascade' }),
     userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
     categoryId: text('category_id').references(() => category.id, {
@@ -134,10 +126,7 @@ export const importSource = sqliteTable(
       .notNull()
       .default('auto_month'),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     index('importSource_preset_idx').on(table.preset),
@@ -241,10 +230,7 @@ export const bankTransaction = sqliteTable(
       .notNull(),
     isSplit: integer('is_split', { mode: 'boolean' }).default(false).notNull(),
     importSeenCount: integer('import_seen_count').notNull().default(1),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     uniqueIndex('bankTransaction_sourceId_dedupeKey_idx').on(
@@ -285,10 +271,7 @@ export const bankTransactionSplit = sqliteTable(
     isArchived: integer('is_archived', { mode: 'boolean' })
       .default(false)
       .notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     index('bankTransactionSplit_bankTransactionId_idx').on(
@@ -331,10 +314,7 @@ export const transactionPreset = sqliteTable(
       .default(false)
       .notNull(),
     lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     index('transactionPreset_userId_idx').on(table.userId),

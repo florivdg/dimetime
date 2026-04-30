@@ -1,11 +1,7 @@
 import { relations } from 'drizzle-orm'
-import {
-  sqliteTable,
-  text,
-  integer,
-  uniqueIndex,
-} from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { user } from './auth'
+import { timestamps } from './_columns'
 
 export const userSetting = sqliteTable(
   'user_setting',
@@ -18,10 +14,7 @@ export const userSetting = sqliteTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     key: text('key').notNull(),
     value: text('value').notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     uniqueIndex('userSetting_userId_key_idx').on(table.userId, table.key),
