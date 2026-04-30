@@ -45,4 +45,5 @@ shadcn-vue components are based on reka-ui v2. These components use `modelValue`
 - After applying changes, always run the linter `bun run lint --type-aware` and `bun run astro check`
 - If Vue.js components were changed, ensure that the TypeScript types are correct by running `bunx vue-tsc --noEmit`
 - After final changes, run the `bunx prettier --write` on changed files to ensure consistent formatting
+- `bun run fallow` runs Fallow's combined dead-code / duplication / complexity audit (https://docs.fallow.tools). A project-level `PreToolUse` hook in `.claude/settings.json` invokes `.claude/hooks/fallow-gate.sh`, which auto-blocks `git commit` / `git push` whenever `fallow audit` returns verdict `fail`. Use `bun run fallow:dupes` to surface DRY violations during refactors and `bun run fallow:dead` for unused exports/files.
 - always use german umlaute for user facing UI texts

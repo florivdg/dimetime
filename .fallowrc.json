@@ -1,0 +1,4 @@
+{
+  "ignorePatterns": ["src/components/ui/**"],
+  "ignoreDependencies": ["@tanstack/vue-table", "class-variance-authority"]
+}

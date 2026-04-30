@@ -31,3 +31,6 @@ sqlite.db
 data/
 
 .playwright-cli
+
+# fallow analysis cache
+.fallow/
