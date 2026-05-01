@@ -4,9 +4,10 @@ import { applyMultiplePresetsToPlan, getPresetById } from '@/lib/presets'
 import { getPlanById } from '@/lib/plans'
 import {
   error,
+  handle,
   json,
   parseJson,
-  unauthorized,
+  requireUserId,
   validate,
 } from '@/lib/api/responses'
 
@@ -20,8 +21,8 @@ const bulkApplySchema = z.object({
 })
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const userId = locals.user?.id
-  if (!userId) return unauthorized()
+  const userId = requireUserId(locals)
+  if (userId instanceof Response) return userId
 
   const body = await parseJson(request)
   if (body instanceof Response) return body
@@ -43,25 +44,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
   }
 
-  try {
-    const result = await applyMultiplePresetsToPlan(data.presetIds, {
-      planId: data.planId,
-      dueDate: data.dueDate,
-    })
-
-    return json(
-      {
-        success: true,
-        count: result.count,
-        transactions: result.transactions,
-      },
-      201,
-    )
-  } catch (err) {
-    console.error('Error bulk applying presets:', err)
-    return error(
-      err instanceof Error ? err.message : 'Fehler beim Anwenden der Vorlagen',
-      500,
-    )
-  }
+  return handle(
+    async () => {
+      const result = await applyMultiplePresetsToPlan(data.presetIds, {
+        planId: data.planId,
+        dueDate: data.dueDate,
+      })
+      return json(
+        {
+          success: true,
+          count: result.count,
+          transactions: result.transactions,
+        },
+        201,
+      )
+    },
+    'Fehler beim Anwenden der Vorlagen',
+    'Error bulk applying presets',
+  )
 }

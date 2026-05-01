@@ -2,12 +2,13 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { createPreset, getPresets } from '@/lib/presets'
 import {
-  error,
+  handle,
   json,
   parseJson,
-  unauthorized,
+  requireUserId,
   validate,
 } from '@/lib/api/responses'
+import { createPresetSchema } from './_schema'
 
 const querySchema = z.object({
   search: z.string().optional(),
@@ -36,32 +37,9 @@ const querySchema = z.object({
     .default(20),
 })
 
-const createSchema = z.object({
-  name: z.string().min(1).max(200),
-  note: z.string().max(2000).nullable().optional(),
-  type: z.enum(['income', 'expense']).optional(),
-  amount: z.number().int().min(0),
-  recurrence: z
-    .enum(['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'])
-    .optional(),
-  startMonth: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/)
-    .nullable()
-    .optional(),
-  endDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable()
-    .optional(),
-  categoryId: z.uuid().nullable().optional(),
-  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-  isBudget: z.boolean().optional(),
-})
-
 export const GET: APIRoute = async ({ url, locals }) => {
-  const userId = locals.user?.id
-  if (!userId) return unauthorized()
+  const userId = requireUserId(locals)
+  if (userId instanceof Response) return userId
 
   const rawParams = {
     search: url.searchParams.get('search') || undefined,
@@ -78,36 +56,26 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const data = validate(querySchema, rawParams)
   if (data instanceof Response) return data
 
-  try {
-    const result = await getPresets(userId, data)
-    return json(result)
-  } catch (err) {
-    console.error('Error fetching presets:', err)
-    return error(
-      err instanceof Error ? err.message : 'Fehler beim Laden der Vorlagen',
-      500,
-    )
-  }
+  return handle(
+    async () => json(await getPresets(userId, data)),
+    'Fehler beim Laden der Vorlagen',
+    'Error fetching presets',
+  )
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const userId = locals.user?.id
-  if (!userId) return unauthorized()
+  const userId = requireUserId(locals)
+  if (userId instanceof Response) return userId
 
   const body = await parseJson(request)
   if (body instanceof Response) return body
 
-  const data = validate(createSchema, body)
+  const data = validate(createPresetSchema, body)
   if (data instanceof Response) return data
 
-  try {
-    const preset = await createPreset(userId, data)
-    return json(preset, 201)
-  } catch (err) {
-    console.error('Error creating preset:', err)
-    return error(
-      err instanceof Error ? err.message : 'Fehler beim Erstellen der Vorlage',
-      500,
-    )
-  }
+  return handle(
+    async () => json(await createPreset(userId, data), 201),
+    'Fehler beim Erstellen der Vorlage',
+    'Error creating preset',
+  )
 }

@@ -7,9 +7,10 @@ import { adjustDueDateToMonth } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
 import {
   error,
+  handle,
   json,
   parseJson,
-  unauthorized,
+  requireUserId,
   validate,
 } from '@/lib/api/responses'
 
@@ -19,8 +20,8 @@ const bulkCopySchema = z.object({
 })
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const userId = locals.user?.id
-  if (!userId) return unauthorized()
+  const userId = requireUserId(locals)
+  if (userId instanceof Response) return userId
 
   const body = await parseJson(request)
   if (body instanceof Response) return body
@@ -60,32 +61,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
     )
   }
 
-  try {
-    const now = new Date()
-
-    const valuesToInsert = sourceTransactions.map((source) => ({
-      name: source.name,
-      note: source.note,
-      type: source.type,
-      dueDate: adjustDueDateToMonth(source.dueDate, targetPlan.date),
-      amount: source.amount,
-      isDone: false,
-      planId: data.targetPlanId,
-      categoryId: source.categoryId,
-      createdAt: now,
-      updatedAt: now,
-    }))
-
-    await db.insert(plannedTransaction).values(valuesToInsert)
-
-    return json({ success: true, count: valuesToInsert.length }, 201)
-  } catch (err) {
-    console.error('Error bulk copying transactions:', err)
-    return error(
-      err instanceof Error
-        ? err.message
-        : 'Fehler beim Kopieren der Transaktionen',
-      500,
-    )
-  }
+  return handle(
+    async () => {
+      const now = new Date()
+      const valuesToInsert = sourceTransactions.map((source) => ({
+        name: source.name,
+        note: source.note,
+        type: source.type,
+        dueDate: adjustDueDateToMonth(source.dueDate, targetPlan.date),
+        amount: source.amount,
+        isDone: false,
+        planId: data.targetPlanId,
+        categoryId: source.categoryId,
+        createdAt: now,
+        updatedAt: now,
+      }))
+      await db.insert(plannedTransaction).values(valuesToInsert)
+      return json({ success: true, count: valuesToInsert.length }, 201)
+    },
+    'Fehler beim Kopieren der Transaktionen',
+    'Error bulk copying transactions',
+  )
 }
