@@ -9,6 +9,7 @@ import {
   getTableColumns,
   like,
   sql,
+  type SQL,
 } from 'drizzle-orm'
 import { createTransaction, type CreateTransactionInput } from './transactions'
 import { getPlanById } from './plans'
@@ -89,6 +90,11 @@ function getLocalDateString(date = new Date()): string {
   return `${year}-${month}-${day}`
 }
 
+function expiryCondition() {
+  const today = getLocalDateString()
+  return sql`(${transactionPreset.endDate} IS NULL OR ${transactionPreset.endDate} >= ${today})`
+}
+
 function buildPresetConditions(userId: string, options: PresetQueryOptions) {
   const {
     search,
@@ -97,33 +103,32 @@ function buildPresetConditions(userId: string, options: PresetQueryOptions) {
     recurrence,
     includeExpired = true,
   } = options
-  const conditions = [eq(transactionPreset.userId, userId)]
-  if (search) conditions.push(like(transactionPreset.name, `%${search}%`))
-  if (type) conditions.push(eq(transactionPreset.type, type))
-  if (categoryId) conditions.push(eq(transactionPreset.categoryId, categoryId))
-  if (recurrence) conditions.push(eq(transactionPreset.recurrence, recurrence))
-  if (!includeExpired) {
-    const today = getLocalDateString()
-    conditions.push(
-      sql`(${transactionPreset.endDate} IS NULL OR ${transactionPreset.endDate} >= ${today})`,
-    )
-  }
-  return conditions
+  const cond = <T>(v: T | undefined | null, build: (val: T) => SQL) =>
+    v ? build(v) : null
+  const candidates = [
+    eq(transactionPreset.userId, userId),
+    cond(search, (v) => like(transactionPreset.name, `%${v}%`)),
+    cond(type, (v) => eq(transactionPreset.type, v)),
+    cond(categoryId, (v) => eq(transactionPreset.categoryId, v)),
+    cond(recurrence, (v) => eq(transactionPreset.recurrence, v)),
+    includeExpired ? null : expiryCondition(),
+  ]
+  return candidates.filter((c): c is SQL => c !== null)
 }
+
+const presetSortColumns = {
+  name: transactionPreset.name,
+  lastUsedAt: transactionPreset.lastUsedAt,
+  amount: transactionPreset.amount,
+  createdAt: transactionPreset.createdAt,
+} as const
 
 function applyPresetSort<T extends { orderBy: (...args: never[]) => T }>(
   query: T,
   sortBy: PresetQueryOptions['sortBy'],
   sortDir: PresetQueryOptions['sortDir'],
 ): T {
-  const sortColumn =
-    sortBy === 'name'
-      ? transactionPreset.name
-      : sortBy === 'lastUsedAt'
-        ? transactionPreset.lastUsedAt
-        : sortBy === 'amount'
-          ? transactionPreset.amount
-          : transactionPreset.createdAt
+  const sortColumn = presetSortColumns[sortBy ?? 'createdAt']
   const orderBy = sortDir === 'asc' ? asc(sortColumn) : desc(sortColumn)
   return (query.orderBy as (arg: typeof orderBy) => T)(orderBy)
 }
@@ -248,6 +253,7 @@ export async function updatePreset(
   id: string,
   input: UpdatePresetInput,
 ): Promise<TransactionPreset | undefined> {
+  // fallow-ignore-next-line code-duplication
   const setValues = buildSetValues<typeof input, NewTransactionPreset>(input, {
     name: (v, s) => {
       s.name = v
