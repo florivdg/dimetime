@@ -11,7 +11,7 @@ export const error = (message: string, status: number): Response =>
 
 const badJson = (): Response => error('Ungültiges JSON', 400)
 
-export const unauthorized = (): Response => error('Nicht authentifiziert', 401)
+const unauthorized = (): Response => error('Nicht authentifiziert', 401)
 
 export async function parseJson(request: Request): Promise<unknown> {
   try {

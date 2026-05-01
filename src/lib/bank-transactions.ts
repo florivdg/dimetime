@@ -137,23 +137,32 @@ export async function updateImportSource(
   id: string,
   input: UpdateImportSourceInput,
 ): Promise<ImportSource | undefined> {
-  const updateData: Partial<NewImportSource> = {
-    updatedAt: new Date(),
-  }
-
-  if (input.name !== undefined) updateData.name = input.name
-  if (input.preset !== undefined) updateData.preset = input.preset
-  if (input.sourceKind !== undefined) updateData.sourceKind = input.sourceKind
-  if (input.bankName !== undefined) updateData.bankName = input.bankName
-  if (input.accountLabel !== undefined)
-    updateData.accountLabel = input.accountLabel
-  if (input.accountIdentifier !== undefined) {
-    updateData.accountIdentifier = input.accountIdentifier
-  }
-  if (input.defaultPlanAssignment !== undefined) {
-    updateData.defaultPlanAssignment = input.defaultPlanAssignment
-  }
-  if (input.isActive !== undefined) updateData.isActive = input.isActive
+  const updateData = buildSetValues<typeof input, NewImportSource>(input, {
+    name: (v, s) => {
+      s.name = v
+    },
+    preset: (v, s) => {
+      s.preset = v
+    },
+    sourceKind: (v, s) => {
+      s.sourceKind = v
+    },
+    bankName: (v, s) => {
+      s.bankName = v
+    },
+    accountLabel: (v, s) => {
+      s.accountLabel = v
+    },
+    accountIdentifier: (v, s) => {
+      s.accountIdentifier = v
+    },
+    defaultPlanAssignment: (v, s) => {
+      s.defaultPlanAssignment = v
+    },
+    isActive: (v, s) => {
+      s.isActive = v
+    },
+  })
 
   const [updated] = await db
     .update(importSource)
