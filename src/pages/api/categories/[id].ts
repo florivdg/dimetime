@@ -5,13 +5,7 @@ import {
   getCategoryBySlug,
   updateCategory,
 } from '@/lib/categories'
-import {
-  error,
-  json,
-  parseJson,
-  requireExisting,
-  validate,
-} from '@/lib/api/responses'
+import { error, json, requireExisting, validateBody } from '@/lib/api/responses'
 import { updateCategorySchema } from './_schema'
 
 export const PUT: APIRoute = async ({ params, request }) => {
@@ -24,10 +18,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
   )
   if (found instanceof Response) return found
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(updateCategorySchema, body)
+  const data = await validateBody(request, updateCategorySchema)
   if (data instanceof Response) return data
 
   if (data.slug && data.slug !== found.resource.slug) {

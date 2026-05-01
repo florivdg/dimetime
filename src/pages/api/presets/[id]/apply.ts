@@ -1,13 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { applyPresetToPlan, getPresetById } from '@/lib/presets'
-import {
-  handle,
-  json,
-  parseJson,
-  requireOwned,
-  validate,
-} from '@/lib/api/responses'
+import { handle, json, requireOwned, validateBody } from '@/lib/api/responses'
 
 const applySchema = z.object({
   planId: z.uuid(),
@@ -28,10 +22,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   )
   if (owned instanceof Response) return owned
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(applySchema, body)
+  const data = await validateBody(request, applySchema)
   if (data instanceof Response) return data
 
   return handle(

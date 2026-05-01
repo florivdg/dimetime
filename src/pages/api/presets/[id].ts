@@ -4,9 +4,8 @@ import {
   error,
   handle,
   json,
-  parseJson,
   requireOwned,
-  validate,
+  validateBody,
 } from '@/lib/api/responses'
 import { updatePresetSchema } from './_schema'
 
@@ -21,9 +20,7 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
   )
   if (owned instanceof Response) return owned
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-  const data = validate(updatePresetSchema, body)
+  const data = await validateBody(request, updatePresetSchema)
   if (data instanceof Response) return data
 
   return handle(

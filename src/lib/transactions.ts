@@ -104,6 +104,36 @@ export interface UpdateTransactionInput {
   planId?: string
 }
 
+const TRANSACTION_QUERY_KEYS = [
+  'search',
+  'categoryId',
+  'planId',
+  'type',
+  'isDone',
+  'dateFrom',
+  'dateTo',
+  'amountMin',
+  'amountMax',
+  'hideZeroValue',
+  'sortBy',
+  'sortDir',
+  'page',
+  'limit',
+] as const
+
+export function parseTransactionQueryParams(
+  searchParams: URLSearchParams,
+): Record<(typeof TRANSACTION_QUERY_KEYS)[number], string | undefined> {
+  const out = {} as Record<
+    (typeof TRANSACTION_QUERY_KEYS)[number],
+    string | undefined
+  >
+  for (const key of TRANSACTION_QUERY_KEYS) {
+    out[key] = searchParams.get(key) || undefined
+  }
+  return out
+}
+
 // fallow-ignore-next-line complexity
 function buildTransactionFilters(options: TransactionQueryOptions) {
   const {
@@ -258,6 +288,32 @@ export async function getTransactionWithPlanStatus(
     ...result[0],
     planIsArchived: result[0].planIsArchived ?? false,
   }
+}
+
+/**
+ * Validates a target plan for an in-flight transaction move.
+ * Returns null if no move requested, otherwise an error tuple.
+ */
+// fallow-ignore-next-line complexity
+export async function validateTransactionPlanChange(
+  currentPlanId: string | null,
+  nextPlanId: string | undefined,
+  loadPlan: (id: string) => Promise<{ isArchived: boolean } | undefined | null>,
+): Promise<{ message: string; status: number } | null> {
+  if (!nextPlanId) return null
+  if (nextPlanId === currentPlanId) {
+    return { message: 'Transaktion ist bereits in diesem Plan', status: 400 }
+  }
+  const targetPlan = await loadPlan(nextPlanId)
+  if (!targetPlan) return { message: 'Zielplan nicht gefunden', status: 404 }
+  if (targetPlan.isArchived) {
+    return {
+      message:
+        'Transaktion kann nicht zu einem archivierten Plan verschoben werden',
+      status: 403,
+    }
+  }
+  return null
 }
 
 /**

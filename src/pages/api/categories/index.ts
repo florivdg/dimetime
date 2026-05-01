@@ -6,7 +6,7 @@ import {
   getCategoryBySlug,
   searchCategories,
 } from '@/lib/categories'
-import { error, json, parseJson, validate } from '@/lib/api/responses'
+import { error, json, validateBody } from '@/lib/api/responses'
 import { createCategorySchema } from './_schema'
 
 export const GET: APIRoute = async ({ url }) => {
@@ -20,10 +20,7 @@ export const GET: APIRoute = async ({ url }) => {
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(createCategorySchema, body)
+  const data = await validateBody(request, createCategorySchema)
   if (data instanceof Response) return data
 
   const { name, color } = data

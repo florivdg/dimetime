@@ -9,9 +9,8 @@ import {
   error,
   handle,
   json,
-  parseJson,
   requireUserId,
-  validate,
+  validateBody,
 } from '@/lib/api/responses'
 
 const bulkCopySchema = z.object({
@@ -23,10 +22,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const userId = requireUserId(locals)
   if (userId instanceof Response) return userId
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(bulkCopySchema, body)
+  const data = await validateBody(request, bulkCopySchema)
   if (data instanceof Response) return data
 
   const transactionIds = Array.from(new Set(data.transactionIds))

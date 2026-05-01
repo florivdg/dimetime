@@ -4,10 +4,11 @@ import {
   createTransaction,
   getBudgetSpendingForBudgets,
   getTransactions,
+  parseTransactionQueryParams,
 } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
 import { getSetting } from '@/lib/settings'
-import { error, json, parseJson, validate } from '@/lib/api/responses'
+import { error, json, validate, validateBody } from '@/lib/api/responses'
 
 const querySchema = z.object({
   search: z.string().optional(),
@@ -56,25 +57,12 @@ const createSchema = z.object({
   categoryId: z.uuid().nullable().optional(),
 })
 
+// fallow-ignore-next-line complexity
 export const GET: APIRoute = async ({ url, locals }) => {
-  const rawParams = {
-    search: url.searchParams.get('search') || undefined,
-    categoryId: url.searchParams.get('categoryId') || undefined,
-    planId: url.searchParams.get('planId') || undefined,
-    type: url.searchParams.get('type') || undefined,
-    isDone: url.searchParams.get('isDone') || undefined,
-    dateFrom: url.searchParams.get('dateFrom') || undefined,
-    dateTo: url.searchParams.get('dateTo') || undefined,
-    amountMin: url.searchParams.get('amountMin') || undefined,
-    amountMax: url.searchParams.get('amountMax') || undefined,
-    hideZeroValue: url.searchParams.get('hideZeroValue') || undefined,
-    sortBy: url.searchParams.get('sortBy') || undefined,
-    sortDir: url.searchParams.get('sortDir') || undefined,
-    page: url.searchParams.get('page') || undefined,
-    limit: url.searchParams.get('limit') || undefined,
-  }
-
-  const data = validate(querySchema, rawParams)
+  const data = validate(
+    querySchema,
+    parseTransactionQueryParams(url.searchParams),
+  )
   if (data instanceof Response) return data
 
   const userId = locals.user?.id
@@ -97,10 +85,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(createSchema, body)
+  const data = await validateBody(request, createSchema)
   if (data instanceof Response) return data
 
   const targetPlan = await getPlanById(data.planId)

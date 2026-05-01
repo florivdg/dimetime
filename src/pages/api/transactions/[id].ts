@@ -4,9 +4,10 @@ import {
   deleteTransaction,
   getTransactionWithPlanStatus,
   updateTransaction,
+  validateTransactionPlanChange,
 } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
-import { error, json, parseJson, validate } from '@/lib/api/responses'
+import { error, json, validateBody } from '@/lib/api/responses'
 
 const updateTransactionSchema = z.object({
   name: z
@@ -44,27 +45,15 @@ export const PUT: APIRoute = async ({ params, request }) => {
     )
   }
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(updateTransactionSchema, body)
+  const data = await validateBody(request, updateTransactionSchema)
   if (data instanceof Response) return data
 
-  if (data.planId) {
-    if (data.planId === existing.planId) {
-      return error('Transaktion ist bereits in diesem Plan', 400)
-    }
-
-    const targetPlan = await getPlanById(data.planId)
-    if (!targetPlan) return error('Zielplan nicht gefunden', 404)
-
-    if (targetPlan.isArchived) {
-      return error(
-        'Transaktion kann nicht zu einem archivierten Plan verschoben werden',
-        403,
-      )
-    }
-  }
+  const planError = await validateTransactionPlanChange(
+    existing.planId,
+    data.planId,
+    getPlanById,
+  )
+  if (planError) return error(planError.message, planError.status)
 
   const updated = await updateTransaction(id, data)
   return json(updated)
