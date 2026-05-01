@@ -8,7 +8,20 @@ import {
   validate,
   validateBody,
 } from '@/lib/api/responses'
+import { parseQueryParams } from '@/lib/api/query-params'
 import { createPresetSchema } from './_schema'
+
+const PRESET_QUERY_KEYS = [
+  'search',
+  'type',
+  'categoryId',
+  'recurrence',
+  'includeExpired',
+  'sortBy',
+  'sortDir',
+  'page',
+  'limit',
+] as const
 
 const querySchema = z.object({
   search: z.string().optional(),
@@ -41,17 +54,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const userId = requireUserId(locals)
   if (userId instanceof Response) return userId
 
-  const rawParams = {
-    search: url.searchParams.get('search') || undefined,
-    type: url.searchParams.get('type') || undefined,
-    categoryId: url.searchParams.get('categoryId') || undefined,
-    recurrence: url.searchParams.get('recurrence') || undefined,
-    includeExpired: url.searchParams.get('includeExpired') || undefined,
-    sortBy: url.searchParams.get('sortBy') || undefined,
-    sortDir: url.searchParams.get('sortDir') || undefined,
-    page: url.searchParams.get('page') || undefined,
-    limit: url.searchParams.get('limit') || undefined,
-  }
+  const rawParams = parseQueryParams(url.searchParams, PRESET_QUERY_KEYS)
 
   const data = validate(querySchema, rawParams)
   if (data instanceof Response) return data

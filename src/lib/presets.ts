@@ -12,6 +12,7 @@ import {
 } from 'drizzle-orm'
 import { createTransaction, type CreateTransactionInput } from './transactions'
 import { getPlanById } from './plans'
+import { buildSetValues } from '@/lib/db/partial-update'
 
 // Infer types from Drizzle schema
 export type TransactionPreset = typeof transactionPreset.$inferSelect
@@ -247,24 +248,42 @@ export async function updatePreset(
   id: string,
   input: UpdatePresetInput,
 ): Promise<TransactionPreset | undefined> {
-  const updateData: Partial<NewTransactionPreset> = {}
-
-  if (input.name !== undefined) updateData.name = input.name
-  if (input.note !== undefined) updateData.note = input.note
-  if (input.type !== undefined) updateData.type = input.type
-  if (input.amount !== undefined) updateData.amount = input.amount
-  if (input.recurrence !== undefined) updateData.recurrence = input.recurrence
-  if (input.startMonth !== undefined) updateData.startMonth = input.startMonth
-  if (input.endDate !== undefined) updateData.endDate = input.endDate
-  if (input.categoryId !== undefined) updateData.categoryId = input.categoryId
-  if (input.dayOfMonth !== undefined) updateData.dayOfMonth = input.dayOfMonth
-  if (input.isBudget !== undefined) updateData.isBudget = input.isBudget
-
-  updateData.updatedAt = new Date()
+  const setValues = buildSetValues<typeof input, NewTransactionPreset>(input, {
+    name: (v, s) => {
+      s.name = v
+    },
+    note: (v, s) => {
+      s.note = v
+    },
+    type: (v, s) => {
+      s.type = v
+    },
+    amount: (v, s) => {
+      s.amount = v
+    },
+    recurrence: (v, s) => {
+      s.recurrence = v
+    },
+    startMonth: (v, s) => {
+      s.startMonth = v
+    },
+    endDate: (v, s) => {
+      s.endDate = v
+    },
+    categoryId: (v, s) => {
+      s.categoryId = v
+    },
+    dayOfMonth: (v, s) => {
+      s.dayOfMonth = v
+    },
+    isBudget: (v, s) => {
+      s.isBudget = v
+    },
+  })
 
   const [updated] = await db
     .update(transactionPreset)
-    .set(updateData)
+    .set(setValues)
     .where(eq(transactionPreset.id, id))
     .returning()
 
@@ -355,6 +374,26 @@ export function isPresetExpired(preset: TransactionPreset): boolean {
   return preset.endDate < today
 }
 
+function matchesQuarterlyRecurrence(
+  startMonth: string,
+  planMonth: string,
+): boolean {
+  const [startYear, startMonthNum] = startMonth.split('-').map(Number)
+  const [planYear, planMonthNum] = planMonth.split('-').map(Number)
+  const monthsDiff =
+    (planYear - startYear) * 12 + (planMonthNum - startMonthNum)
+  return monthsDiff >= 0 && monthsDiff % 3 === 0
+}
+
+function matchesYearlyRecurrence(
+  startMonth: string,
+  planMonth: string,
+): boolean {
+  const startMonthNum = parseInt(startMonth.split('-')[1], 10)
+  const planMonthNum = parseInt(planMonth.split('-')[1], 10)
+  return planMonthNum === startMonthNum && planMonth >= startMonth
+}
+
 /**
  * Check if a preset matches a plan month based on recurrence rules
  * @param preset - The preset to check
@@ -368,38 +407,18 @@ export function presetMatchesPlanMonth(
   const startMonth = preset.startMonth
   if (!startMonth) return true // No startMonth = always matches (legacy presets)
 
-  // Check if expired
-  if (preset.endDate) {
-    const endMonth = preset.endDate.substring(0, 7) // YYYY-MM from YYYY-MM-DD
-    if (planMonth > endMonth) return false
-  }
-
-  // Check if plan is before start month
+  if (preset.endDate && planMonth > preset.endDate.substring(0, 7)) return false
   if (planMonth < startMonth) return false
 
   switch (preset.recurrence) {
     case 'einmalig':
       return planMonth === startMonth
-
     case 'monatlich':
       return planMonth >= startMonth
-
-    case 'vierteljährlich': {
-      // Calculate months between startMonth and planMonth
-      const [startYear, startMonthNum] = startMonth.split('-').map(Number)
-      const [planYear, planMonthNum] = planMonth.split('-').map(Number)
-      const monthsDiff =
-        (planYear - startYear) * 12 + (planMonthNum - startMonthNum)
-      return monthsDiff >= 0 && monthsDiff % 3 === 0
-    }
-
-    case 'jährlich': {
-      // Same month of the year, on or after start
-      const startMonthNum = parseInt(startMonth.split('-')[1], 10)
-      const planMonthNum = parseInt(planMonth.split('-')[1], 10)
-      return planMonthNum === startMonthNum && planMonth >= startMonth
-    }
-
+    case 'vierteljährlich':
+      return matchesQuarterlyRecurrence(startMonth, planMonth)
+    case 'jährlich':
+      return matchesYearlyRecurrence(startMonth, planMonth)
     default:
       return false
   }

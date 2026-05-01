@@ -23,6 +23,8 @@ import {
   getBudgetSpendingFromSplits,
   getBudgetSpendingFromSplitsForPlan,
 } from '@/lib/bank-transaction-splits'
+import { parseQueryParams } from '@/lib/api/query-params'
+import { buildSetValues } from '@/lib/db/partial-update'
 
 // Infer types from Drizzle schema
 export type Transaction = typeof plannedTransaction.$inferSelect
@@ -124,14 +126,7 @@ const TRANSACTION_QUERY_KEYS = [
 export function parseTransactionQueryParams(
   searchParams: URLSearchParams,
 ): Record<(typeof TRANSACTION_QUERY_KEYS)[number], string | undefined> {
-  const out = {} as Record<
-    (typeof TRANSACTION_QUERY_KEYS)[number],
-    string | undefined
-  >
-  for (const key of TRANSACTION_QUERY_KEYS) {
-    out[key] = searchParams.get(key) || undefined
-  }
-  return out
+  return parseQueryParams(searchParams, TRANSACTION_QUERY_KEYS)
 }
 
 // fallow-ignore-next-line complexity
@@ -323,31 +318,38 @@ export async function updateTransaction(
   id: string,
   input: UpdateTransactionInput,
 ): Promise<Transaction | undefined> {
-  const now = new Date()
-  const updateData: {
-    name?: string
-    note?: string | null
-    type?: 'income' | 'expense'
-    dueDate?: string
-    amount?: number
-    isDone?: boolean
-    isBudget?: boolean
-    categoryId?: string | null
-    planId?: string
-    updatedAt: Date
-  } = {
-    updatedAt: now,
-  }
-
-  if (input.name !== undefined) updateData.name = input.name
-  if (input.note !== undefined) updateData.note = input.note
-  if (input.type !== undefined) updateData.type = input.type
-  if (input.dueDate !== undefined) updateData.dueDate = input.dueDate
-  if (input.amount !== undefined) updateData.amount = input.amount
-  if (input.isDone !== undefined) updateData.isDone = input.isDone
-  if (input.isBudget !== undefined) updateData.isBudget = input.isBudget
-  if (input.categoryId !== undefined) updateData.categoryId = input.categoryId
-  if (input.planId !== undefined) updateData.planId = input.planId
+  const updateData = buildSetValues<
+    typeof input,
+    typeof plannedTransaction.$inferInsert
+  >(input, {
+    name: (v, s) => {
+      s.name = v
+    },
+    note: (v, s) => {
+      s.note = v
+    },
+    type: (v, s) => {
+      s.type = v
+    },
+    dueDate: (v, s) => {
+      s.dueDate = v
+    },
+    amount: (v, s) => {
+      s.amount = v
+    },
+    isDone: (v, s) => {
+      s.isDone = v
+    },
+    isBudget: (v, s) => {
+      s.isBudget = v
+    },
+    categoryId: (v, s) => {
+      s.categoryId = v
+    },
+    planId: (v, s) => {
+      s.planId = v
+    },
+  })
 
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -371,7 +373,7 @@ export async function updateTransaction(
         .update(bankTransaction)
         .set({
           budgetId: null,
-          updatedAt: now,
+          updatedAt: updateData.updatedAt,
         })
         .where(eq(bankTransaction.budgetId, id))
     }

@@ -1,6 +1,6 @@
 export type FieldMappers<TFields, TRow> = {
   [K in keyof TFields]?: (
-    value: NonNullable<TFields[K]> | null,
+    value: Exclude<TFields[K], undefined>,
     set: Partial<TRow>,
   ) => void
 }
