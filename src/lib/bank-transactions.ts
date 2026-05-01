@@ -195,40 +195,45 @@ export async function deleteBankTransaction(id: string): Promise<boolean> {
   return result.length > 0
 }
 
-export async function getBankTransactions(
-  options: BankTransactionQueryOptions = {},
-): Promise<PaginatedBankTransactions> {
-  const {
-    sourceId,
-    planId,
-    status,
-    search,
-    dateFrom,
-    dateTo,
-    sortBy = 'bookingDate',
-    sortDir = 'desc',
-    page = 1,
-    limit = 20,
-  } = options
-
-  // Base conditions applied to the parent bankTransaction in both branches
+// fallow-ignore-next-line complexity
+function buildBankTxParentConditions(options: BankTransactionQueryOptions) {
+  const { sourceId, status, dateFrom, dateTo, showArchived } = options
   const parentConditions = []
   if (sourceId) parentConditions.push(eq(bankTransaction.sourceId, sourceId))
   if (status) parentConditions.push(eq(bankTransaction.status, status))
   if (dateFrom)
     parentConditions.push(gte(bankTransaction.bookingDate, dateFrom))
   if (dateTo) parentConditions.push(lte(bankTransaction.bookingDate, dateTo))
-  if (!options.showArchived) {
+  if (!showArchived)
     parentConditions.push(eq(bankTransaction.isArchived, false))
-  }
-  const parentSearchCondition = search
-    ? or(
-        like(bankTransaction.description, `%${search}%`),
-        like(bankTransaction.counterparty, `%${search}%`),
-        like(bankTransaction.purpose, `%${search}%`),
-        like(bankTransaction.bookingText, `%${search}%`),
-      )
-    : undefined
+  return parentConditions
+}
+
+function buildBankTxSearchCondition(search: string | undefined) {
+  if (!search) return undefined
+  return or(
+    like(bankTransaction.description, `%${search}%`),
+    like(bankTransaction.counterparty, `%${search}%`),
+    like(bankTransaction.purpose, `%${search}%`),
+    like(bankTransaction.bookingText, `%${search}%`),
+  )
+}
+
+// fallow-ignore-next-line complexity
+export async function getBankTransactions(
+  options: BankTransactionQueryOptions = {},
+): Promise<PaginatedBankTransactions> {
+  const {
+    planId,
+    search,
+    sortBy = 'bookingDate',
+    sortDir = 'desc',
+    page = 1,
+    limit = 20,
+  } = options
+
+  const parentConditions = buildBankTxParentConditions(options)
+  const parentSearchCondition = buildBankTxSearchCondition(search)
 
   // Branch 1: regular (non-split) transactions
   const txConditions = [...parentConditions, eq(bankTransaction.isSplit, false)]

@@ -104,12 +104,8 @@ export interface UpdateTransactionInput {
   planId?: string
 }
 
-/**
- * Get paginated transactions with optional filtering and sorting
- */
-export async function getTransactions(
-  options: TransactionQueryOptions = {},
-): Promise<PaginatedTransactions> {
+// fallow-ignore-next-line complexity
+function buildTransactionFilters(options: TransactionQueryOptions) {
   const {
     search,
     categoryId,
@@ -121,6 +117,32 @@ export async function getTransactions(
     amountMin,
     amountMax,
     hideZeroValue = true,
+  } = options
+  const conditions = []
+  if (search) conditions.push(like(plannedTransaction.name, `%${search}%`))
+  if (categoryId) conditions.push(eq(plannedTransaction.categoryId, categoryId))
+  if (planId) conditions.push(eq(plannedTransaction.planId, planId))
+  if (type) conditions.push(eq(plannedTransaction.type, type))
+  if (isDone !== undefined)
+    conditions.push(eq(plannedTransaction.isDone, isDone))
+  if (dateFrom) conditions.push(gte(plannedTransaction.dueDate, dateFrom))
+  if (dateTo) conditions.push(lte(plannedTransaction.dueDate, dateTo))
+  if (amountMin !== undefined)
+    conditions.push(gte(plannedTransaction.amount, amountMin))
+  if (amountMax !== undefined)
+    conditions.push(lte(plannedTransaction.amount, amountMax))
+  if (hideZeroValue) conditions.push(ne(plannedTransaction.amount, 0))
+  return conditions
+}
+
+/**
+ * Get paginated transactions with optional filtering and sorting
+ */
+// fallow-ignore-next-line complexity
+export async function getTransactions(
+  options: TransactionQueryOptions = {},
+): Promise<PaginatedTransactions> {
+  const {
     sortBy = 'dueDate',
     sortDir = 'desc',
     page = 1,
@@ -128,49 +150,7 @@ export async function getTransactions(
     groupByType = false,
   } = options
 
-  // Build where conditions
-  const conditions = []
-
-  if (search) {
-    conditions.push(like(plannedTransaction.name, `%${search}%`))
-  }
-
-  if (categoryId) {
-    conditions.push(eq(plannedTransaction.categoryId, categoryId))
-  }
-
-  if (planId) {
-    conditions.push(eq(plannedTransaction.planId, planId))
-  }
-
-  if (type) {
-    conditions.push(eq(plannedTransaction.type, type))
-  }
-
-  if (isDone !== undefined) {
-    conditions.push(eq(plannedTransaction.isDone, isDone))
-  }
-
-  if (dateFrom) {
-    conditions.push(gte(plannedTransaction.dueDate, dateFrom))
-  }
-
-  if (dateTo) {
-    conditions.push(lte(plannedTransaction.dueDate, dateTo))
-  }
-
-  if (amountMin !== undefined) {
-    conditions.push(gte(plannedTransaction.amount, amountMin))
-  }
-
-  if (amountMax !== undefined) {
-    conditions.push(lte(plannedTransaction.amount, amountMax))
-  }
-
-  if (hideZeroValue) {
-    conditions.push(ne(plannedTransaction.amount, 0))
-  }
-
+  const conditions = buildTransactionFilters(options)
   const whereClause =
     conditions.length === 0
       ? undefined
