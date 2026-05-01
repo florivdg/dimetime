@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import type {
   BankTransactionStatus,
   ImportTypeDescriptor,
+  NormalizedBankTransactionInput,
   ParsedImportFile,
 } from '@/lib/bank-import/types'
 import { ImportApiError, validationError } from '@/lib/bank-import/api-helpers'
@@ -10,6 +11,7 @@ import {
   normalizeText,
   parseGermanDateToIso,
   parseGermanMoney,
+  type ParsedMoney,
 } from '@/lib/bank-import/normalize'
 
 const REQUIRED_COLUMNS = [
@@ -26,6 +28,22 @@ export const EASYBANK_XLSX_IMPORT_TYPE: ImportTypeDescriptor = {
   name: 'easybank (XLSX)',
   extensions: ['.xlsx'],
   requiredColumns: REQUIRED_COLUMNS,
+}
+
+interface EasybankIndices {
+  headerRowIndex: number
+  bookingDateIndex: number
+  valueDateIndex: number | undefined
+  referenceIndex: number | undefined
+  amountIndex: number
+  descriptionIndex: number
+  typeIndex: number
+  statusIndex: number
+  cardNumberIndex: number | undefined
+  originalAmountIndex: number | undefined
+  countryIndex: number | undefined
+  cardholderIndex: number | undefined
+  detailsIndex: number | undefined
 }
 
 function findHeaderRow(rows: unknown[][]): {
@@ -78,178 +96,273 @@ function amountByType(amountCents: number, typeRaw: string | null): number {
   return amountCents
 }
 
-export async function parseEasybankXlsxFile(
-  fileName: string,
-  bytes: Uint8Array,
-): Promise<ParsedImportFile> {
-  if (!fileName.toLowerCase().endsWith('.xlsx')) {
-    throw validationError(
-      'Ungültiger Dateityp für easybank-Import. Erwartet wird eine XLSX-Datei.',
-    )
-  }
-
-  let workbook: XLSX.WorkBook
+function readEasybankWorkbook(bytes: Uint8Array): XLSX.WorkBook {
   try {
-    workbook = XLSX.read(bytes, { type: 'array' })
+    return XLSX.read(bytes, { type: 'array' })
   } catch (error) {
     if (error instanceof ImportApiError) throw error
     throw validationError(
       'EasyBank-XLSX konnte nicht gelesen werden: Datei ist beschädigt oder hat ein ungültiges Format.',
     )
   }
+}
 
-  const firstSheetName = workbook.SheetNames[0]
-  if (!firstSheetName) {
+function loadEasybankWorkbook(
+  fileName: string,
+  bytes: Uint8Array,
+): XLSX.WorkBook {
+  if (!fileName.toLowerCase().endsWith('.xlsx')) {
+    throw validationError(
+      'Ungültiger Dateityp für easybank-Import. Erwartet wird eine XLSX-Datei.',
+    )
+  }
+
+  const workbook = readEasybankWorkbook(bytes)
+
+  if (!workbook.SheetNames[0]) {
     throw validationError('EasyBank-XLSX enthält kein Tabellenblatt.')
   }
 
-  const sheet = workbook.Sheets[firstSheetName]
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw: false,
-    defval: '',
-  }) as unknown[][]
+  return workbook
+}
 
-  const { headerRowIndex, headerCells } = findHeaderRow(rows)
-  const headerMap = buildHeaderIndex(headerCells)
+function firstIndex(
+  headerMap: Record<string, number[]>,
+  key: string,
+): number | undefined {
+  return headerMap[key]?.[0]
+}
 
-  const bookingDateIndexes = headerMap['buchungsdatum'] ?? []
-  const bookingDateIndex = bookingDateIndexes[0]
-  const valueDateIndex = bookingDateIndexes[1]
-
-  const referenceIndex = headerMap['referenznummer']?.[0]
-  const amountIndex = headerMap['betrag']?.[0]
-  const descriptionIndex = headerMap['beschreibung']?.[0]
-  const typeIndex = headerMap['typ']?.[0]
-  const statusIndex = headerMap['status']?.[0]
-  const cardNumberIndex = headerMap['kartennummer']?.[0]
-  const originalAmountIndex = headerMap['originalbetrag']?.[0]
-  const countryIndex = headerMap['land']?.[0]
-  const cardholderIndex = headerMap['karteninhaber']?.[0]
-  const detailsIndex = headerMap['details']?.[0]
-
-  if (
-    bookingDateIndex === undefined ||
-    amountIndex === undefined ||
-    descriptionIndex === undefined ||
-    typeIndex === undefined ||
-    statusIndex === undefined
-  ) {
+function requireIndex(
+  headerMap: Record<string, number[]>,
+  key: string,
+): number {
+  const index = firstIndex(headerMap, key)
+  if (index === undefined) {
     throw validationError(
       'EasyBank-XLSX konnte nicht gelesen werden: Pflichtspalten fehlen in der Kopfzeile.',
     )
   }
+  return index
+}
 
-  const warnings: string[] = []
-  const normalizedRows: ParsedImportFile['rows'] = []
+function resolveEasybankHeaderIndices(rows: unknown[][]): EasybankIndices {
+  const { headerRowIndex, headerCells } = findHeaderRow(rows)
+  const headerMap = buildHeaderIndex(headerCells)
 
-  for (let i = headerRowIndex + 1; i < rows.length; i += 1) {
-    const row = rows[i] ?? []
-    const stringRow = row.map((cell) => normalizeText(cell) ?? '')
-    if (stringRow.every((value) => value.length === 0)) continue
-
-    const bookingDate = parseGermanDateToIso(stringRow[bookingDateIndex] ?? '')
-    const valueDate =
-      valueDateIndex === undefined
-        ? null
-        : parseGermanDateToIso(stringRow[valueDateIndex] ?? '')
-
-    const parsedAmount = parseGermanMoney(stringRow[amountIndex], 'EUR')
-    if (!bookingDate || !parsedAmount) {
-      warnings.push(
-        `Zeile ${i + 1} konnte nicht importiert werden und wurde übersprungen.`,
-      )
-      continue
-    }
-
-    const typeRaw = normalizeText(stringRow[typeIndex])
-    const normalizedAmountCents = amountByType(
-      parsedAmount.amountCents,
-      typeRaw,
-    )
-    const parsedOriginalAmount =
-      originalAmountIndex === undefined
-        ? null
-        : parseGermanMoney(
-            stringRow[originalAmountIndex],
-            parsedAmount.currency,
-          )
-
-    normalizedRows.push({
-      externalTransactionId:
-        referenceIndex === undefined
-          ? null
-          : normalizeText(stringRow[referenceIndex]),
-      bookingDate,
-      valueDate,
-      amountCents: normalizedAmountCents,
-      currency: parsedAmount.currency,
-      originalAmountCents: parsedOriginalAmount?.amountCents ?? null,
-      originalCurrency: parsedOriginalAmount?.currency ?? null,
-      counterparty: null,
-      bookingText: typeRaw,
-      description: normalizeText(stringRow[descriptionIndex]),
-      purpose:
-        detailsIndex === undefined
-          ? null
-          : normalizeText(stringRow[detailsIndex]),
-      status: parseStatus(
-        statusIndex === undefined ? null : stringRow[statusIndex],
-      ),
-      balanceAfterCents: null,
-      balanceCurrency: null,
-      country:
-        countryIndex === undefined
-          ? null
-          : normalizeText(stringRow[countryIndex]),
-      cardLast4:
-        cardNumberIndex === undefined
-          ? null
-          : extractCardLast4(stringRow[cardNumberIndex]),
-      cardholder:
-        cardholderIndex === undefined
-          ? null
-          : normalizeText(stringRow[cardholderIndex]),
-      rawData: {
-        referenznummer:
-          referenceIndex === undefined
-            ? null
-            : normalizeText(stringRow[referenceIndex]),
-        buchungsdatum: normalizeText(stringRow[bookingDateIndex]),
-        wertstellungsdatum:
-          valueDateIndex === undefined
-            ? null
-            : normalizeText(stringRow[valueDateIndex]),
-        betrag: normalizeText(stringRow[amountIndex]),
-        beschreibung: normalizeText(stringRow[descriptionIndex]),
-        typ: typeRaw,
-        status:
-          statusIndex === undefined
-            ? null
-            : normalizeText(stringRow[statusIndex]),
-        kartennummer:
-          cardNumberIndex === undefined
-            ? null
-            : normalizeText(stringRow[cardNumberIndex]),
-        originalbetrag:
-          originalAmountIndex === undefined
-            ? null
-            : normalizeText(stringRow[originalAmountIndex]),
-        land:
-          countryIndex === undefined
-            ? null
-            : normalizeText(stringRow[countryIndex]),
-        karteninhaber:
-          cardholderIndex === undefined
-            ? null
-            : normalizeText(stringRow[cardholderIndex]),
-        details:
-          detailsIndex === undefined
-            ? null
-            : normalizeText(stringRow[detailsIndex]),
-      },
-    })
+  return {
+    headerRowIndex,
+    bookingDateIndex: requireIndex(headerMap, 'buchungsdatum'),
+    valueDateIndex: headerMap['buchungsdatum']?.[1],
+    referenceIndex: firstIndex(headerMap, 'referenznummer'),
+    amountIndex: requireIndex(headerMap, 'betrag'),
+    descriptionIndex: requireIndex(headerMap, 'beschreibung'),
+    typeIndex: requireIndex(headerMap, 'typ'),
+    statusIndex: requireIndex(headerMap, 'status'),
+    cardNumberIndex: firstIndex(headerMap, 'kartennummer'),
+    originalAmountIndex: firstIndex(headerMap, 'originalbetrag'),
+    countryIndex: firstIndex(headerMap, 'land'),
+    cardholderIndex: firstIndex(headerMap, 'karteninhaber'),
+    detailsIndex: firstIndex(headerMap, 'details'),
   }
+}
+
+function pickOptional<T>(
+  stringRow: string[],
+  index: number | undefined,
+  transform: (value: string) => T | null,
+): T | null {
+  if (index === undefined) return null
+  return transform(stringRow[index] ?? '')
+}
+
+interface EasybankFieldTexts {
+  reference: string | null
+  valueDate: string | null
+  cardNumber: string | null
+  originalAmount: string | null
+  country: string | null
+  cardholder: string | null
+  details: string | null
+  status: string | null
+}
+
+function extractEasybankFieldTexts(
+  stringRow: string[],
+  indices: EasybankIndices,
+): EasybankFieldTexts {
+  return {
+    reference: pickOptional(stringRow, indices.referenceIndex, normalizeText),
+    valueDate: pickOptional(stringRow, indices.valueDateIndex, normalizeText),
+    cardNumber: pickOptional(stringRow, indices.cardNumberIndex, normalizeText),
+    originalAmount: pickOptional(
+      stringRow,
+      indices.originalAmountIndex,
+      normalizeText,
+    ),
+    country: pickOptional(stringRow, indices.countryIndex, normalizeText),
+    cardholder: pickOptional(stringRow, indices.cardholderIndex, normalizeText),
+    details: pickOptional(stringRow, indices.detailsIndex, normalizeText),
+    status: pickOptional(stringRow, indices.statusIndex, normalizeText),
+  }
+}
+
+function buildEasybankRawData(
+  stringRow: string[],
+  indices: EasybankIndices,
+  texts: EasybankFieldTexts,
+  typeRaw: string | null,
+): Record<string, string | null> {
+  return {
+    referenznummer: texts.reference,
+    buchungsdatum: normalizeText(stringRow[indices.bookingDateIndex]),
+    wertstellungsdatum: texts.valueDate,
+    betrag: normalizeText(stringRow[indices.amountIndex]),
+    beschreibung: normalizeText(stringRow[indices.descriptionIndex]),
+    typ: typeRaw,
+    status: texts.status,
+    kartennummer: texts.cardNumber,
+    originalbetrag: texts.originalAmount,
+    land: texts.country,
+    karteninhaber: texts.cardholder,
+    details: texts.details,
+  }
+}
+
+function parseOriginalAmount(
+  stringRow: string[],
+  indices: EasybankIndices,
+  fallbackCurrency: string,
+): { amountCents: number | null; currency: string | null } {
+  const parsed = pickOptional(stringRow, indices.originalAmountIndex, (value) =>
+    parseGermanMoney(value, fallbackCurrency),
+  )
+  if (!parsed) return { amountCents: null, currency: null }
+  return { amountCents: parsed.amountCents, currency: parsed.currency }
+}
+
+function buildEasybankParsedRow(
+  stringRow: string[],
+  indices: EasybankIndices,
+  bookingDate: string,
+  parsedAmount: ParsedMoney,
+): NormalizedBankTransactionInput {
+  const typeRaw = normalizeText(stringRow[indices.typeIndex])
+  const texts = extractEasybankFieldTexts(stringRow, indices)
+  const original = parseOriginalAmount(
+    stringRow,
+    indices,
+    parsedAmount.currency,
+  )
+
+  return {
+    externalTransactionId: texts.reference,
+    bookingDate,
+    valueDate: pickOptional(
+      stringRow,
+      indices.valueDateIndex,
+      parseGermanDateToIso,
+    ),
+    amountCents: amountByType(parsedAmount.amountCents, typeRaw),
+    currency: parsedAmount.currency,
+    originalAmountCents: original.amountCents,
+    originalCurrency: original.currency,
+    counterparty: null,
+    bookingText: typeRaw,
+    description: normalizeText(stringRow[indices.descriptionIndex]),
+    purpose: texts.details,
+    status: parseStatus(texts.status),
+    balanceAfterCents: null,
+    balanceCurrency: null,
+    country: texts.country,
+    cardLast4: pickOptional(
+      stringRow,
+      indices.cardNumberIndex,
+      extractCardLast4,
+    ),
+    cardholder: texts.cardholder,
+    rawData: buildEasybankRawData(stringRow, indices, texts, typeRaw),
+  }
+}
+
+function normalizeStringRow(row: unknown[]): string[] {
+  return row.map((cell) => normalizeText(cell) ?? '')
+}
+
+function isBlankRow(stringRow: string[]): boolean {
+  return stringRow.every((value) => value.length === 0)
+}
+
+function parseRequiredFields(
+  stringRow: string[],
+  indices: EasybankIndices,
+): { bookingDate: string; parsedAmount: ParsedMoney } | null {
+  const bookingDate = parseGermanDateToIso(
+    stringRow[indices.bookingDateIndex] ?? '',
+  )
+  const parsedAmount = parseGermanMoney(stringRow[indices.amountIndex], 'EUR')
+  if (!bookingDate || !parsedAmount) return null
+  return { bookingDate, parsedAmount }
+}
+
+function parseEasybankRow(
+  row: unknown[],
+  indices: EasybankIndices,
+  lineNumber: number,
+): { row: NormalizedBankTransactionInput | null; warning?: string } {
+  const stringRow = normalizeStringRow(row)
+  if (isBlankRow(stringRow)) return { row: null }
+
+  const required = parseRequiredFields(stringRow, indices)
+  if (!required) {
+    return {
+      row: null,
+      warning: `Zeile ${lineNumber} konnte nicht importiert werden und wurde übersprungen.`,
+    }
+  }
+
+  return {
+    row: buildEasybankParsedRow(
+      stringRow,
+      indices,
+      required.bookingDate,
+      required.parsedAmount,
+    ),
+  }
+}
+
+function readEasybankRows(workbook: XLSX.WorkBook): unknown[][] {
+  const firstSheetName = workbook.SheetNames[0]!
+  const sheet = workbook.Sheets[firstSheetName]
+  return XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: false,
+    defval: '',
+  }) as unknown[][]
+}
+
+function collectEasybankRows(
+  rows: unknown[][],
+  indices: EasybankIndices,
+): { rows: NormalizedBankTransactionInput[]; warnings: string[] } {
+  const dataRows = rows.slice(indices.headerRowIndex + 1)
+  const results = dataRows.map((row, offset) =>
+    parseEasybankRow(row ?? [], indices, indices.headerRowIndex + offset + 2),
+  )
+  return {
+    rows: results.flatMap((r) => (r.row ? [r.row] : [])),
+    warnings: results.flatMap((r) => (r.warning ? [r.warning] : [])),
+  }
+}
+
+export async function parseEasybankXlsxFile(
+  fileName: string,
+  bytes: Uint8Array,
+): Promise<ParsedImportFile> {
+  const workbook = loadEasybankWorkbook(fileName, bytes)
+  const rows = readEasybankRows(workbook)
+  const indices = resolveEasybankHeaderIndices(rows)
+  const { rows: normalizedRows, warnings } = collectEasybankRows(rows, indices)
 
   return {
     rows: normalizedRows,
