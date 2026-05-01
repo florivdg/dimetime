@@ -10,6 +10,16 @@ export type NewPlan = typeof plan.$inferInsert
 export type CreatePlanInput = Omit<NewPlan, 'id' | 'createdAt' | 'updatedAt'>
 export type UpdatePlanInput = Partial<CreatePlanInput>
 
+function buildPlanConditions(
+  includeArchived: boolean,
+  year: number | undefined,
+) {
+  const conditions = []
+  if (!includeArchived) conditions.push(eq(plan.isArchived, false))
+  if (year !== undefined) conditions.push(like(plan.date, `${year}-%`))
+  return conditions
+}
+
 /**
  * Get all distinct years from plans (sorted descending)
  */
@@ -38,15 +48,7 @@ export async function getAllPlans(
   includeArchived = false,
   year?: number,
 ): Promise<Plan[]> {
-  const conditions = []
-
-  if (!includeArchived) {
-    conditions.push(eq(plan.isArchived, false))
-  }
-
-  if (year !== undefined) {
-    conditions.push(like(plan.date, `${year}-%`))
-  }
+  const conditions = buildPlanConditions(includeArchived, year)
 
   if (conditions.length === 0) {
     return db.query.plan.findMany({
@@ -73,15 +75,8 @@ export async function searchPlans(
 ): Promise<Plan[]> {
   const conditions = [
     or(like(plan.name, `%${query}%`), like(plan.date, `%${query}%`)),
+    ...buildPlanConditions(includeArchived, year),
   ]
-
-  if (!includeArchived) {
-    conditions.push(eq(plan.isArchived, false))
-  }
-
-  if (year !== undefined) {
-    conditions.push(like(plan.date, `${year}-%`))
-  }
 
   return db.query.plan.findMany({
     where: and(...conditions),
