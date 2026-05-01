@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useForm } from 'vee-validate'
-import { z } from 'zod'
 import { qrcode } from '@lowlighter/qrcode'
 import { authClient } from '@/lib/auth-client'
 import { useAuthAction } from '@/composables/useAuthAction'
+import { usePasswordForm } from '@/composables/usePasswordForm'
+import { useTwoFactorVerify } from '@/composables/useTwoFactorVerify'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -44,18 +44,15 @@ const totpSecret = ref<string | null>(null)
 const backupCodes = ref<string[]>([])
 const { copy: copySecret, copied: secretCopied } = useClipboard()
 
-const { isLoading, errorMessage, runWithErrorHandling } = useAuthAction()
-
-const passwordSchema = z.object({
-  password: z.string().min(1, 'Passwort ist erforderlich'),
-})
-
-const passwordForm = useForm({
-  validationSchema: passwordSchema,
-  initialValues: { password: '' },
-})
-
-const totpCode = ref<string[]>([])
+const auth = useAuthAction()
+const { isLoading, errorMessage, runWithErrorHandling } = auth
+const { passwordForm } = usePasswordForm()
+const { totpCode, verifyTotp, handlePinComplete } = useTwoFactorVerify(
+  auth,
+  () => {
+    currentStep.value = 'backup'
+  },
+)
 
 const qrCodeSvg = computed(() => {
   if (!totpUri.value) return null
@@ -81,30 +78,6 @@ async function enableTwoFactor(password: string) {
   }
 }
 
-const INVALID_CODE_MESSAGE = 'Ungültiger Code. Bitte versuchen Sie es erneut.'
-
-async function verifyTotp() {
-  const code = totpCode.value.join('')
-  if (code.length !== 6) {
-    errorMessage.value = 'Bitte geben Sie einen 6-stelligen Code ein'
-    return
-  }
-
-  const data = await runWithErrorHandling(
-    () => authClient.twoFactor.verifyTotp({ code, trustDevice: true }),
-    {
-      default: INVALID_CODE_MESSAGE,
-      network: 'Ein Fehler ist aufgetreten',
-    },
-  )
-
-  if (data) {
-    currentStep.value = 'backup'
-  } else if (errorMessage.value === INVALID_CODE_MESSAGE) {
-    totpCode.value = []
-  }
-}
-
 function finishSetup() {
   window.location.href = '/'
 }
@@ -112,13 +85,6 @@ function finishSetup() {
 const onPasswordSubmit = passwordForm.handleSubmit((values) => {
   enableTwoFactor(values.password)
 })
-
-function handlePinComplete(value: string[]) {
-  totpCode.value = value
-  if (value.join('').length === 6) {
-    verifyTotp()
-  }
-}
 </script>
 
 <template>

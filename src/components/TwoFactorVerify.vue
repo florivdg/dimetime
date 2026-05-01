@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { authClient } from '@/lib/auth-client'
 import { useAuthAction } from '@/composables/useAuthAction'
+import { useTwoFactorVerify } from '@/composables/useTwoFactorVerify'
 import { getSafeRedirectUrl } from '@/lib/redirect'
 import { syncSettingsToLocalStorage } from '@/lib/sync-settings'
 import { Button } from '@/components/ui/button'
@@ -24,36 +25,18 @@ const props = defineProps<{
   redirectTo?: string
 }>()
 
-const totpCode = ref<string[]>([])
 const showBackupInput = ref(false)
 const backupCode = ref('')
 
-const { isLoading, errorMessage, runWithErrorHandling } = useAuthAction()
-
-const INVALID_CODE_MESSAGE = 'Ungültiger Code. Bitte versuchen Sie es erneut.'
-
-async function verifyTotp() {
-  const code = totpCode.value.join('')
-  if (code.length !== 6) {
-    errorMessage.value = 'Bitte geben Sie einen 6-stelligen Code ein'
-    return
-  }
-
-  const data = await runWithErrorHandling(
-    () => authClient.twoFactor.verifyTotp({ code, trustDevice: true }),
-    {
-      default: INVALID_CODE_MESSAGE,
-      network: 'Ein Fehler ist aufgetreten',
-    },
-  )
-
-  if (data) {
+const auth = useAuthAction()
+const { isLoading, errorMessage, runWithErrorHandling } = auth
+const { totpCode, verifyTotp, handlePinComplete } = useTwoFactorVerify(
+  auth,
+  async () => {
     await syncSettingsToLocalStorage()
     window.location.href = getSafeRedirectUrl(props.redirectTo)
-  } else if (errorMessage.value === INVALID_CODE_MESSAGE) {
-    totpCode.value = []
-  }
-}
+  },
+)
 
 async function verifyBackupCode() {
   if (!backupCode.value.trim()) {
@@ -76,13 +59,6 @@ async function verifyBackupCode() {
   if (data) {
     await syncSettingsToLocalStorage()
     window.location.href = getSafeRedirectUrl(props.redirectTo)
-  }
-}
-
-function handlePinComplete(value: string[]) {
-  totpCode.value = value
-  if (value.join('').length === 6) {
-    verifyTotp()
   }
 }
 </script>

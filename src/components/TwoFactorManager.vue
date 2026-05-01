@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useForm } from 'vee-validate'
-import { z } from 'zod'
 import { authClient } from '@/lib/auth-client'
 import { useAuthAction } from '@/composables/useAuthAction'
+import { usePasswordForm } from '@/composables/usePasswordForm'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -46,15 +45,7 @@ const showBackupCodes = ref(false)
 const dialogOpen = ref(false)
 
 const { isLoading, errorMessage, runWithErrorHandling } = useAuthAction()
-
-const passwordSchema = z.object({
-  password: z.string().min(1, 'Passwort ist erforderlich'),
-})
-
-const passwordForm = useForm({
-  validationSchema: passwordSchema,
-  initialValues: { password: '' },
-})
+const { passwordForm } = usePasswordForm()
 
 async function regenerateBackupCodes(password: string) {
   successMessage.value = null
