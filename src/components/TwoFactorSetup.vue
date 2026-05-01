@@ -4,6 +4,7 @@ import { useForm } from 'vee-validate'
 import { z } from 'zod'
 import { qrcode } from '@lowlighter/qrcode'
 import { authClient } from '@/lib/auth-client'
+import { useAuthAction } from '@/composables/useAuthAction'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -38,12 +39,12 @@ import TwoFactorBackupCodes from '@/components/TwoFactorBackupCodes.vue'
 type SetupStep = 'password' | 'qrcode' | 'verify' | 'backup'
 
 const currentStep = ref<SetupStep>('password')
-const isLoading = ref(false)
-const errorMessage = ref<string | null>(null)
 const totpUri = ref<string | null>(null)
 const totpSecret = ref<string | null>(null)
 const backupCodes = ref<string[]>([])
 const { copy: copySecret, copied: secretCopied } = useClipboard()
+
+const { isLoading, errorMessage, runWithErrorHandling } = useAuthAction()
 
 const passwordSchema = z.object({
   password: z.string().min(1, 'Passwort ist erforderlich'),
@@ -62,35 +63,25 @@ const qrCodeSvg = computed(() => {
 })
 
 async function enableTwoFactor(password: string) {
-  isLoading.value = true
-  errorMessage.value = null
+  const data = await runWithErrorHandling(
+    () => authClient.twoFactor.enable({ password }),
+    {
+      400: 'Falsches Passwort',
+      default: 'Ein Fehler ist aufgetreten',
+    },
+  )
 
-  try {
-    const result = await authClient.twoFactor.enable({ password })
-
-    if (result.error) {
-      if (result.error.status === 400) {
-        errorMessage.value = 'Falsches Passwort'
-      } else {
-        errorMessage.value = 'Ein Fehler ist aufgetreten'
-      }
-      return
-    }
-
-    if (result.data) {
-      totpUri.value = result.data.totpURI
-      // Extract secret from URI since Better Auth doesn't return it separately
-      const uriParams = new URL(result.data.totpURI).searchParams
-      totpSecret.value = uriParams.get('secret')
-      backupCodes.value = result.data.backupCodes
-      currentStep.value = 'qrcode'
-    }
-  } catch {
-    errorMessage.value = 'Ein Fehler ist aufgetreten'
-  } finally {
-    isLoading.value = false
+  if (data) {
+    totpUri.value = data.totpURI
+    // Better Auth doesn't return the secret separately, so parse it from the URI
+    const uriParams = new URL(data.totpURI).searchParams
+    totpSecret.value = uriParams.get('secret')
+    backupCodes.value = data.backupCodes
+    currentStep.value = 'qrcode'
   }
 }
+
+const INVALID_CODE_MESSAGE = 'Ungültiger Code. Bitte versuchen Sie es erneut.'
 
 async function verifyTotp() {
   const code = totpCode.value.join('')
@@ -99,26 +90,18 @@ async function verifyTotp() {
     return
   }
 
-  isLoading.value = true
-  errorMessage.value = null
+  const data = await runWithErrorHandling(
+    () => authClient.twoFactor.verifyTotp({ code, trustDevice: true }),
+    {
+      default: INVALID_CODE_MESSAGE,
+      network: 'Ein Fehler ist aufgetreten',
+    },
+  )
 
-  try {
-    const result = await authClient.twoFactor.verifyTotp({
-      code,
-      trustDevice: true,
-    })
-
-    if (result.error) {
-      errorMessage.value = 'Ungültiger Code. Bitte versuchen Sie es erneut.'
-      totpCode.value = []
-      return
-    }
-
+  if (data) {
     currentStep.value = 'backup'
-  } catch {
-    errorMessage.value = 'Ein Fehler ist aufgetreten'
-  } finally {
-    isLoading.value = false
+  } else if (errorMessage.value === INVALID_CODE_MESSAGE) {
+    totpCode.value = []
   }
 }
 

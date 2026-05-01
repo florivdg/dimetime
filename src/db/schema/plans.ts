@@ -7,7 +7,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 import { user } from './auth'
-import { timestamps } from './_columns'
+import { timestamps, transactionCoreColumns } from './_columns'
 
 export const category = sqliteTable(
   'category',
@@ -287,15 +287,7 @@ export const bankTransactionSplit = sqliteTable(
 export const transactionPreset = sqliteTable(
   'transaction_preset',
   {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    name: text('name').notNull(),
-    note: text('note'),
-    type: text('type', { enum: ['income', 'expense'] })
-      .notNull()
-      .default('expense'),
-    amount: integer('amount').notNull().default(0), // Cents
+    ...transactionCoreColumns(),
     recurrence: text('recurrence', {
       enum: ['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'],
     })

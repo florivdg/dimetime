@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useForm } from 'vee-validate'
 import { z } from 'zod'
 import { authClient } from '@/lib/auth-client'
+import { useAuthAction } from '@/composables/useAuthAction'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -39,12 +40,12 @@ const isTwoFactorEnabled = computed(
       ?.twoFactorEnabled ?? false,
 )
 
-const isLoading = ref(false)
-const errorMessage = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
 const backupCodes = ref<string[]>([])
 const showBackupCodes = ref(false)
 const dialogOpen = ref(false)
+
+const { isLoading, errorMessage, runWithErrorHandling } = useAuthAction()
 
 const passwordSchema = z.object({
   password: z.string().min(1, 'Passwort ist erforderlich'),
@@ -56,33 +57,22 @@ const passwordForm = useForm({
 })
 
 async function regenerateBackupCodes(password: string) {
-  isLoading.value = true
-  errorMessage.value = null
   successMessage.value = null
 
-  try {
-    const result = await authClient.twoFactor.generateBackupCodes({ password })
+  const data = await runWithErrorHandling(
+    () => authClient.twoFactor.generateBackupCodes({ password }),
+    {
+      400: 'Falsches Passwort',
+      default: 'Ein Fehler ist aufgetreten',
+    },
+  )
 
-    if (result.error) {
-      if (result.error.status === 400) {
-        errorMessage.value = 'Falsches Passwort'
-      } else {
-        errorMessage.value = 'Ein Fehler ist aufgetreten'
-      }
-      return
-    }
-
-    if (result.data) {
-      backupCodes.value = result.data.backupCodes
-      showBackupCodes.value = true
-      successMessage.value = 'Neue Backup-Codes wurden generiert'
-      passwordForm.resetForm()
-      dialogOpen.value = false
-    }
-  } catch {
-    errorMessage.value = 'Ein Fehler ist aufgetreten'
-  } finally {
-    isLoading.value = false
+  if (data) {
+    backupCodes.value = data.backupCodes
+    showBackupCodes.value = true
+    successMessage.value = 'Neue Backup-Codes wurden generiert'
+    passwordForm.resetForm()
+    dialogOpen.value = false
   }
 }
 
