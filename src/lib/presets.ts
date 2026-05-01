@@ -88,6 +88,45 @@ function getLocalDateString(date = new Date()): string {
   return `${year}-${month}-${day}`
 }
 
+function buildPresetConditions(userId: string, options: PresetQueryOptions) {
+  const {
+    search,
+    type,
+    categoryId,
+    recurrence,
+    includeExpired = true,
+  } = options
+  const conditions = [eq(transactionPreset.userId, userId)]
+  if (search) conditions.push(like(transactionPreset.name, `%${search}%`))
+  if (type) conditions.push(eq(transactionPreset.type, type))
+  if (categoryId) conditions.push(eq(transactionPreset.categoryId, categoryId))
+  if (recurrence) conditions.push(eq(transactionPreset.recurrence, recurrence))
+  if (!includeExpired) {
+    const today = getLocalDateString()
+    conditions.push(
+      sql`(${transactionPreset.endDate} IS NULL OR ${transactionPreset.endDate} >= ${today})`,
+    )
+  }
+  return conditions
+}
+
+function applyPresetSort<T extends { orderBy: (...args: never[]) => T }>(
+  query: T,
+  sortBy: PresetQueryOptions['sortBy'],
+  sortDir: PresetQueryOptions['sortDir'],
+): T {
+  const sortColumn =
+    sortBy === 'name'
+      ? transactionPreset.name
+      : sortBy === 'lastUsedAt'
+        ? transactionPreset.lastUsedAt
+        : sortBy === 'amount'
+          ? transactionPreset.amount
+          : transactionPreset.createdAt
+  const orderBy = sortDir === 'asc' ? asc(sortColumn) : desc(sortColumn)
+  return (query.orderBy as (arg: typeof orderBy) => T)(orderBy)
+}
+
 /**
  * Get paginated presets with optional filtering and sorting
  */
@@ -96,45 +135,14 @@ export async function getPresets(
   options: PresetQueryOptions = {},
 ): Promise<PaginatedPresets> {
   const {
-    search,
-    type,
-    categoryId,
-    recurrence,
-    includeExpired = true,
     sortBy = 'createdAt',
     sortDir = 'desc',
     page = 1,
     limit = 20,
   } = options
 
-  // Build where conditions
-  const conditions = [eq(transactionPreset.userId, userId)]
+  const conditions = buildPresetConditions(userId, options)
 
-  if (search) {
-    conditions.push(like(transactionPreset.name, `%${search}%`))
-  }
-
-  if (type) {
-    conditions.push(eq(transactionPreset.type, type))
-  }
-
-  if (categoryId) {
-    conditions.push(eq(transactionPreset.categoryId, categoryId))
-  }
-
-  if (recurrence) {
-    conditions.push(eq(transactionPreset.recurrence, recurrence))
-  }
-
-  if (!includeExpired) {
-    // Filter out expired presets: endDate is null OR endDate >= today
-    const today = getLocalDateString()
-    conditions.push(
-      sql`(${transactionPreset.endDate} IS NULL OR ${transactionPreset.endDate} >= ${today})`,
-    )
-  }
-
-  // Build base query
   let baseQuery = db
     .select({
       ...getTableColumns(transactionPreset),
@@ -146,22 +154,8 @@ export async function getPresets(
     .where(and(...conditions))
     .$dynamic()
 
-  // Apply sorting
-  const sortColumn =
-    sortBy === 'name'
-      ? transactionPreset.name
-      : sortBy === 'lastUsedAt'
-        ? transactionPreset.lastUsedAt
-        : sortBy === 'amount'
-          ? transactionPreset.amount
-          : transactionPreset.createdAt
+  baseQuery = applyPresetSort(baseQuery, sortBy, sortDir)
 
-  baseQuery =
-    sortDir === 'asc'
-      ? baseQuery.orderBy(asc(sortColumn))
-      : baseQuery.orderBy(desc(sortColumn))
-
-  // Get total count
   const countQuery = db
     .select({ count: count() })
     .from(transactionPreset)
@@ -170,7 +164,6 @@ export async function getPresets(
   const [{ count: total }] = await countQuery
   const totalPages = limit === -1 ? 1 : Math.ceil(total / limit)
 
-  // Apply pagination
   if (limit !== -1) {
     const offset = (page - 1) * limit
     baseQuery = baseQuery.limit(limit).offset(offset)
