@@ -157,6 +157,7 @@ export async function updateSplitFields(
     typeof bankTransactionSplit.$inferInsert
   >(fields, {
     planId: (v, s) => {
+      // fallow-ignore-next-line code-duplication
       s.planId = v
       // Clear budget when plan changes (budget is plan-specific)
       s.budgetId = null

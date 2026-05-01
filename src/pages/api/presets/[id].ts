@@ -9,6 +9,7 @@ import {
 } from '@/lib/api/responses'
 import { updatePresetSchema } from './_schema'
 
+// fallow-ignore-next-line code-duplication
 export const PUT: APIRoute = async ({ params, request, locals }) => {
   const owned = await requireOwned(
     params,

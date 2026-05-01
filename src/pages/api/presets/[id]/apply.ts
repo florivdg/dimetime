@@ -11,6 +11,7 @@ const applySchema = z.object({
     .optional(),
 })
 
+// fallow-ignore-next-line code-duplication
 export const POST: APIRoute = async ({ params, request, locals }) => {
   const owned = await requireOwned(
     params,

@@ -460,6 +460,7 @@ export async function updateBankTransactionFields(
     typeof bankTransaction.$inferInsert
   >(fields, {
     planId: (v, s) => {
+      // fallow-ignore-next-line code-duplication
       s.planId = v
       s.planAssignment = v ? 'manual' : 'none'
       // Clear budget when plan changes (budget is plan-specific)

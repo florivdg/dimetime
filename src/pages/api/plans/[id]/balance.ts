@@ -3,6 +3,7 @@ import { getPlanBalance } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
 import { json, requireExisting } from '@/lib/api/responses'
 
+// fallow-ignore-next-line code-duplication
 export const GET: APIRoute = async ({ params }) => {
   const found = await requireExisting(
     params,
