@@ -34,3 +34,5 @@ data/
 
 # fallow analysis cache
 .fallow/
+
+CLAUDE.local.md
