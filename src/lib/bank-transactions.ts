@@ -20,6 +20,7 @@ import {
   sql,
 } from 'drizzle-orm'
 import { unionAll } from 'drizzle-orm/sqlite-core'
+import { buildSetValues } from '@/lib/db/partial-update'
 
 export type ImportSource = typeof importSource.$inferSelect
 type NewImportSource = typeof importSource.$inferInsert
@@ -389,24 +390,23 @@ export async function updateBankTransactionFields(
     budgetId?: string | null
   },
 ): Promise<BankTransaction | undefined> {
-  const setValues: Partial<typeof bankTransaction.$inferInsert> = {
-    updatedAt: new Date(),
-  }
-
-  if (fields.planId !== undefined) {
-    setValues.planId = fields.planId
-    setValues.planAssignment = fields.planId ? 'manual' : 'none'
-    // Clear budget when plan changes (budget is plan-specific)
-    setValues.budgetId = null
-  }
-
-  if (fields.budgetId !== undefined) {
-    setValues.budgetId = fields.budgetId
-  }
-
-  if (fields.note !== undefined) {
-    setValues.note = fields.note
-  }
+  const setValues = buildSetValues<
+    typeof fields,
+    typeof bankTransaction.$inferInsert
+  >(fields, {
+    planId: (v, s) => {
+      s.planId = v
+      s.planAssignment = v ? 'manual' : 'none'
+      // Clear budget when plan changes (budget is plan-specific)
+      s.budgetId = null
+    },
+    budgetId: (v, s) => {
+      s.budgetId = v
+    },
+    note: (v, s) => {
+      s.note = v
+    },
+  })
 
   const [updated] = await db
     .update(bankTransaction)

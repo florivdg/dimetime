@@ -5,6 +5,7 @@ import {
   plannedTransaction,
 } from '@/db/schema/plans'
 import { and, eq, inArray, sum } from 'drizzle-orm'
+import { buildSetValues } from '@/lib/db/partial-update'
 
 export type BankTransactionSplit = typeof bankTransactionSplit.$inferSelect
 
@@ -151,23 +152,22 @@ export async function updateSplitFields(
     note?: string | null
   },
 ): Promise<BankTransactionSplit | undefined> {
-  const setValues: Partial<typeof bankTransactionSplit.$inferInsert> = {
-    updatedAt: new Date(),
-  }
-
-  if (fields.planId !== undefined) {
-    setValues.planId = fields.planId
-    // Clear budget when plan changes (budget is plan-specific)
-    setValues.budgetId = null
-  }
-
-  if (fields.budgetId !== undefined) {
-    setValues.budgetId = fields.budgetId
-  }
-
-  if (fields.note !== undefined) {
-    setValues.note = fields.note
-  }
+  const setValues = buildSetValues<
+    typeof fields,
+    typeof bankTransactionSplit.$inferInsert
+  >(fields, {
+    planId: (v, s) => {
+      s.planId = v
+      // Clear budget when plan changes (budget is plan-specific)
+      s.budgetId = null
+    },
+    budgetId: (v, s) => {
+      s.budgetId = v
+    },
+    note: (v, s) => {
+      s.note = v
+    },
+  })
 
   const [updated] = await db
     .update(bankTransactionSplit)
