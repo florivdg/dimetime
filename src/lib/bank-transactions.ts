@@ -387,6 +387,57 @@ export async function getBankTransactionById(
   })
 }
 
+export interface BankTransactionPatchFields {
+  planId?: string | null
+  note?: string | null
+  budgetId?: string | null
+}
+
+/**
+ * Validates a partial bank-transaction update against plan/budget rules.
+ * Returns null on success or an error tuple to forward as a JSON response.
+ */
+// fallow-ignore-next-line complexity
+export async function validateBankTransactionPatch(
+  fields: BankTransactionPatchFields,
+  existing: { planId: string | null },
+  loadPlan: (id: string) => Promise<{ isArchived: boolean } | undefined | null>,
+  loadBudget: (
+    id: string,
+  ) => Promise<{ isBudget: boolean; planId: string | null } | undefined | null>,
+): Promise<{ message: string; status: number } | null> {
+  if (fields.planId !== undefined && fields.planId) {
+    const targetPlan = await loadPlan(fields.planId)
+    if (!targetPlan) return { message: 'Zielplan nicht gefunden', status: 404 }
+    if (targetPlan.isArchived) {
+      return {
+        message:
+          'Banktransaktionen können nicht einem archivierten Plan zugeordnet werden.',
+        status: 400,
+      }
+    }
+  }
+
+  if (fields.budgetId !== undefined && fields.budgetId !== null) {
+    const budget = await loadBudget(fields.budgetId)
+    if (!budget) return { message: 'Budget nicht gefunden', status: 404 }
+    if (!budget.isBudget) {
+      return { message: 'Transaktion ist kein Budget', status: 400 }
+    }
+
+    const effectivePlanId =
+      fields.planId !== undefined ? fields.planId : existing.planId
+    if (budget.planId !== effectivePlanId) {
+      return {
+        message: 'Budget gehört nicht zum zugewiesenen Plan',
+        status: 400,
+      }
+    }
+  }
+
+  return null
+}
+
 export async function updateBankTransactionFields(
   id: string,
   fields: {

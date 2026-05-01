@@ -27,6 +27,15 @@ export function validate<T>(schema: ZodType<T>, body: unknown): T | Response {
   return parsed.data
 }
 
+export async function validateBody<T>(
+  request: Request,
+  schema: ZodType<T>,
+): Promise<T | Response> {
+  const body = await parseJson(request)
+  if (body instanceof Response) return body
+  return validate(schema, body)
+}
+
 export function requireUserId(locals: App.Locals): string | Response {
   return locals.user?.id ?? unauthorized()
 }

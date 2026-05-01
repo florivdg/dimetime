@@ -4,9 +4,9 @@ import { createPreset, getPresets } from '@/lib/presets'
 import {
   handle,
   json,
-  parseJson,
   requireUserId,
   validate,
+  validateBody,
 } from '@/lib/api/responses'
 import { createPresetSchema } from './_schema'
 
@@ -67,10 +67,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const userId = requireUserId(locals)
   if (userId instanceof Response) return userId
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(createPresetSchema, body)
+  const data = await validateBody(request, createPresetSchema)
   if (data instanceof Response) return data
 
   return handle(

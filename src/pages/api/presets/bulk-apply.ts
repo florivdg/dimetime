@@ -6,9 +6,8 @@ import {
   error,
   handle,
   json,
-  parseJson,
   requireUserId,
-  validate,
+  validateBody,
 } from '@/lib/api/responses'
 
 const bulkApplySchema = z.object({
@@ -24,10 +23,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const userId = requireUserId(locals)
   if (userId instanceof Response) return userId
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(bulkApplySchema, body)
+  const data = await validateBody(request, bulkApplySchema)
   if (data instanceof Response) return data
 
   const plan = await getPlanById(data.planId)

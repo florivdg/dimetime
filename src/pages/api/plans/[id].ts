@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { deletePlan, getPlanById, updatePlan } from '@/lib/plans'
-import { error, json, parseJson, validate } from '@/lib/api/responses'
+import { error, json, validateBody } from '@/lib/api/responses'
 
 const updatePlanSchema = z.object({
   name: z.string().max(200, 'Name ist zu lang').nullable().optional(),
@@ -23,10 +23,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
   const existing = await getPlanById(id)
   if (!existing) return error('Plan nicht gefunden', 404)
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(updatePlanSchema, body)
+  const data = await validateBody(request, updatePlanSchema)
   if (data instanceof Response) return data
 
   const updated = await updatePlan(id, data)

@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { getAllSettings, updateSettings } from '@/lib/settings'
-import { error, json, parseJson, validate } from '@/lib/api/responses'
+import { error, json, validateBody } from '@/lib/api/responses'
 
 const updateSettingsSchema = z.object({
   groupTransactionsByType: z.boolean().optional(),
@@ -20,10 +20,7 @@ export const PUT: APIRoute = async ({ request, locals }) => {
   const userId = locals.user?.id
   if (!userId) return error('Nicht autorisiert', 401)
 
-  const body = await parseJson(request)
-  if (body instanceof Response) return body
-
-  const data = validate(updateSettingsSchema, body)
+  const data = await validateBody(request, updateSettingsSchema)
   if (data instanceof Response) return data
 
   await updateSettings(userId, data)
