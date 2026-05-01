@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import {
   deleteTransaction,
-  getTransactionWithPlanStatus,
+  requireUnarchivedTransaction,
   updateTransaction,
   validateTransactionPlanChange,
 } from '@/lib/transactions'
@@ -32,18 +32,8 @@ const updateTransactionSchema = z.object({
 })
 
 export const PUT: APIRoute = async ({ params, request }) => {
-  const { id } = params
-  if (!id) return error('Transaktions-ID ist erforderlich', 400)
-
-  const existing = await getTransactionWithPlanStatus(id)
-  if (!existing) return error('Transaktion nicht gefunden', 404)
-
-  if (existing.planIsArchived) {
-    return error(
-      'Transaktion kann nicht bearbeitet werden, da der zugehörige Plan archiviert ist.',
-      403,
-    )
-  }
+  const existing = await requireUnarchivedTransaction(params.id, 'bearbeitet')
+  if (existing instanceof Response) return existing
 
   const data = await validateBody(request, updateTransactionSchema)
   if (data instanceof Response) return data
@@ -55,24 +45,14 @@ export const PUT: APIRoute = async ({ params, request }) => {
   )
   if (planError) return error(planError.message, planError.status)
 
-  const updated = await updateTransaction(id, data)
+  const updated = await updateTransaction(existing.id, data)
   return json(updated)
 }
 
 export const DELETE: APIRoute = async ({ params }) => {
-  const { id } = params
-  if (!id) return error('Transaktions-ID ist erforderlich', 400)
+  const existing = await requireUnarchivedTransaction(params.id, 'gelöscht')
+  if (existing instanceof Response) return existing
 
-  const existing = await getTransactionWithPlanStatus(id)
-  if (!existing) return error('Transaktion nicht gefunden', 404)
-
-  if (existing.planIsArchived) {
-    return error(
-      'Transaktion kann nicht gelöscht werden, da der zugehörige Plan archiviert ist.',
-      403,
-    )
-  }
-
-  await deleteTransaction(id)
+  await deleteTransaction(existing.id)
   return json({ success: true, message: 'Transaktion wurde gelöscht' })
 }

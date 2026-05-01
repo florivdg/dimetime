@@ -24,6 +24,7 @@ import {
   getBudgetSpendingFromSplitsForPlan,
 } from '@/lib/bank-transaction-splits'
 import { parseQueryParams } from '@/lib/api/query-params'
+import { error } from '@/lib/api/responses'
 import { buildSetValues } from '@/lib/db/partial-update'
 
 // Infer types from Drizzle schema
@@ -264,7 +265,7 @@ export async function getTransactionById(
  * Get a transaction by ID with its plan's archived status
  * Used for checking if modifications are allowed
  */
-export async function getTransactionWithPlanStatus(
+async function getTransactionWithPlanStatus(
   id: string,
 ): Promise<TransactionWithPlanStatus | undefined> {
   const result = await db
@@ -283,6 +284,26 @@ export async function getTransactionWithPlanStatus(
     ...result[0],
     planIsArchived: result[0].planIsArchived ?? false,
   }
+}
+
+/**
+ * Resolves a transaction by id and ensures its plan is not archived.
+ * Returns a Response for 400/404/403, otherwise the loaded transaction.
+ */
+export async function requireUnarchivedTransaction(
+  id: string | undefined,
+  action: 'bearbeitet' | 'gelöscht',
+): Promise<TransactionWithPlanStatus | Response> {
+  if (!id) return error('Transaktions-ID ist erforderlich', 400)
+  const existing = await getTransactionWithPlanStatus(id)
+  if (!existing) return error('Transaktion nicht gefunden', 404)
+  if (existing.planIsArchived) {
+    return error(
+      `Transaktion kann nicht ${action} werden, da der zugehörige Plan archiviert ist.`,
+      403,
+    )
+  }
+  return existing
 }
 
 /**
@@ -318,6 +339,7 @@ export async function updateTransaction(
   id: string,
   input: UpdateTransactionInput,
 ): Promise<Transaction | undefined> {
+  // fallow-ignore-next-line code-duplication
   const updateData = buildSetValues<
     typeof input,
     typeof plannedTransaction.$inferInsert
