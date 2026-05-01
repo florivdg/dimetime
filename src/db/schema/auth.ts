@@ -103,6 +103,7 @@ export const twoFactor = sqliteTable(
     id: text('id').primaryKey(),
     secret: text('secret').notNull(),
     backupCodes: text('backup_codes').notNull(),
+    verified: integer('verified', { mode: 'boolean' }).default(true).notNull(),
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
