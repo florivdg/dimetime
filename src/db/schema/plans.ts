@@ -46,16 +46,8 @@ export const plan = sqliteTable(
 export const plannedTransaction = sqliteTable(
   'planned_transaction',
   {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    name: text('name').notNull(),
-    note: text('note'), // Longer description
-    type: text('type', { enum: ['income', 'expense'] })
-      .notNull()
-      .default('expense'),
+    ...transactionCoreColumns(),
     dueDate: text('due_date').notNull(), // YYYY-MM-DD format
-    amount: integer('amount').notNull().default(0), // Cents (e.g., 1234 = €12.34)
     isDone: integer('is_done', { mode: 'boolean' }).default(false).notNull(),
     completedAt: integer('completed_at', { mode: 'timestamp_ms' }), // When marked done
     isBudget: integer('is_budget', { mode: 'boolean' })
