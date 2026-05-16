@@ -302,7 +302,12 @@ function groupPendingBySemanticKey(
 }
 
 function matchPendingUpgrades(
-  unmatchedBookedRows: { dedupeKey: string; bookingDate: string }[],
+  unmatchedBookedRows: {
+    dedupeKey: string
+    bookingDate: string
+    amountCents: number
+    description: string | null
+  }[],
   pendingDbRows: PendingDbRow[],
 ): Map<string, ExistingTransactionMatch> {
   const pendingUpgradeMatches = new Map<string, ExistingTransactionMatch>()
@@ -312,7 +317,7 @@ function matchPendingUpgrades(
   const usedDbIds = new Set<string>()
 
   for (const bookedRow of unmatchedBookedRows) {
-    const candidates = pendingBySemKey.get(buildSemanticKey(bookedRow as never))
+    const candidates = pendingBySemKey.get(buildSemanticKey(bookedRow))
     if (!candidates) continue
     const match = candidates.find((c) => !usedDbIds.has(c.id))
     if (!match) continue
