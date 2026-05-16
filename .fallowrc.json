@@ -9,6 +9,13 @@
     "class-variance-authority",
     "@astrojs/node",
     "@astrojs/vue",
-    "@tailwindcss/vite"
-  ]
+    "@tailwindcss/vite",
+    "astro",
+    "reka-ui"
+  ],
+  "health": {
+    "maxCyclomatic": 10,
+    "maxCognitive": 15,
+    "maxCrap": 110
+  }
 }
