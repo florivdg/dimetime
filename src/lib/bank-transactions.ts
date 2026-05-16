@@ -279,7 +279,7 @@ export async function getBankTransactions(
       note: bankTransaction.note,
       purpose: bankTransaction.purpose,
       isSplit: bankTransaction.isSplit,
-      createdAt: bankTransaction.createdAt,
+      createdAt: sql<Date>`${bankTransaction.createdAt}`.as('created_at'),
       sortOrder: sql<number>`0`.as('sort_order'),
       sortGroup: sql`${bankTransaction.id}`.as('sort_group'),
     })
@@ -333,7 +333,7 @@ export async function getBankTransactions(
       note: bankTransactionSplit.note,
       purpose: bankTransaction.purpose,
       isSplit: sql<boolean>`0`.as('is_split'),
-      createdAt: bankTransactionSplit.createdAt,
+      createdAt: sql<Date>`${bankTransactionSplit.createdAt}`.as('created_at'),
       sortOrder: bankTransactionSplit.sortOrder,
       sortGroup: sql`${bankTransactionSplit.bankTransactionId}`.as(
         'sort_group',

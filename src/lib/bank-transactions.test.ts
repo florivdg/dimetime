@@ -269,10 +269,7 @@ describe('getBankTransactions', () => {
     expect(amounts).toEqual(sorted)
   })
 
-  // KNOWN BUG: sortBy='createdAt' generates invalid SQL on union (no matching
-  // ORDER BY column in the result set). Untested in main; surfaced by this
-  // test. Tracked separately; leaving as skipped until the lib is fixed.
-  it.skip('sorts by createdAt', async () => {
+  it('sorts by createdAt', async () => {
     const { rows } = await getBankTransactions({ sortBy: 'createdAt' })
     expect(rows.length).toBeGreaterThan(0)
   })
