@@ -289,6 +289,37 @@ function datePrefix(planId: string) {
   return planId === planBId ? '2026-04' : '2026-03'
 }
 
+type ExpectedParentFields = Partial<{
+  budgetId: string | null
+  preSplitBudgetId: string | null
+  isSplit: boolean
+}>
+
+async function expectParentState(id: string, expected: ExpectedParentFields) {
+  const parent = await getBankTransactionById(id)
+  expect(parent).toBeDefined()
+  if (!parent) return
+  for (const key of Object.keys(expected) as (keyof ExpectedParentFields)[]) {
+    const value = expected[key] as string | boolean | null
+    expect(parent[key]).toBe(value)
+  }
+}
+
+async function seedSplitParentAndSplit() {
+  await createBankTransactionRow({
+    id: 'parent-1',
+    amountCents: -10000,
+    planId: planAId,
+    isSplit: true,
+  })
+  await createSplitRow({
+    id: 'split-1',
+    parentId: 'parent-1',
+    amountCents: -10000,
+    planId: planAId,
+  })
+}
+
 async function postSplit(id: string, splits: { amountCents: number }[]) {
   return splitRoute.POST({
     params: { id },
@@ -405,16 +436,18 @@ describe('bank transaction splits', () => {
       { amountCents: -3000, label: 'Freizeit' },
     ])
 
-    let parent = await getBankTransactionById('parent-1')
-    expect(parent?.budgetId).toBeNull()
-    expect(parent?.preSplitBudgetId).toBe(budgetAId)
+    await expectParentState('parent-1', {
+      budgetId: null,
+      preSplitBudgetId: budgetAId,
+    })
 
     await unsplitBankTransaction('parent-1')
 
-    parent = await getBankTransactionById('parent-1')
-    expect(parent?.isSplit).toBe(false)
-    expect(parent?.budgetId).toBe(budgetAId)
-    expect(parent?.preSplitBudgetId).toBeNull()
+    await expectParentState('parent-1', {
+      isSplit: false,
+      budgetId: budgetAId,
+      preSplitBudgetId: null,
+    })
   })
 
   it('keeps parent budget empty after undo when no pre-split budget existed', async () => {
@@ -441,18 +474,7 @@ describe('bank transaction splits', () => {
     await createPlan(planBId, '2026-04-01')
     await createBudget(budgetAId, planAId)
     await createBudget(budgetBId, planBId)
-    await createBankTransactionRow({
-      id: 'parent-1',
-      amountCents: -10000,
-      planId: planAId,
-      isSplit: true,
-    })
-    await createSplitRow({
-      id: 'split-1',
-      parentId: 'parent-1',
-      amountCents: -10000,
-      planId: planAId,
-    })
+    await seedSplitParentAndSplit()
 
     const response = await patchSplit('split-1', { budgetId: budgetBId })
 
@@ -464,18 +486,7 @@ describe('bank transaction splits', () => {
     await createPlan(planAId, '2026-03-01')
     await createPlan(planBId, '2026-04-01')
     await createBudget(budgetBId, planBId)
-    await createBankTransactionRow({
-      id: 'parent-1',
-      amountCents: -10000,
-      planId: planAId,
-      isSplit: true,
-    })
-    await createSplitRow({
-      id: 'split-1',
-      parentId: 'parent-1',
-      amountCents: -10000,
-      planId: planAId,
-    })
+    await seedSplitParentAndSplit()
 
     const response = await patchSplit('split-1', {
       planId: planBId,
