@@ -1,7 +1,7 @@
 {
   "entry": [
     "**/*.test.ts",
-    "**/*.spec.ts",
+    "**/*.vitest.ts",
     "test/**",
     "vitest.config.ts",
     "src/lib/bank-import/parsers/__fixtures__/generate-easybank-fixture.ts"

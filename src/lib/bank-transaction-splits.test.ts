@@ -1,23 +1,9 @@
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-} from 'bun:test'
-import { Database } from 'bun:sqlite'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
 import * as plansSchema from '@/db/schema/plans'
+import { createTestDb } from '@/lib/__fixtures__/test-db'
 
-const sqlite = new Database(':memory:')
-sqlite.run('PRAGMA foreign_keys = ON;')
-
-const testDb = drizzle({
-  client: sqlite,
-  schema: plansSchema,
-})
+const harness = createTestDb()
+const testDb = harness.db
 
 void mock.module('@/db/database', () => ({
   db: testDb,
@@ -37,142 +23,13 @@ const planBId = '22222222-2222-4222-8222-222222222222'
 const budgetAId = '33333333-3333-4333-8333-333333333333'
 const budgetBId = '44444444-4444-4444-8444-444444444444'
 
-function runStatements(sql: string) {
-  for (const statement of sql.split(';')) {
-    const trimmed = statement.trim()
-    if (trimmed) sqlite.run(trimmed)
-  }
-}
-
-beforeAll(() => {
-  runStatements(`
-    CREATE TABLE "user" (
-      "id" text PRIMARY KEY NOT NULL
-    );
-
-    CREATE TABLE "category" (
-      "id" text PRIMARY KEY NOT NULL
-    );
-
-    CREATE TABLE "plan" (
-      "id" text PRIMARY KEY NOT NULL,
-      "name" text,
-      "date" text NOT NULL,
-      "notes" text,
-      "is_archived" integer DEFAULT false NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL
-    );
-
-    CREATE TABLE "planned_transaction" (
-      "id" text PRIMARY KEY NOT NULL,
-      "name" text NOT NULL,
-      "note" text,
-      "type" text DEFAULT 'expense' NOT NULL,
-      "due_date" text NOT NULL,
-      "amount" integer DEFAULT 0 NOT NULL,
-      "is_done" integer DEFAULT false NOT NULL,
-      "completed_at" integer,
-      "is_budget" integer DEFAULT false NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL,
-      "plan_id" text REFERENCES "plan"("id") ON DELETE cascade,
-      "user_id" text REFERENCES "user"("id") ON DELETE set null,
-      "category_id" text REFERENCES "category"("id") ON DELETE set null
-    );
-
-    CREATE TABLE "import_source" (
-      "id" text PRIMARY KEY NOT NULL,
-      "name" text NOT NULL,
-      "preset" text NOT NULL,
-      "source_kind" text NOT NULL,
-      "bank_name" text,
-      "account_label" text,
-      "account_identifier" text,
-      "default_plan_assignment" text DEFAULT 'auto_month' NOT NULL,
-      "is_active" integer DEFAULT true NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL
-    );
-
-    CREATE TABLE "statement_import" (
-      "id" text PRIMARY KEY NOT NULL
-    );
-
-    CREATE TABLE "bank_transaction" (
-      "id" text PRIMARY KEY NOT NULL,
-      "source_id" text NOT NULL REFERENCES "import_source"("id") ON DELETE cascade,
-      "first_seen_import_id" text REFERENCES "statement_import"("id") ON DELETE set null,
-      "last_seen_import_id" text REFERENCES "statement_import"("id") ON DELETE set null,
-      "external_transaction_id" text,
-      "dedupe_key" text NOT NULL,
-      "booking_date" text NOT NULL,
-      "value_date" text,
-      "amount_cents" integer NOT NULL,
-      "currency" text DEFAULT 'EUR' NOT NULL,
-      "original_amount_cents" integer,
-      "original_currency" text,
-      "counterparty" text,
-      "booking_text" text,
-      "description" text,
-      "purpose" text,
-      "status" text DEFAULT 'unknown' NOT NULL,
-      "balance_after_cents" integer,
-      "balance_currency" text,
-      "country" text,
-      "card_last4" text,
-      "merchant" text,
-      "merchant_category" text,
-      "booking_type" text,
-      "reference" text,
-      "customer_reference" text,
-      "mandate_reference" text,
-      "creditor_id" text,
-      "return_reason" text,
-      "cardholder" text,
-      "note" text,
-      "raw_data_json" text NOT NULL,
-      "plan_id" text REFERENCES "plan"("id") ON DELETE set null,
-      "plan_assignment" text DEFAULT 'none' NOT NULL,
-      "budget_id" text REFERENCES "planned_transaction"("id") ON DELETE set null,
-      "pre_split_budget_id" text REFERENCES "planned_transaction"("id") ON DELETE set null,
-      "is_archived" integer DEFAULT false NOT NULL,
-      "is_split" integer DEFAULT false NOT NULL,
-      "import_seen_count" integer DEFAULT 1 NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL
-    );
-
-    CREATE TABLE "bank_transaction_split" (
-      "id" text PRIMARY KEY NOT NULL,
-      "bank_transaction_id" text NOT NULL REFERENCES "bank_transaction"("id") ON DELETE cascade,
-      "amount_cents" integer NOT NULL,
-      "label" text,
-      "note" text,
-      "budget_id" text REFERENCES "planned_transaction"("id") ON DELETE set null,
-      "plan_id" text REFERENCES "plan"("id") ON DELETE set null,
-      "sort_order" integer DEFAULT 0 NOT NULL,
-      "is_archived" integer DEFAULT false NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL
-    );
-  `)
-})
-
 beforeEach(async () => {
-  runStatements(`
-    DELETE FROM "bank_transaction_split";
-    DELETE FROM "bank_transaction";
-    DELETE FROM "planned_transaction";
-    DELETE FROM "plan";
-    DELETE FROM "import_source";
-  `)
-
+  harness.reset()
   await createSource()
 })
 
 afterAll(() => {
-  sqlite.close()
+  harness.close()
 })
 
 async function createSource(id = 'source-1') {

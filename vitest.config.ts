@@ -11,15 +11,21 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
-    include: ['**/*.spec.ts'],
-    exclude: ['**/*.test.ts', 'node_modules/**', 'dist/**', '.astro/**'],
+    include: ['**/*.vitest.ts'],
+    exclude: [
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      'node_modules/**',
+      'dist/**',
+      '.astro/**',
+    ],
     setupFiles: ['./test/vue-setup.ts'],
     globals: false,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,vue}'],
       exclude: [
-        'src/**/*.spec.ts',
+        'src/**/*.vitest.ts',
         'src/**/*.test.ts',
         'src/**/__fixtures__/**',
         'src/components/ui/**',
