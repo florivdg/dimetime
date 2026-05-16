@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
+import { buildDedupeKey } from './dedupe-key'
 import {
-  buildDedupeKey,
   buildSemanticKey,
   dedupeByStatusUpgrade,
   dedupeRowsInFile,

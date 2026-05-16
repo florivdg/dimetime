@@ -16,7 +16,7 @@ export function notFoundError(message: string): ImportApiError {
   return new ImportApiError(404, message)
 }
 
-export function asImportApiError(error: unknown): {
+function asImportApiError(error: unknown): {
   status: number
   message: string
 } {
@@ -45,7 +45,7 @@ export function jsonError(error: string, status = 400): Response {
   return jsonResponse({ error }, status)
 }
 
-export async function parseImportFormData(
+async function parseImportFormData(
   request: Request,
 ): Promise<{ sourceId: string; file: File } | Response> {
   let formData: FormData
@@ -70,4 +70,64 @@ export async function parseImportFormData(
   }
 
   return { sourceId, file }
+}
+
+interface ImportRunner<T> {
+  (input: {
+    sourceId: string
+    file: File
+    triggeredByUserId?: string | null
+  }): Promise<T>
+}
+
+export async function runImportFlow<T>(
+  request: Request,
+  triggeredByUserId: string | null,
+  runner: ImportRunner<T>,
+): Promise<Response> {
+  const parsed = await parseImportFormData(request)
+  if (parsed instanceof Response) return parsed
+
+  try {
+    const result = await runner({
+      sourceId: parsed.sourceId,
+      file: parsed.file,
+      triggeredByUserId,
+    })
+    return jsonResponse(result)
+  } catch (error) {
+    const mapped = asImportApiError(error)
+    return jsonError(mapped.message, mapped.status)
+  }
+}
+
+type ZodSafeParse<T> =
+  | {
+      success: true
+      data: T
+    }
+  | {
+      success: false
+      error: { issues: Array<{ message?: string }> }
+    }
+
+export async function parseJsonBody<T>(
+  request: Request,
+  schema: { safeParse: (body: unknown) => ZodSafeParse<T> },
+  invalidJsonMessage = 'Ungültiges JSON',
+): Promise<{ data: T } | { error: Response }> {
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return { error: jsonError(invalidJsonMessage) }
+  }
+
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) {
+    return {
+      error: jsonError(parsed.error.issues[0]?.message ?? 'Ungültige Eingabe'),
+    }
+  }
+  return { data: parsed.data }
 }
