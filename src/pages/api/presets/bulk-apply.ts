@@ -1,12 +1,13 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
-import { applyMultiplePresetsToPlan, getPresetById } from '@/lib/presets'
-import { getPlanById } from '@/lib/plans'
+import { applyMultiplePresetsToPlan, getPresetsByIds } from '@/lib/presets'
+import { requireUnarchivedPlan } from '@/lib/api/plan-guards'
 import {
   error,
   handle,
   json,
   requireUserId,
+  unwrap,
   validateBody,
 } from '@/lib/api/responses'
 
@@ -19,29 +20,28 @@ const bulkApplySchema = z.object({
     .optional(),
 })
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  const userId = requireUserId(locals)
-  if (userId instanceof Response) return userId
-
-  const data = await validateBody(request, bulkApplySchema)
-  if (data instanceof Response) return data
-
-  const plan = await getPlanById(data.planId)
-  if (!plan) return error('Plan nicht gefunden', 404)
-  if (plan.isArchived) return error('Plan ist archiviert', 400)
-
-  for (const presetId of data.presetIds) {
-    const preset = await getPresetById(presetId)
-    if (!preset || preset.userId !== userId) {
-      return error(
-        `Vorlage ${presetId} nicht gefunden oder nicht autorisiert`,
-        403,
-      )
-    }
+async function assertPresetsOwned(
+  presetIds: string[],
+  userId: string,
+): Promise<void> {
+  const presets = await getPresetsByIds(presetIds)
+  if (presets.length !== presetIds.length) {
+    throw error('Eine oder mehrere Vorlagen wurden nicht gefunden', 404)
   }
+  const foreign = presets.find((p) => p.userId !== userId)
+  if (foreign) {
+    throw error(`Vorlage ${foreign.id} nicht autorisiert`, 403)
+  }
+}
 
-  return handle(
+export const POST: APIRoute = async ({ request, locals }) =>
+  handle(
     async () => {
+      const userId = unwrap(requireUserId(locals))
+      const data = unwrap(await validateBody(request, bulkApplySchema))
+      unwrap(await requireUnarchivedPlan(data.planId))
+      await assertPresetsOwned(data.presetIds, userId)
+
       const result = await applyMultiplePresetsToPlan(data.presetIds, {
         planId: data.planId,
         dueDate: data.dueDate,
@@ -58,4 +58,3 @@ export const POST: APIRoute = async ({ request, locals }) => {
     'Fehler beim Anwenden der Vorlagen',
     'Error bulk applying presets',
   )
-}

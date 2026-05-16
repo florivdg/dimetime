@@ -1,6 +1,23 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { getBankTransactions } from '@/lib/bank-transactions'
+import { paginationFields, sortDirField } from '@/lib/api/pagination-schema'
+import { parseQueryParams } from '@/lib/api/query-params'
+import { json, validate } from '@/lib/api/responses'
+
+const BANK_TRANSACTION_QUERY_KEYS = [
+  'sourceId',
+  'planId',
+  'status',
+  'search',
+  'dateFrom',
+  'dateTo',
+  'showArchived',
+  'sortBy',
+  'sortDir',
+  'page',
+  'limit',
+] as const
 
 const querySchema = z.object({
   sourceId: z.uuid().optional(),
@@ -17,45 +34,16 @@ const querySchema = z.object({
     .optional(),
   showArchived: z.coerce.boolean().optional(),
   sortBy: z.enum(['bookingDate', 'amountCents', 'createdAt']).optional(),
-  sortDir: z.enum(['asc', 'desc']).optional(),
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce
-    .number()
-    .refine((value) => value === -1 || (value >= 1 && value <= 100), {
-      message: 'Limit muss -1 (unbegrenzt) oder zwischen 1 und 100 sein',
-    })
-    .optional()
-    .default(20),
+  sortDir: sortDirField,
+  ...paginationFields,
 })
 
 export const GET: APIRoute = async ({ url }) => {
-  const rawParams = {
-    sourceId: url.searchParams.get('sourceId') || undefined,
-    planId: url.searchParams.get('planId') || undefined,
-    status: url.searchParams.get('status') || undefined,
-    search: url.searchParams.get('search') || undefined,
-    dateFrom: url.searchParams.get('dateFrom') || undefined,
-    dateTo: url.searchParams.get('dateTo') || undefined,
-    showArchived: url.searchParams.get('showArchived') || undefined,
-    sortBy: url.searchParams.get('sortBy') || undefined,
-    sortDir: url.searchParams.get('sortDir') || undefined,
-    page: url.searchParams.get('page') || undefined,
-    limit: url.searchParams.get('limit') || undefined,
-  }
-
-  const parsed = querySchema.safeParse(rawParams)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({
-        error: parsed.error.issues[0]?.message ?? 'Ungültige Filter',
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  const result = await getBankTransactions(parsed.data)
-  return new Response(JSON.stringify(result), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  const rawParams = parseQueryParams(
+    url.searchParams,
+    BANK_TRANSACTION_QUERY_KEYS,
+  )
+  const data = validate(querySchema, rawParams)
+  if (data instanceof Response) return data
+  return json(await getBankTransactions(data))
 }

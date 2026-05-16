@@ -6,9 +6,16 @@ import {
   getTransactions,
   parseTransactionQueryParams,
 } from '@/lib/transactions'
-import { getPlanById } from '@/lib/plans'
 import { getSetting } from '@/lib/settings'
-import { error, json, validate, validateBody } from '@/lib/api/responses'
+import {
+  handle,
+  json,
+  unwrap,
+  validate,
+  validateBody,
+} from '@/lib/api/responses'
+import { requireUnarchivedPlan } from '@/lib/api/plan-guards'
+import { paginationFields, sortDirField } from '@/lib/api/pagination-schema'
 
 const querySchema = z.object({
   search: z.string().optional(),
@@ -34,15 +41,8 @@ const querySchema = z.object({
     .transform((v) => v === 'true')
     .optional(),
   sortBy: z.enum(['name', 'dueDate', 'categoryName', 'amount']).optional(),
-  sortDir: z.enum(['asc', 'desc']).optional(),
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce
-    .number()
-    .refine((v) => v === -1 || (v >= 1 && v <= 100), {
-      message: 'Limit must be -1 (unlimited) or between 1 and 100',
-    })
-    .optional()
-    .default(20),
+  sortDir: sortDirField,
+  ...paginationFields,
 })
 
 const createSchema = z.object({
@@ -84,25 +84,19 @@ export const GET: APIRoute = async ({ url, locals }) => {
   return json({ ...result, budgetSpending })
 }
 
-export const POST: APIRoute = async ({ request }) => {
-  const data = await validateBody(request, createSchema)
-  if (data instanceof Response) return data
-
-  const targetPlan = await getPlanById(data.planId)
-  if (!targetPlan) return error('Plan nicht gefunden', 404)
-
-  if (targetPlan.isArchived) {
-    return error(
-      'Transaktionen können nicht zu einem archivierten Plan hinzugefügt werden.',
-      403,
-    )
-  }
-
-  try {
-    const transaction = await createTransaction(data)
-    return json(transaction, 201)
-  } catch (err) {
-    console.error('Failed to create transaction:', err)
-    return error('Transaktion konnte nicht erstellt werden', 500)
-  }
-}
+export const POST: APIRoute = async ({ request }) =>
+  handle(
+    async () => {
+      const data = unwrap(await validateBody(request, createSchema))
+      unwrap(
+        await requireUnarchivedPlan(data.planId, {
+          archived:
+            'Transaktionen können nicht zu einem archivierten Plan hinzugefügt werden.',
+          archivedStatus: 403,
+        }),
+      )
+      return json(await createTransaction(data), 201)
+    },
+    'Transaktion konnte nicht erstellt werden',
+    'Failed to create transaction',
+  )

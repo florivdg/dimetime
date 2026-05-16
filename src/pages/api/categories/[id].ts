@@ -8,6 +8,18 @@ import {
 import { error, json, requireExisting, validateBody } from '@/lib/api/responses'
 import { updateCategorySchema } from './_schema'
 
+async function ensureSlugAvailable(
+  nextSlug: string | undefined,
+  currentSlug: string,
+): Promise<Response | null> {
+  if (!nextSlug || nextSlug === currentSlug) return null
+  const slugExists = await getCategoryBySlug(nextSlug)
+  if (slugExists) {
+    return error('Eine Kategorie mit diesem Slug existiert bereits', 409)
+  }
+  return null
+}
+
 export const PUT: APIRoute = async ({ params, request }) => {
   const found = await requireExisting(
     params,
@@ -21,12 +33,8 @@ export const PUT: APIRoute = async ({ params, request }) => {
   const data = await validateBody(request, updateCategorySchema)
   if (data instanceof Response) return data
 
-  if (data.slug && data.slug !== found.resource.slug) {
-    const slugExists = await getCategoryBySlug(data.slug)
-    if (slugExists) {
-      return error('Eine Kategorie mit diesem Slug existiert bereits', 409)
-    }
-  }
+  const slugError = await ensureSlugAvailable(data.slug, found.resource.slug)
+  if (slugError) return slugError
 
   const updated = await updateCategory(found.id, data)
 

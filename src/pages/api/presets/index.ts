@@ -9,6 +9,7 @@ import {
   validateBody,
 } from '@/lib/api/responses'
 import { parseQueryParams } from '@/lib/api/query-params'
+import { paginationFields, sortDirField } from '@/lib/api/pagination-schema'
 import { createPresetSchema } from './_schema'
 
 const PRESET_QUERY_KEYS = [
@@ -39,15 +40,8 @@ const querySchema = z.object({
     .enum(['name', 'createdAt', 'lastUsedAt', 'amount'])
     .optional()
     .default('createdAt'),
-  sortDir: z.enum(['asc', 'desc']).optional().default('desc'),
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce
-    .number()
-    .refine((v) => v === -1 || (v >= 1 && v <= 100), {
-      message: 'Limit muss -1 (unbegrenzt) oder zwischen 1 und 100 sein',
-    })
-    .optional()
-    .default(20),
+  sortDir: sortDirField.unwrap().default('desc'),
+  ...paginationFields,
 })
 
 export const GET: APIRoute = async ({ url, locals }) => {

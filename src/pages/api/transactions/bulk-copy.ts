@@ -4,12 +4,13 @@ import { db } from '@/db/database'
 import { plannedTransaction, plan } from '@/db/schema/plans'
 import { eq, inArray } from 'drizzle-orm'
 import { adjustDueDateToMonth } from '@/lib/transactions'
-import { getPlanById } from '@/lib/plans'
+import { requireUnarchivedPlan } from '@/lib/api/plan-guards'
 import {
   error,
   handle,
   json,
   requireUserId,
+  unwrap,
   validateBody,
 } from '@/lib/api/responses'
 
@@ -18,20 +19,8 @@ const bulkCopySchema = z.object({
   transactionIds: z.array(z.uuid()).min(1),
 })
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  const userId = requireUserId(locals)
-  if (userId instanceof Response) return userId
-
-  const data = await validateBody(request, bulkCopySchema)
-  if (data instanceof Response) return data
-
-  const transactionIds = Array.from(new Set(data.transactionIds))
-
-  const targetPlan = await getPlanById(data.targetPlanId)
-  if (!targetPlan) return error('Zielplan nicht gefunden', 404)
-  if (targetPlan.isArchived) return error('Zielplan ist archiviert', 400)
-
-  const sourceTransactions = await db
+function selectSources(transactionIds: string[]) {
+  return db
     .select({
       id: plannedTransaction.id,
       name: plannedTransaction.name,
@@ -45,22 +34,40 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .from(plannedTransaction)
     .innerJoin(plan, eq(plannedTransaction.planId, plan.id))
     .where(inArray(plannedTransaction.id, transactionIds))
+}
 
-  if (sourceTransactions.length === 0) {
+async function loadSourcesForCopy(
+  transactionIds: string[],
+): Promise<Awaited<ReturnType<typeof selectSources>> | Response> {
+  const sources = await selectSources(transactionIds)
+  if (sources.length === 0) {
     return error('Keine gültigen Transaktionen gefunden', 404)
   }
-
-  if (sourceTransactions.length !== transactionIds.length) {
+  if (sources.length !== transactionIds.length) {
     return error(
       'Einige der ausgewählten Transaktionen wurden nicht gefunden',
       404,
     )
   }
+  return sources
+}
 
-  return handle(
+export const POST: APIRoute = async ({ request, locals }) =>
+  handle(
     async () => {
+      unwrap(requireUserId(locals))
+      const data = unwrap(await validateBody(request, bulkCopySchema))
+      const targetPlan = unwrap(
+        await requireUnarchivedPlan(data.targetPlanId, {
+          notFound: 'Zielplan nicht gefunden',
+          archived: 'Zielplan ist archiviert',
+        }),
+      )
+      const transactionIds = Array.from(new Set(data.transactionIds))
+      const sources = unwrap(await loadSourcesForCopy(transactionIds))
       const now = new Date()
-      const valuesToInsert = sourceTransactions.map((source) => ({
+
+      const values = sources.map((source) => ({
         name: source.name,
         note: source.note,
         type: source.type,
@@ -72,10 +79,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         createdAt: now,
         updatedAt: now,
       }))
-      await db.insert(plannedTransaction).values(valuesToInsert)
-      return json({ success: true, count: valuesToInsert.length }, 201)
+      await db.insert(plannedTransaction).values(values)
+      return json({ success: true, count: values.length }, 201)
     },
     'Fehler beim Kopieren der Transaktionen',
     'Error bulk copying transactions',
   )
-}
