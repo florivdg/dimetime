@@ -207,35 +207,49 @@ const presetInitialValues = ref<PresetInitialValues | undefined>(undefined)
 const copyFromPlanDialogOpen = ref(false)
 
 // API
+function setIfTruthy(
+  params: URLSearchParams,
+  key: string,
+  value: string | null | undefined,
+): void {
+  if (value) params.set(key, value)
+}
+
+function setAmountCentsIfValid(
+  params: URLSearchParams,
+  key: string,
+  raw: string | null | undefined,
+): void {
+  if (!raw) return
+  const cents = Math.round(parseFloat(raw) * 100)
+  if (!isNaN(cents)) params.set(key, cents.toString())
+}
+
+function buildTransactionFilterParams(): URLSearchParams {
+  const params = new URLSearchParams()
+  params.set('planId', props.plan.id)
+  setIfTruthy(params, 'search', filters.value.search)
+  setIfTruthy(params, 'categoryId', filters.value.categoryId)
+  setIfTruthy(params, 'type', filters.value.type)
+  if (filters.value.isDone !== null) {
+    params.set('isDone', filters.value.isDone.toString())
+  }
+  setIfTruthy(params, 'dateFrom', filters.value.dateFrom)
+  setIfTruthy(params, 'dateTo', filters.value.dateTo)
+  setAmountCentsIfValid(params, 'amountMin', filters.value.amountMin)
+  setAmountCentsIfValid(params, 'amountMax', filters.value.amountMax)
+  if (!filters.value.hideZeroValue) params.set('hideZeroValue', 'false')
+  params.set('sortBy', sortBy.value)
+  params.set('sortDir', sortDir.value)
+  params.set('limit', '-1')
+  return params
+}
+
 async function loadTransactions() {
   isLoading.value = true
   errorMessage.value = null
   try {
-    const params = new URLSearchParams()
-    params.set('planId', props.plan.id)
-    if (filters.value.search) params.set('search', filters.value.search)
-    if (filters.value.categoryId)
-      params.set('categoryId', filters.value.categoryId)
-    if (filters.value.type) params.set('type', filters.value.type)
-    if (filters.value.isDone !== null)
-      params.set('isDone', filters.value.isDone.toString())
-    if (filters.value.dateFrom) params.set('dateFrom', filters.value.dateFrom)
-    if (filters.value.dateTo) params.set('dateTo', filters.value.dateTo)
-    if (filters.value.amountMin) {
-      const cents = Math.round(parseFloat(filters.value.amountMin) * 100)
-      if (!isNaN(cents)) params.set('amountMin', cents.toString())
-    }
-    if (filters.value.amountMax) {
-      const cents = Math.round(parseFloat(filters.value.amountMax) * 100)
-      if (!isNaN(cents)) params.set('amountMax', cents.toString())
-    }
-    if (!filters.value.hideZeroValue) {
-      params.set('hideZeroValue', 'false')
-    }
-    params.set('sortBy', sortBy.value)
-    params.set('sortDir', sortDir.value)
-    params.set('limit', '-1')
-
+    const params = buildTransactionFilterParams()
     const response = await fetch(`/api/transactions?${params.toString()}`)
     if (!response.ok) throw new Error('Fehler beim Laden')
     const data = await response.json()
@@ -309,36 +323,52 @@ function handleMoved(_targetPlanId: string, targetPlanName: string) {
   transactionToMove.value = null
 }
 
+function applyOptimisticToggle(
+  index: number,
+  isDone: boolean,
+  willBeFilteredOut: boolean,
+): TransactionWithCategory | null {
+  if (willBeFilteredOut) {
+    const snapshot = { ...transactions.value[index] }
+    transactions.value.splice(index, 1)
+    return snapshot
+  }
+  transactions.value[index].isDone = isDone
+  return null
+}
+
+function revertOptimisticToggle(
+  index: number,
+  willBeFilteredOut: boolean,
+  removed: TransactionWithCategory | null,
+  originalValue: boolean,
+): void {
+  if (willBeFilteredOut && removed) {
+    transactions.value.splice(index, 0, removed)
+    return
+  }
+  if (index < transactions.value.length) {
+    transactions.value[index].isDone = originalValue
+  }
+}
+
 async function handleToggleDone(id: string, isDone: boolean) {
-  // Check if plan is archived
   if (props.plan.isArchived) {
     toast.error('Transaktion kann nicht geändert werden - Plan ist archiviert')
     return
   }
 
-  // Find transaction and store original state for potential rollback
   const index = transactions.value.findIndex((t) => t.id === id)
   if (index === -1) return
 
   const originalValue = transactions.value[index].isDone
-
-  // Check if transaction will be filtered out after toggle
   const willBeFilteredOut =
     filters.value.isDone !== null && filters.value.isDone !== isDone
-
-  // Store transaction for potential restoration on error
-  const removedTransaction = willBeFilteredOut
-    ? { ...transactions.value[index] }
-    : null
-
-  // Optimistically update UI immediately
-  if (willBeFilteredOut) {
-    // Remove from list since it won't match the current filter anymore
-    transactions.value.splice(index, 1)
-  } else {
-    // Just update the isDone property
-    transactions.value[index].isDone = isDone
-  }
+  const removedTransaction = applyOptimisticToggle(
+    index,
+    isDone,
+    willBeFilteredOut,
+  )
 
   try {
     const response = await fetch(`/api/transactions/${id}`, {
@@ -346,22 +376,16 @@ async function handleToggleDone(id: string, isDone: boolean) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isDone }),
     })
-
-    if (!response.ok) {
-      throw new Error('Fehler beim Aktualisieren')
-    }
-
-    // Success: show toast and reload balance only
+    if (!response.ok) throw new Error('Fehler beim Aktualisieren')
     toast.success(isDone ? 'Als erledigt markiert' : 'Als offen markiert')
     loadBalance()
   } catch {
-    // Error: revert the optimistic update
-    if (willBeFilteredOut && removedTransaction) {
-      // Re-insert the removed transaction at original position
-      transactions.value.splice(index, 0, removedTransaction)
-    } else if (index < transactions.value.length) {
-      transactions.value[index].isDone = originalValue
-    }
+    revertOptimisticToggle(
+      index,
+      willBeFilteredOut,
+      removedTransaction,
+      originalValue,
+    )
     toast.error('Status konnte nicht aktualisiert werden')
   }
 }

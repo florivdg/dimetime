@@ -4,6 +4,8 @@ import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
 import { formatAmount, formatDate, getPlanDisplayName } from '@/lib/format'
 import { useEditInputRefs } from '@/composables/useEditInputRefs'
+import { useDeleteTransactionDialog } from '@/composables/useDeleteTransactionDialog'
+import { getSortIcon as resolveSortIcon } from '@/composables/useSortIcon'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -45,9 +47,6 @@ import {
   InputGroupInput,
 } from '@/components/ui/input-group'
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   BookmarkPlus,
   Check,
   Loader2,
@@ -92,14 +91,15 @@ const emit = defineEmits<{
   saveAsPreset: [transaction: TransactionWithCategory]
 }>()
 
-// Delete dialog state
-const deleteDialogOpen = ref(false)
-const transactionToDelete = ref<TransactionWithCategory | null>(null)
-
-function openDeleteDialog(transaction: TransactionWithCategory) {
-  transactionToDelete.value = transaction
-  deleteDialogOpen.value = true
-}
+const {
+  deleteDialogOpen,
+  transactionToDelete,
+  openDeleteDialog,
+  deleteTransaction,
+} = useDeleteTransactionDialog(
+  () => emit('deleted'),
+  (message) => emit('error', message),
+)
 
 // Edit input refs
 const { setEditInputRef, focusEditInputAsync } = useEditInputRefs()
@@ -175,31 +175,8 @@ async function updateTransaction(id: string) {
   }
 }
 
-async function deleteTransaction(id: string) {
-  try {
-    const response = await fetch(`/api/transactions/${id}`, {
-      method: 'DELETE',
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Löschen')
-    }
-
-    emit('deleted')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Transaktion konnte nicht gelöscht werden.',
-    )
-  }
-}
-
 function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
-  if (props.sortBy !== column) return ArrowUpDown
-  return props.sortDir === 'asc' ? ArrowUp : ArrowDown
+  return resolveSortIcon(props.sortBy, props.sortDir, column)
 }
 </script>
 

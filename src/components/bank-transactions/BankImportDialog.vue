@@ -115,30 +115,32 @@ function resetState() {
   errorMessage.value = null
 }
 
-function handleStepChange(newStep: number | undefined) {
-  if (newStep === undefined || isLoading.value) return
-
-  // Backward navigation (always allowed except from step 4)
-  if (newStep < currentStep.value) {
-    if (currentStep.value >= 4) return
-    if (currentStep.value === 3) {
-      previewResult.value = null
-      errorMessage.value = null
-    }
-    currentStep.value = newStep
-    return
+function navigateBackward(newStep: number): void {
+  if (currentStep.value >= 4) return
+  if (currentStep.value === 3) {
+    previewResult.value = null
+    errorMessage.value = null
   }
+  currentStep.value = newStep
+}
 
-  // Forward navigation via stepper click
+function navigateForward(newStep: number): void {
   if (newStep === 2 && currentStep.value === 1 && canGoToStep2.value) {
     currentStep.value = 2
     return
   }
   if (newStep === 3 && currentStep.value === 2 && canGoToStep3.value) {
     runPreview()
+  }
+}
+
+function handleStepChange(newStep: number | undefined) {
+  if (newStep === undefined || isLoading.value) return
+  if (newStep < currentStep.value) {
+    navigateBackward(newStep)
     return
   }
-  // Step 4 only reachable via commit button — ignore click
+  navigateForward(newStep)
 }
 
 function goBack() {

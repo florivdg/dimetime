@@ -90,32 +90,42 @@ watch(
   { deep: true },
 )
 
+function appendIfPresent(
+  params: URLSearchParams,
+  key: string,
+  value: string | null | undefined,
+  excludeAll = false,
+): void {
+  if (!value) return
+  if (excludeAll && value === 'all') return
+  params.append(key, value)
+}
+
+function buildPresetQueryParams(): URLSearchParams {
+  const params = new URLSearchParams()
+  appendIfPresent(params, 'search', urlState.search)
+  appendIfPresent(params, 'categoryId', urlState.categoryId, true)
+  appendIfPresent(params, 'type', urlState.type)
+  appendIfPresent(params, 'recurrence', urlState.recurrence, true)
+  params.append('includeExpired', String(urlState.includeExpired))
+  params.append('sortBy', urlState.sortBy)
+  params.append('sortDir', urlState.sortDir)
+  params.append('page', String(urlState.page))
+  params.append('limit', String(20))
+  return params
+}
+
 async function loadPresets() {
   isLoading.value = true
   error.value = ''
 
   try {
-    const params = new URLSearchParams()
-
-    if (urlState.search) params.append('search', urlState.search)
-    if (urlState.categoryId && urlState.categoryId !== 'all')
-      params.append('categoryId', urlState.categoryId)
-    if (urlState.type) params.append('type', urlState.type)
-    if (urlState.recurrence && urlState.recurrence !== 'all')
-      params.append('recurrence', urlState.recurrence)
-    params.append('includeExpired', String(urlState.includeExpired))
-    params.append('sortBy', urlState.sortBy)
-    params.append('sortDir', urlState.sortDir)
-    params.append('page', String(urlState.page))
-    params.append('limit', String(20))
-
+    const params = buildPresetQueryParams()
     const response = await fetch(`/api/presets?${params}`)
-
     if (!response.ok) {
       const data = await response.json()
       throw new Error(data.error || 'Fehler beim Laden')
     }
-
     const data = await response.json()
     presets.value = data.presets || []
     pagination.value = data.pagination
