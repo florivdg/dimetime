@@ -20,12 +20,14 @@ import {
   sum,
 } from 'drizzle-orm'
 import {
+  buildSpendingRecord,
   getBudgetSpendingFromSplits,
   getBudgetSpendingFromSplitsForPlan,
 } from '@/lib/bank-transaction-splits'
 import { parseQueryParams } from '@/lib/api/query-params'
 import { error } from '@/lib/api/responses'
 import { buildSetValues } from '@/lib/db/partial-update'
+import { orDefault, orNull } from '@/lib/defaults'
 
 // Infer types from Drizzle schema
 export type Transaction = typeof plannedTransaction.$inferSelect
@@ -373,41 +375,56 @@ export async function updateTransaction(
     },
   })
 
-  return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({
-        planId: plannedTransaction.planId,
-        isBudget: plannedTransaction.isBudget,
-      })
-      .from(plannedTransaction)
-      .where(eq(plannedTransaction.id, id))
-      .limit(1)
+  return db.transaction(async (tx) =>
+    runUpdateTransaction(tx, id, input, updateData),
+  )
+}
 
-    if (!existing) {
-      return undefined
-    }
+type TxHandle = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type TransactionUpdateData = { updatedAt: Date } & Partial<
+  typeof plannedTransaction.$inferInsert
+>
 
-    const nextPlanId = input.planId ?? existing.planId
-    const nextIsBudget = input.isBudget ?? existing.isBudget
+function shouldClearBudgetLinks(
+  existing: { planId: string | null; isBudget: boolean },
+  input: UpdateTransactionInput,
+): boolean {
+  const nextPlanId = input.planId ?? existing.planId
+  const nextIsBudget = input.isBudget ?? existing.isBudget
+  return !nextIsBudget || nextPlanId !== existing.planId
+}
 
-    if (!nextIsBudget || nextPlanId !== existing.planId) {
-      await tx
-        .update(bankTransaction)
-        .set({
-          budgetId: null,
-          updatedAt: updateData.updatedAt,
-        })
-        .where(eq(bankTransaction.budgetId, id))
-    }
+async function runUpdateTransaction(
+  tx: TxHandle,
+  id: string,
+  input: UpdateTransactionInput,
+  updateData: TransactionUpdateData,
+): Promise<Transaction | undefined> {
+  const [existing] = await tx
+    .select({
+      planId: plannedTransaction.planId,
+      isBudget: plannedTransaction.isBudget,
+    })
+    .from(plannedTransaction)
+    .where(eq(plannedTransaction.id, id))
+    .limit(1)
 
-    const result = await tx
-      .update(plannedTransaction)
-      .set(updateData)
-      .where(eq(plannedTransaction.id, id))
-      .returning()
+  if (!existing) return undefined
 
-    return result[0]
-  })
+  if (shouldClearBudgetLinks(existing, input)) {
+    await tx
+      .update(bankTransaction)
+      .set({ budgetId: null, updatedAt: updateData.updatedAt })
+      .where(eq(bankTransaction.budgetId, id))
+  }
+
+  const result = await tx
+    .update(plannedTransaction)
+    .set(updateData)
+    .where(eq(plannedTransaction.id, id))
+    .returning()
+
+  return result[0]
 }
 
 /**
@@ -421,28 +438,34 @@ export async function deleteTransaction(id: string): Promise<boolean> {
   return result.length > 0
 }
 
+function buildTransactionInsertValues(
+  input: CreateTransactionInput,
+  now: Date,
+): typeof plannedTransaction.$inferInsert {
+  return {
+    name: input.name,
+    note: orNull(input.note),
+    type: orDefault(input.type, 'expense'),
+    dueDate: input.dueDate,
+    amount: input.amount,
+    isDone: orDefault(input.isDone, false),
+    isBudget: orDefault(input.isBudget, false),
+    planId: input.planId,
+    categoryId: orNull(input.categoryId),
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 /**
  * Create a new transaction
  */
 export async function createTransaction(
   input: CreateTransactionInput,
 ): Promise<Transaction> {
-  const now = new Date()
   const result = await db
     .insert(plannedTransaction)
-    .values({
-      name: input.name,
-      note: input.note ?? null,
-      type: input.type ?? 'expense',
-      dueDate: input.dueDate,
-      amount: input.amount,
-      isDone: input.isDone ?? false,
-      isBudget: input.isBudget ?? false,
-      planId: input.planId,
-      categoryId: input.categoryId ?? null,
-      createdAt: now,
-      updatedAt: now,
-    })
+    .values(buildTransactionInsertValues(input, new Date()))
     .returning()
 
   return result[0]
@@ -499,6 +522,17 @@ export async function getBudgetsForPlan(planId: string) {
     .orderBy(asc(plannedTransaction.name))
 }
 
+function mergeBudgetSpending(
+  bankRows: { budgetId: string | null; spent: string | null }[],
+  splitSpending: Record<string, number>,
+): Record<string, number> {
+  const spending = buildSpendingRecord(bankRows)
+  for (const [budgetId, amount] of Object.entries(splitSpending)) {
+    spending[budgetId] = (spending[budgetId] ?? 0) + amount
+  }
+  return spending
+}
+
 /**
  * Get budget spending for a plan (sum of absolute bank transaction amounts grouped by budgetId)
  */
@@ -526,18 +560,7 @@ export async function getBudgetSpendingForPlan(
     getBudgetSpendingFromSplitsForPlan(planId),
   ])
 
-  const spending: Record<string, number> = {}
-  for (const row of result) {
-    if (row.budgetId) {
-      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
-    }
-  }
-
-  for (const [budgetId, amount] of Object.entries(splitSpending)) {
-    spending[budgetId] = (spending[budgetId] ?? 0) + amount
-  }
-
-  return spending
+  return mergeBudgetSpending(result, splitSpending)
 }
 
 /**
@@ -561,18 +584,7 @@ export async function getBudgetSpendingForBudgets(
     getBudgetSpendingFromSplits(budgetIds),
   ])
 
-  const spending: Record<string, number> = {}
-  for (const row of result) {
-    if (row.budgetId) {
-      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
-    }
-  }
-
-  for (const [budgetId, amount] of Object.entries(splitSpending)) {
-    spending[budgetId] = (spending[budgetId] ?? 0) + amount
-  }
-
-  return spending
+  return mergeBudgetSpending(result, splitSpending)
 }
 
 /**

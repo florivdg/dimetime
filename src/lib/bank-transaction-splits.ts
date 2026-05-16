@@ -6,20 +6,20 @@ import {
 } from '@/db/schema/plans'
 import { and, eq, inArray, sum } from 'drizzle-orm'
 import { buildSetValues } from '@/lib/db/partial-update'
+import { partitionByPlan } from '@/lib/plan-partition'
 
 export type BankTransactionSplit = typeof bankTransactionSplit.$inferSelect
 
-function assertValidSplitAmounts(
-  parentAmountCents: number,
-  splits: { amountCents: number; label?: string }[],
-) {
-  if (parentAmountCents === 0) {
-    throw new Error('Transaktionen mit 0,00 EUR können nicht aufgeteilt werden')
-  }
+function isValidSplitAmount(amountCents: number): boolean {
+  return Number.isInteger(amountCents) && amountCents !== 0
+}
 
-  const expectedSign = Math.sign(parentAmountCents)
+function assertSplitMatchesSign(
+  splits: { amountCents: number }[],
+  expectedSign: number,
+) {
   for (const split of splits) {
-    if (!Number.isInteger(split.amountCents) || split.amountCents === 0) {
+    if (!isValidSplitAmount(split.amountCents)) {
       throw new Error(
         'Jeder Teilbetrag muss ein von 0 verschiedener Cent-Betrag sein',
       )
@@ -30,6 +30,17 @@ function assertValidSplitAmounts(
       )
     }
   }
+}
+
+function assertValidSplitAmounts(
+  parentAmountCents: number,
+  splits: { amountCents: number; label?: string }[],
+) {
+  if (parentAmountCents === 0) {
+    throw new Error('Transaktionen mit 0,00 EUR können nicht aufgeteilt werden')
+  }
+
+  assertSplitMatchesSign(splits, Math.sign(parentAmountCents))
 
   const splitSum = splits.reduce((acc, s) => acc + s.amountCents, 0)
   if (splitSum !== parentAmountCents) {
@@ -115,7 +126,7 @@ export async function getSplitById(
   })
 }
 
-function buildSpendingRecord(
+export function buildSpendingRecord(
   rows: { budgetId: string | null; spent: string | number | null }[],
 ): Record<string, number> {
   const spending: Record<string, number> = {}
@@ -179,6 +190,18 @@ export async function updateSplitFields(
   return updated
 }
 
+async function updateSplitPlanGroup(
+  txOrDb: DbOrTransaction,
+  ids: string[],
+  values: Partial<typeof bankTransactionSplit.$inferInsert>,
+) {
+  if (ids.length === 0) return
+  await txOrDb
+    .update(bankTransactionSplit)
+    .set(values)
+    .where(inArray(bankTransactionSplit.id, ids))
+}
+
 export async function bulkAssignPlanToSplits(
   ids: string[],
   planId: string | null,
@@ -197,26 +220,20 @@ export async function bulkAssignPlanToSplits(
 
   if (targetSplits.length === 0) return 0
 
-  const idsToClearBudget = targetSplits
-    .filter((s) => planId === null || s.planId !== planId)
-    .map((s) => s.id)
-  const idsToKeepBudget = targetSplits
-    .filter((s) => planId !== null && s.planId === planId)
-    .map((s) => s.id)
+  const { idsToClearBudget, idsToKeepBudget } = partitionByPlan(
+    targetSplits,
+    planId,
+  )
 
-  if (idsToClearBudget.length > 0) {
-    await txOrDb
-      .update(bankTransactionSplit)
-      .set({ planId, budgetId: null, updatedAt: now })
-      .where(inArray(bankTransactionSplit.id, idsToClearBudget))
-  }
-
-  if (idsToKeepBudget.length > 0) {
-    await txOrDb
-      .update(bankTransactionSplit)
-      .set({ planId, updatedAt: now })
-      .where(inArray(bankTransactionSplit.id, idsToKeepBudget))
-  }
+  await updateSplitPlanGroup(txOrDb, idsToClearBudget, {
+    planId,
+    budgetId: null,
+    updatedAt: now,
+  })
+  await updateSplitPlanGroup(txOrDb, idsToKeepBudget, {
+    planId,
+    updatedAt: now,
+  })
 
   return targetSplits.length
 }

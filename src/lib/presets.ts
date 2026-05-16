@@ -7,6 +7,7 @@ import {
   desc,
   eq,
   getTableColumns,
+  inArray,
   like,
   sql,
   type SQL,
@@ -14,6 +15,7 @@ import {
 import { createTransaction, type CreateTransactionInput } from './transactions'
 import { getPlanById } from './plans'
 import { buildSetValues } from '@/lib/db/partial-update'
+import { orDefault, orNull } from '@/lib/defaults'
 
 // Infer types from Drizzle schema
 export type TransactionPreset = typeof transactionPreset.$inferSelect
@@ -210,9 +212,47 @@ export async function getPresetById(
   return results[0]
 }
 
+/**
+ * Get multiple presets by IDs (basic columns; used for batch ownership checks).
+ */
+export async function getPresetsByIds(
+  ids: string[],
+): Promise<{ id: string; userId: string }[]> {
+  if (ids.length === 0) return []
+  return db
+    .select({
+      id: transactionPreset.id,
+      userId: transactionPreset.userId,
+    })
+    .from(transactionPreset)
+    .where(inArray(transactionPreset.id, ids))
+}
+
 function getCurrentMonth(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function buildPresetInsertValues(
+  userId: string,
+  input: CreatePresetInput,
+  now: Date,
+): NewTransactionPreset {
+  return {
+    name: input.name,
+    note: orNull(input.note),
+    type: orDefault(input.type, 'expense'),
+    amount: input.amount,
+    recurrence: orDefault(input.recurrence, 'einmalig'),
+    startMonth: orDefault(input.startMonth, getCurrentMonth()),
+    endDate: orNull(input.endDate),
+    categoryId: orNull(input.categoryId),
+    dayOfMonth: orNull(input.dayOfMonth),
+    isBudget: orDefault(input.isBudget, false),
+    userId,
+    createdAt: now,
+    updatedAt: now,
+  }
 }
 
 /**
@@ -222,25 +262,9 @@ export async function createPreset(
   userId: string,
   input: CreatePresetInput,
 ): Promise<TransactionPreset> {
-  const now = new Date()
-
   const [preset] = await db
     .insert(transactionPreset)
-    .values({
-      name: input.name,
-      note: input.note || null,
-      type: input.type || 'expense',
-      amount: input.amount,
-      recurrence: input.recurrence || 'einmalig',
-      startMonth: input.startMonth || getCurrentMonth(),
-      endDate: input.endDate || null,
-      categoryId: input.categoryId || null,
-      dayOfMonth: input.dayOfMonth ?? null,
-      isBudget: input.isBudget ?? false,
-      userId,
-      createdAt: now,
-      updatedAt: now,
-    })
+    .values(buildPresetInsertValues(userId, input, new Date()))
     .returning()
 
   return preset
@@ -308,6 +332,28 @@ export async function deletePreset(id: string): Promise<boolean> {
   return result.length > 0
 }
 
+function resolvePresetDueDate(
+  planDate: string,
+  presetDayOfMonth: number | null,
+  override?: string,
+): string {
+  if (override) return override
+  if (!presetDayOfMonth) return planDate
+  const [year, month] = planDate.split('-').map(Number)
+  const lastDayOfMonth = new Date(year, month, 0).getDate()
+  const day = Math.min(presetDayOfMonth, lastDayOfMonth)
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+async function loadPresetAndPlan(presetId: string, planId: string) {
+  const preset = await getPresetById(presetId)
+  if (!preset) throw new Error('Preset nicht gefunden')
+  const plan = await getPlanById(planId)
+  if (!plan) throw new Error('Plan nicht gefunden')
+  if (plan.isArchived) throw new Error('Plan ist archiviert')
+  return { preset, plan }
+}
+
 /**
  * Apply preset to a plan (creates a transaction)
  */
@@ -315,43 +361,13 @@ export async function applyPresetToPlan(
   presetId: string,
   input: ApplyPresetInput,
 ): Promise<any> {
-  // Fetch the preset
-  const preset = await getPresetById(presetId)
-  if (!preset) {
-    throw new Error('Preset nicht gefunden')
-  }
+  const { preset, plan } = await loadPresetAndPlan(presetId, input.planId)
 
-  // Validate plan exists and is not archived
-  const plan = await getPlanById(input.planId)
-  if (!plan) {
-    throw new Error('Plan nicht gefunden')
-  }
-  if (plan.isArchived) {
-    throw new Error('Plan ist archiviert')
-  }
-
-  // Determine due date:
-  // 1. Explicit override from input
-  // 2. Preset's dayOfMonth (clamped to last valid day of the plan's month)
-  // 3. Fall back to plan date
-  let dueDate: string
-  if (input.dueDate) {
-    dueDate = input.dueDate
-  } else if (preset.dayOfMonth) {
-    const [year, month] = plan.date.split('-').map(Number)
-    const lastDayOfMonth = new Date(year, month, 0).getDate()
-    const day = Math.min(preset.dayOfMonth, lastDayOfMonth)
-    dueDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  } else {
-    dueDate = plan.date
-  }
-
-  // Create transaction from preset
   const transactionInput: CreateTransactionInput = {
     name: preset.name,
     note: preset.note,
     type: preset.type,
-    dueDate,
+    dueDate: resolvePresetDueDate(plan.date, preset.dayOfMonth, input.dueDate),
     amount: preset.amount,
     isDone: false,
     isBudget: preset.isBudget,
@@ -400,6 +416,34 @@ function matchesYearlyRecurrence(
   return planMonthNum === startMonthNum && planMonth >= startMonth
 }
 
+const recurrenceMatchers: Record<
+  TransactionPreset['recurrence'],
+  (startMonth: string, planMonth: string) => boolean
+> = {
+  einmalig: (start, plan) => plan === start,
+  monatlich: (start, plan) => plan >= start,
+  vierteljährlich: matchesQuarterlyRecurrence,
+  jährlich: matchesYearlyRecurrence,
+}
+
+function matchesRecurrence(
+  recurrence: TransactionPreset['recurrence'],
+  startMonth: string,
+  planMonth: string,
+): boolean {
+  return recurrenceMatchers[recurrence]?.(startMonth, planMonth) ?? false
+}
+
+function isPresetWithinRange(
+  startMonth: string,
+  endDate: string | null,
+  planMonth: string,
+): boolean {
+  if (planMonth < startMonth) return false
+  const endMonth = endDate?.substring(0, 7)
+  return !endMonth || planMonth <= endMonth
+}
+
 /**
  * Check if a preset matches a plan month based on recurrence rules
  * @param preset - The preset to check
@@ -411,23 +455,9 @@ export function presetMatchesPlanMonth(
   planMonth: string,
 ): boolean {
   const startMonth = preset.startMonth
-  if (!startMonth) return true // No startMonth = always matches (legacy presets)
-
-  if (preset.endDate && planMonth > preset.endDate.substring(0, 7)) return false
-  if (planMonth < startMonth) return false
-
-  switch (preset.recurrence) {
-    case 'einmalig':
-      return planMonth === startMonth
-    case 'monatlich':
-      return planMonth >= startMonth
-    case 'vierteljährlich':
-      return matchesQuarterlyRecurrence(startMonth, planMonth)
-    case 'jährlich':
-      return matchesYearlyRecurrence(startMonth, planMonth)
-    default:
-      return false
-  }
+  if (!startMonth) return true // Legacy presets without startMonth always match
+  if (!isPresetWithinRange(startMonth, preset.endDate, planMonth)) return false
+  return matchesRecurrence(preset.recurrence, startMonth, planMonth)
 }
 
 /**

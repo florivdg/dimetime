@@ -21,6 +21,8 @@ import {
 } from 'drizzle-orm'
 import { unionAll } from 'drizzle-orm/sqlite-core'
 import { buildSetValues } from '@/lib/db/partial-update'
+import { orDefault, orNull } from '@/lib/defaults'
+import { partitionByPlan } from '@/lib/plan-partition'
 
 export type ImportSource = typeof importSource.$inferSelect
 type NewImportSource = typeof importSource.$inferInsert
@@ -110,24 +112,30 @@ export async function getImportSourceById(
   })
 }
 
+function buildImportSourceInsertValues(
+  input: CreateImportSourceInput,
+  now: Date,
+): NewImportSource {
+  return {
+    name: input.name,
+    preset: input.preset,
+    sourceKind: input.sourceKind,
+    bankName: orNull(input.bankName),
+    accountLabel: orNull(input.accountLabel),
+    accountIdentifier: orNull(input.accountIdentifier),
+    defaultPlanAssignment: orDefault(input.defaultPlanAssignment, 'auto_month'),
+    isActive: orDefault(input.isActive, true),
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 export async function createImportSource(
   input: CreateImportSourceInput,
 ): Promise<ImportSource> {
-  const now = new Date()
   const [created] = await db
     .insert(importSource)
-    .values({
-      name: input.name,
-      preset: input.preset,
-      sourceKind: input.sourceKind,
-      bankName: input.bankName ?? null,
-      accountLabel: input.accountLabel ?? null,
-      accountIdentifier: input.accountIdentifier ?? null,
-      defaultPlanAssignment: input.defaultPlanAssignment ?? 'auto_month',
-      isActive: input.isActive ?? true,
-      createdAt: now,
-      updatedAt: now,
-    })
+    .values(buildImportSourceInsertValues(input, new Date()))
     .returning()
 
   return created
@@ -496,12 +504,25 @@ export async function bulkArchiveBankTransactions(
   return result.length
 }
 
+async function updateBankTxPlanGroup(
+  txOrDb: DbOrTransaction,
+  ids: string[],
+  values: Partial<typeof bankTransaction.$inferInsert>,
+) {
+  if (ids.length === 0) return
+  await txOrDb
+    .update(bankTransaction)
+    .set(values)
+    .where(inArray(bankTransaction.id, ids))
+}
+
 export async function bulkAssignPlanToTransactions(
   ids: string[],
   planId: string | null,
   txOrDb: DbOrTransaction = db,
 ): Promise<number> {
   const now = new Date()
+  const planAssignment: 'manual' | 'none' = planId ? 'manual' : 'none'
 
   const targetTransactions = await txOrDb
     .select({
@@ -511,39 +532,24 @@ export async function bulkAssignPlanToTransactions(
     .from(bankTransaction)
     .where(inArray(bankTransaction.id, ids))
 
-  if (targetTransactions.length === 0) {
-    return 0
-  }
+  if (targetTransactions.length === 0) return 0
 
-  const idsToClearBudget = targetTransactions
-    .filter((transaction) => planId === null || transaction.planId !== planId)
-    .map((transaction) => transaction.id)
-  const idsToKeepBudget = targetTransactions
-    .filter((transaction) => planId !== null && transaction.planId === planId)
-    .map((transaction) => transaction.id)
+  const { idsToClearBudget, idsToKeepBudget } = partitionByPlan(
+    targetTransactions,
+    planId,
+  )
 
-  if (idsToClearBudget.length > 0) {
-    await txOrDb
-      .update(bankTransaction)
-      .set({
-        planId,
-        planAssignment: planId ? 'manual' : 'none',
-        budgetId: null,
-        updatedAt: now,
-      })
-      .where(inArray(bankTransaction.id, idsToClearBudget))
-  }
-
-  if (idsToKeepBudget.length > 0) {
-    await txOrDb
-      .update(bankTransaction)
-      .set({
-        planId,
-        planAssignment: planId ? 'manual' : 'none',
-        updatedAt: now,
-      })
-      .where(inArray(bankTransaction.id, idsToKeepBudget))
-  }
+  await updateBankTxPlanGroup(txOrDb, idsToClearBudget, {
+    planId,
+    planAssignment,
+    budgetId: null,
+    updatedAt: now,
+  })
+  await updateBankTxPlanGroup(txOrDb, idsToKeepBudget, {
+    planId,
+    planAssignment,
+    updatedAt: now,
+  })
 
   return targetTransactions.length
 }

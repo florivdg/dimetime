@@ -42,13 +42,40 @@ export interface MonthlyChartData {
 
 export type ChartRange = '6m' | '12m' | 'year'
 
+type PendingTotalRow = {
+  type: 'income' | 'expense'
+  count: number
+  total: string | null
+}
+
+function applyPendingRow(
+  stats: PendingTransactionsStats,
+  row: PendingTotalRow,
+): void {
+  const rowTotal = Number(row.total) || 0
+  stats.count += row.count ?? 0
+  if (row.type === 'income') stats.incomeTotal = rowTotal
+  else stats.expenseTotal = rowTotal
+}
+
+function aggregatePendingTotals(
+  rows: PendingTotalRow[],
+): PendingTransactionsStats {
+  const stats: PendingTransactionsStats = {
+    count: 0,
+    incomeTotal: 0,
+    expenseTotal: 0,
+  }
+  for (const row of rows) applyPendingRow(stats, row)
+  return stats
+}
+
 /**
  * Get pending transactions stats for a plan
  */
 async function getPendingTransactionsStats(
   planId: string,
 ): Promise<PendingTransactionsStats> {
-  // Get counts and totals by type
   const totalsResult = await db
     .select({
       type: plannedTransaction.type,
@@ -64,26 +91,7 @@ async function getPendingTransactionsStats(
     )
     .groupBy(plannedTransaction.type)
 
-  let totalCount = 0
-  let incomeTotal = 0
-  let expenseTotal = 0
-
-  for (const row of totalsResult) {
-    const rowCount = row.count ?? 0
-    const rowTotal = Number(row.total) || 0
-    totalCount += rowCount
-    if (row.type === 'income') {
-      incomeTotal = rowTotal
-    } else {
-      expenseTotal = rowTotal
-    }
-  }
-
-  return {
-    count: totalCount,
-    incomeTotal,
-    expenseTotal,
-  }
+  return aggregatePendingTotals(totalsResult)
 }
 
 /**
@@ -177,27 +185,44 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   }
 }
 
+function chartStartDate(range: ChartRange, now: Date): string {
+  const lookback = { '6m': 5, '12m': 11, year: now.getMonth() }[range]
+  const startMonth = now.getMonth() - lookback
+  const year = now.getFullYear() + Math.floor(startMonth / 12)
+  const month = ((startMonth % 12) + 12) % 12
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`
+}
+
+type MonthRow = {
+  month: string
+  type: 'income' | 'expense'
+  total: string | null
+}
+
+type MonthBucket = { income: number; expense: number }
+
+function applyMonthRow(map: Map<string, MonthBucket>, row: MonthRow): void {
+  const data = map.get(row.month) ?? { income: 0, expense: 0 }
+  const total = Number(row.total) || 0
+  if (row.type === 'income') data.income = total
+  else data.expense = total
+  map.set(row.month, data)
+}
+
+function groupMonthlyRows(rows: MonthRow[]): Map<string, MonthBucket> {
+  const monthlyMap = new Map<string, MonthBucket>()
+  for (const row of rows) applyMonthRow(monthlyMap, row)
+  return monthlyMap
+}
+
 /**
  * Get monthly chart data based on range
  */
 export async function getMonthlyChartData(
   range: ChartRange,
 ): Promise<MonthlyChartData[]> {
-  const now = new Date()
-  let startDate: string
+  const startDate = chartStartDate(range, new Date())
 
-  if (range === '6m') {
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-    startDate = sixMonthsAgo.toISOString().slice(0, 10)
-  } else if (range === '12m') {
-    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
-    startDate = twelveMonthsAgo.toISOString().slice(0, 10)
-  } else {
-    // Current year
-    startDate = `${now.getFullYear()}-01-01`
-  }
-
-  // Get aggregated monthly data
   const result = await db
     .select({
       month: sql<string>`strftime('%Y-%m', ${plannedTransaction.dueDate})`,
@@ -212,32 +237,10 @@ export async function getMonthlyChartData(
     )
     .orderBy(asc(sql`strftime('%Y-%m', ${plannedTransaction.dueDate})`))
 
-  // Group by month and combine income/expense
-  const monthlyMap = new Map<string, { income: number; expense: number }>()
-
-  for (const row of result) {
-    const month = row.month
-    if (!monthlyMap.has(month)) {
-      monthlyMap.set(month, { income: 0, expense: 0 })
-    }
-    const data = monthlyMap.get(month)!
-    const total = Number(row.total) || 0
-    if (row.type === 'income') {
-      data.income = total
-    } else {
-      data.expense = total
-    }
-  }
-
-  // Convert to array with Date objects
-  const chartData: MonthlyChartData[] = []
-  for (const [month, data] of monthlyMap) {
-    chartData.push({
-      month: new Date(`${month}-01`),
-      income: data.income,
-      expense: data.expense,
-    })
-  }
-
-  return chartData
+  const monthlyMap = groupMonthlyRows(result)
+  return Array.from(monthlyMap, ([month, data]) => ({
+    month: new Date(`${month}-01`),
+    income: data.income,
+    expense: data.expense,
+  }))
 }

@@ -78,14 +78,16 @@ function buildHeaderIndex(headerCells: string[]): Record<string, number[]> {
   return map
 }
 
+const BOOKED_MARKERS = ['', '-']
+
+function isBookedStatus(status: string): boolean {
+  return BOOKED_MARKERS.includes(status) || status.includes('abgerechnet')
+}
+
 function parseStatus(statusRaw: string | null): BankTransactionStatus {
   const status = (statusRaw ?? '').toLowerCase()
-  if (status.includes('vorgemerkt')) {
-    return 'pending'
-  }
-  if (status.length === 0 || status === '-' || status.includes('abgerechnet')) {
-    return 'booked'
-  }
+  if (status.includes('vorgemerkt')) return 'pending'
+  if (isBookedStatus(status)) return 'booked'
   return 'unknown'
 }
 

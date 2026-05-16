@@ -1,6 +1,7 @@
 import { db } from '@/db/database'
 import { plan } from '@/db/schema/plans'
 import { and, desc, eq, like, or } from 'drizzle-orm'
+import { buildSetValues } from '@/lib/db/partial-update'
 
 // Infer types from Drizzle schema
 export type Plan = typeof plan.$inferSelect
@@ -119,20 +120,20 @@ export async function updatePlan(
   id: string,
   input: UpdatePlanInput,
 ): Promise<Plan | undefined> {
-  const updateData: {
-    name?: string | null
-    date?: string
-    notes?: string | null
-    isArchived?: boolean
-    updatedAt: Date
-  } = {
-    updatedAt: new Date(),
-  }
-
-  if (input.name !== undefined) updateData.name = input.name
-  if (input.date !== undefined) updateData.date = input.date
-  if (input.notes !== undefined) updateData.notes = input.notes
-  if (input.isArchived !== undefined) updateData.isArchived = input.isArchived
+  const updateData = buildSetValues<typeof input, NewPlan>(input, {
+    name: (v, s) => {
+      s.name = v
+    },
+    date: (v, s) => {
+      s.date = v
+    },
+    notes: (v, s) => {
+      s.notes = v
+    },
+    isArchived: (v, s) => {
+      s.isArchived = v
+    },
+  })
 
   const result = await db
     .update(plan)
