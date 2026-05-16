@@ -1,42 +1,31 @@
-/**
- * Validates and returns a safe redirect URL.
- * Prevents open redirect vulnerabilities by ensuring URLs are:
- * - Relative paths starting with /
- * - Not protocol-relative URLs (//evil.com)
- * - Free of dangerous protocols (javascript:, data:, vbscript:)
- * - Same-origin (client-side only)
- */
+const DANGEROUS_PROTOCOLS = ['javascript:', 'data:', 'vbscript:'] as const
+
+function hasDangerousProtocol(url: string): boolean {
+  const lower = url.toLowerCase()
+  return DANGEROUS_PROTOCOLS.some((p) => lower.includes(p))
+}
+
+function isSameOriginClientSide(url: string): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    const parsed = new URL(url, window.location.origin)
+    return parsed.origin === window.location.origin
+  } catch {
+    return false
+  }
+}
+
+function isUnsafeRedirectUrl(url: string): boolean {
+  if (!url.startsWith('/')) return true
+  if (url.startsWith('//')) return true
+  if (hasDangerousProtocol(url)) return true
+  return !isSameOriginClientSide(url)
+}
+
 export function getSafeRedirectUrl(
   url: string | null | undefined,
   fallback = '/',
 ): string {
   if (!url) return fallback
-
-  // Must be a relative path starting with /
-  if (!url.startsWith('/')) return fallback
-
-  // Block protocol-relative URLs (//evil.com)
-  if (url.startsWith('//')) return fallback
-
-  // Block dangerous protocols
-  const lowercaseUrl = url.toLowerCase()
-  if (
-    lowercaseUrl.includes('javascript:') ||
-    lowercaseUrl.includes('data:') ||
-    lowercaseUrl.includes('vbscript:')
-  ) {
-    return fallback
-  }
-
-  // Client-side only: validate same-origin
-  if (typeof window !== 'undefined') {
-    try {
-      const parsed = new URL(url, window.location.origin)
-      if (parsed.origin !== window.location.origin) return fallback
-    } catch {
-      return fallback
-    }
-  }
-
-  return url
+  return isUnsafeRedirectUrl(url) ? fallback : url
 }

@@ -2,67 +2,73 @@ import { auth } from '@/lib/auth'
 import { getAllSettings } from '@/lib/settings'
 import { defineMiddleware } from 'astro:middleware'
 
-export const onRequest = defineMiddleware(async (context, next) => {
-  const { pathname } = context.url
+type MiddlewareContext = Parameters<Parameters<typeof defineMiddleware>[0]>[0]
+type MiddlewareNext = Parameters<Parameters<typeof defineMiddleware>[0]>[1]
+type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>
 
-  // Allow auth API routes (must be first)
-  if (pathname.startsWith('/api/auth')) {
-    return next()
-  }
+function jsonAuthError(message: string, status: number): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
 
-  // Allow login page (redirect to home if already authenticated)
-  if (pathname === '/login') {
-    const session = await auth.api.getSession({
-      headers: context.request.headers,
-    })
-    if (session) {
-      return context.redirect('/')
-    }
-    return next()
-  }
-
-  // Allow 2FA verify page without session check
-  // When 2FA is pending, Better Auth uses a temporary token, not a full session
-  // The client-side verification will handle the actual auth flow
-  if (pathname === '/2fa/verify') {
-    return next()
-  }
-
-  // All remaining routes require authentication - get session ONCE
+async function handleLoginRoute(
+  context: MiddlewareContext,
+  next: MiddlewareNext,
+) {
   const session = await auth.api.getSession({
     headers: context.request.headers,
   })
+  if (session) return context.redirect('/')
+  return next()
+}
 
-  // Handle unauthenticated requests
-  if (!session) {
-    if (pathname.startsWith('/api/')) {
-      return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-    const redirectTo = encodeURIComponent(pathname + context.url.search)
-    return context.redirect(`/login?redirectTo=${redirectTo}`)
+function rejectUnauthenticated(context: MiddlewareContext, pathname: string) {
+  if (pathname.startsWith('/api/')) {
+    return jsonAuthError('Nicht autorisiert', 401)
   }
+  const redirectTo = encodeURIComponent(pathname + context.url.search)
+  return context.redirect(`/login?redirectTo=${redirectTo}`)
+}
 
-  // Check 2FA requirement (except for /2fa/setup which is where they set it up)
+function requireTwoFactorSetup(
+  context: MiddlewareContext,
+  pathname: string,
+  session: Session,
+): Response | null {
   const user = session.user as { twoFactorEnabled?: boolean }
-  if (!user.twoFactorEnabled && pathname !== '/2fa/setup') {
-    if (pathname.startsWith('/api/')) {
-      return new Response(
-        JSON.stringify({ error: '2FA-Einrichtung erforderlich' }),
-        {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      )
-    }
-    return context.redirect('/2fa/setup')
+  if (user.twoFactorEnabled || pathname === '/2fa/setup') return null
+  if (pathname.startsWith('/api/')) {
+    return jsonAuthError('2FA-Einrichtung erforderlich', 403)
   }
+  return context.redirect('/2fa/setup')
+}
 
-  // Set locals for all authenticated routes - ONCE
+async function attachAuthenticatedLocals(
+  context: MiddlewareContext,
+  session: Session,
+) {
   context.locals.user = session.user
   context.locals.session = session.session
   context.locals.userSettings = await getAllSettings(session.user.id)
+}
+
+export const onRequest = defineMiddleware(async (context, next) => {
+  const { pathname } = context.url
+
+  if (pathname.startsWith('/api/auth')) return next()
+  if (pathname === '/login') return handleLoginRoute(context, next)
+  if (pathname === '/2fa/verify') return next()
+
+  const session = await auth.api.getSession({
+    headers: context.request.headers,
+  })
+  if (!session) return rejectUnauthenticated(context, pathname)
+
+  const twoFactorBlock = requireTwoFactorSetup(context, pathname, session)
+  if (twoFactorBlock) return twoFactorBlock
+
+  await attachAuthenticatedLocals(context, session)
   return next()
 })
