@@ -1,6 +1,9 @@
 {
   "entry": [
     "**/*.test.ts",
+    "**/*.spec.ts",
+    "test/**",
+    "vitest.config.ts",
     "src/lib/bank-import/parsers/__fixtures__/generate-easybank-fixture.ts"
   ],
   "ignorePatterns": ["src/components/ui/**"],
