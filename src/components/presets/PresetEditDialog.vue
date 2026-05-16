@@ -80,6 +80,21 @@ function toggleType() {
   editType.value = editType.value === 'income' ? 'expense' : 'income'
 }
 
+function buildPresetEditPayload() {
+  return {
+    name: editName.value.trim(),
+    note: editNote.value.trim() || null,
+    amount: Math.round(editAmount.value * 100),
+    type: editType.value,
+    recurrence: editRecurrence.value,
+    startMonth: editStartMonth.value || null,
+    endDate: editEndDate.value || null,
+    categoryId: editCategoryId.value,
+    dayOfMonth: editDayOfMonth.value,
+    isBudget: editIsBudget.value,
+  }
+}
+
 async function handleSubmit() {
   if (!props.preset || !editName.value.trim()) return
 
@@ -89,18 +104,7 @@ async function handleSubmit() {
     const response = await fetch(`/api/presets/${props.preset.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: editName.value.trim(),
-        note: editNote.value.trim() || null,
-        amount: Math.round(editAmount.value * 100),
-        type: editType.value,
-        recurrence: editRecurrence.value,
-        startMonth: editStartMonth.value || null,
-        endDate: editEndDate.value || null,
-        categoryId: editCategoryId.value,
-        dayOfMonth: editDayOfMonth.value,
-        isBudget: editIsBudget.value,
-      }),
+      body: JSON.stringify(buildPresetEditPayload()),
     })
 
     if (!response.ok) {

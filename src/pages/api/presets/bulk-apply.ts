@@ -1,7 +1,15 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
-import { applyMultiplePresetsToPlan, getPresetById } from '@/lib/presets'
-import { getPlanById } from '@/lib/plans'
+import { applyMultiplePresetsToPlan, getPresetsByIds } from '@/lib/presets'
+import { requireUnarchivedPlan } from '@/lib/api/plan-guards'
+import {
+  error,
+  handle,
+  json,
+  requireUserId,
+  unwrap,
+  validateBody,
+} from '@/lib/api/responses'
 
 const bulkApplySchema = z.object({
   planId: z.uuid(),
@@ -12,85 +20,41 @@ const bulkApplySchema = z.object({
     .optional(),
 })
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
+async function assertPresetsOwned(
+  presetIds: string[],
+  userId: string,
+): Promise<void> {
+  const presets = await getPresetsByIds(presetIds)
+  if (presets.length !== presetIds.length) {
+    throw error('Eine oder mehrere Vorlagen wurden nicht gefunden', 404)
   }
-
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiger Request-Body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = bulkApplySchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  // Validate plan
-  const plan = await getPlanById(parsed.data.planId)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-  if (plan.isArchived) {
-    return new Response(JSON.stringify({ error: 'Plan ist archiviert' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  // Verify all presets belong to user
-  for (const presetId of parsed.data.presetIds) {
-    const preset = await getPresetById(presetId)
-    if (!preset || preset.userId !== userId) {
-      return new Response(
-        JSON.stringify({
-          error: `Vorlage ${presetId} nicht gefunden oder nicht autorisiert`,
-        }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-  }
-
-  try {
-    const result = await applyMultiplePresetsToPlan(parsed.data.presetIds, {
-      planId: parsed.data.planId,
-      dueDate: parsed.data.dueDate,
-    })
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        count: result.count,
-        transactions: result.transactions,
-      }),
-      { status: 201, headers: { 'Content-Type': 'application/json' } },
-    )
-  } catch (error) {
-    console.error('Error bulk applying presets:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Anwenden der Vorlagen',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+  const foreign = presets.find((p) => p.userId !== userId)
+  if (foreign) {
+    throw error(`Vorlage ${foreign.id} nicht autorisiert`, 403)
   }
 }
+
+export const POST: APIRoute = async ({ request, locals }) =>
+  handle(
+    async () => {
+      const userId = unwrap(requireUserId(locals))
+      const data = unwrap(await validateBody(request, bulkApplySchema))
+      unwrap(await requireUnarchivedPlan(data.planId))
+      await assertPresetsOwned(data.presetIds, userId)
+
+      const result = await applyMultiplePresetsToPlan(data.presetIds, {
+        planId: data.planId,
+        dueDate: data.dueDate,
+      })
+      return json(
+        {
+          success: true,
+          count: result.count,
+          transactions: result.transactions,
+        },
+        201,
+      )
+    },
+    'Fehler beim Anwenden der Vorlagen',
+    'Error bulk applying presets',
+  )

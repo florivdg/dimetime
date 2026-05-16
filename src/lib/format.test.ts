@@ -2,8 +2,11 @@ import { describe, expect, it } from 'bun:test'
 import {
   formatAmount,
   formatDate,
-  getPlanDisplayName,
+  formatDateTime,
   formatRecurrence,
+  getMonthPacing,
+  getPlanDisplayName,
+  truncateText,
 } from './format'
 
 /** Normalize whitespace (Intl may produce non-breaking spaces U+00A0) */
@@ -71,6 +74,74 @@ describe('getPlanDisplayName', () => {
 
   it('returns dash when both are null', () => {
     expect(getPlanDisplayName(null, null)).toBe('-')
+  })
+})
+
+describe('formatDateTime', () => {
+  it('combines date + time with defaults', () => {
+    const result = formatDateTime('2024-03-15T14:30:00Z')
+    expect(result).toContain('2024')
+    // hour digits present (depending on locale rendering)
+    expect(result).toMatch(/\d{1,2}/)
+  })
+
+  it('honors custom dateStyle and timeStyle', () => {
+    const short = formatDateTime('2024-03-15T14:30:00Z', 'short', 'short')
+    const long = formatDateTime('2024-03-15T14:30:00Z', 'long', 'long')
+    expect(long.length).toBeGreaterThan(short.length)
+  })
+})
+
+describe('truncateText', () => {
+  it('returns empty string for null', () => {
+    expect(truncateText(null)).toBe('')
+  })
+
+  it('returns text unchanged when within limit', () => {
+    expect(truncateText('short', 10)).toBe('short')
+  })
+
+  it('truncates and appends ellipsis when over limit', () => {
+    expect(truncateText('abcdefghij', 5)).toBe('abcde…')
+  })
+
+  it('uses default maxLength of 100', () => {
+    const text = 'a'.repeat(150)
+    const result = truncateText(text)
+    expect(result.length).toBe(101)
+    expect(result.endsWith('…')).toBe(true)
+  })
+})
+
+describe('getMonthPacing', () => {
+  it('reports 0% elapsed when plan month is in the future', () => {
+    const result = getMonthPacing('2030-12-01', new Date('2026-05-15'))
+    expect(result.isCurrent).toBe(false)
+    expect(result.daysElapsed).toBe(0)
+    expect(result.totalDays).toBe(31)
+    expect(result.percentElapsed).toBe(0)
+  })
+
+  it('reports 100% elapsed when plan month is in the past', () => {
+    const result = getMonthPacing('2020-02-01', new Date('2026-05-15'))
+    expect(result.isCurrent).toBe(false)
+    expect(result.daysElapsed).toBe(29) // 2020 is a leap year
+    expect(result.totalDays).toBe(29)
+    expect(result.percentElapsed).toBe(100)
+  })
+
+  it('reports today.getDate() elapsed when plan month is current', () => {
+    const today = new Date(2026, 4, 10) // May 10, 2026 (local time)
+    const result = getMonthPacing('2026-05-01', today)
+    expect(result.isCurrent).toBe(true)
+    expect(result.daysElapsed).toBe(10)
+    expect(result.totalDays).toBe(31)
+  })
+
+  it('treats past year as fully elapsed', () => {
+    const result = getMonthPacing('2020-06-15', new Date('2026-01-01'))
+    expect(result.isCurrent).toBe(false)
+    expect(result.daysElapsed).toBe(30)
   })
 })
 

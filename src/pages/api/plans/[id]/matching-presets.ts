@@ -1,50 +1,32 @@
 import type { APIRoute } from 'astro'
 import { getPlanById } from '@/lib/plans'
 import { getPresetsWithMatchStatus } from '@/lib/presets'
+import {
+  handle,
+  json,
+  requireExisting,
+  requireUserId,
+} from '@/lib/api/responses'
 
 export const GET: APIRoute = async ({ params, locals }) => {
-  const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const userId = requireUserId(locals)
+  if (userId instanceof Response) return userId
 
-  const { id } = params
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Fehlende Plan-ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const found = await requireExisting(
+    params,
+    'id',
+    'Plan-ID',
+    getPlanById,
+    'Plan nicht gefunden',
+  )
+  if (found instanceof Response) return found
 
-  const plan = await getPlanById(id)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const planMonth = found.resource.date.substring(0, 7)
 
-  const planMonth = plan.date.substring(0, 7) // YYYY-MM from YYYY-MM-DD
-
-  try {
-    const presets = await getPresetsWithMatchStatus(userId, planMonth)
-    return new Response(JSON.stringify({ presets }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Error fetching matching presets:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Laden der Vorlagen',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  return handle(
+    async () =>
+      json({ presets: await getPresetsWithMatchStatus(userId, planMonth) }),
+    'Fehler beim Laden der Vorlagen',
+    'Error fetching matching presets',
+  )
 }

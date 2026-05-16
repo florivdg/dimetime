@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro'
 import { getMonthlyChartData, type ChartRange } from '@/lib/dashboard'
+import { json } from '@/lib/api/responses'
 
 export const GET: APIRoute = async ({ url }) => {
   const rangeParam = url.searchParams.get('range') ?? '6m'
@@ -12,8 +13,5 @@ export const GET: APIRoute = async ({ url }) => {
 
   const chartData = await getMonthlyChartData(range)
 
-  return new Response(JSON.stringify({ data: chartData }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json({ data: chartData })
 }

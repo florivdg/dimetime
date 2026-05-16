@@ -1,30 +1,18 @@
 import type { APIRoute } from 'astro'
 import { getPlanBalance } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
+import { json, requireExisting } from '@/lib/api/responses'
 
+// fallow-ignore-next-line code-duplication
 export const GET: APIRoute = async ({ params }) => {
-  const { id } = params
+  const found = await requireExisting(
+    params,
+    'id',
+    'Plan-ID',
+    getPlanById,
+    'Plan nicht gefunden',
+  )
+  if (found instanceof Response) return found
 
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Plan-ID fehlt' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  // Verify plan exists
-  const plan = await getPlanById(id)
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const balance = await getPlanBalance(id)
-
-  return new Response(JSON.stringify(balance), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json(await getPlanBalance(found.id))
 }

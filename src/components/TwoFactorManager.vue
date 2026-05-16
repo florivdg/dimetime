@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useForm } from 'vee-validate'
-import { z } from 'zod'
 import { authClient } from '@/lib/auth-client'
+import { useAuthAction } from '@/composables/useAuthAction'
+import { usePasswordForm } from '@/composables/usePasswordForm'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -29,7 +29,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { ShieldCheck, Copy, Check, Loader2, RefreshCw } from 'lucide-vue-next'
+import { ShieldCheck, Loader2, RefreshCw } from 'lucide-vue-next'
+import TwoFactorBackupCodes from '@/components/TwoFactorBackupCodes.vue'
 
 const session = authClient.useSession()
 const isTwoFactorEnabled = computed(
@@ -38,68 +39,32 @@ const isTwoFactorEnabled = computed(
       ?.twoFactorEnabled ?? false,
 )
 
-const isLoading = ref(false)
-const errorMessage = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
 const backupCodes = ref<string[]>([])
 const showBackupCodes = ref(false)
-const copiedIndex = ref<number | null>(null)
 const dialogOpen = ref(false)
 
-const passwordSchema = z.object({
-  password: z.string().min(1, 'Passwort ist erforderlich'),
-})
-
-const passwordForm = useForm({
-  validationSchema: passwordSchema,
-  initialValues: { password: '' },
-})
+const { isLoading, errorMessage, runWithErrorHandling } = useAuthAction()
+const { passwordForm } = usePasswordForm()
 
 async function regenerateBackupCodes(password: string) {
-  isLoading.value = true
-  errorMessage.value = null
   successMessage.value = null
 
-  try {
-    const result = await authClient.twoFactor.generateBackupCodes({ password })
+  const data = await runWithErrorHandling(
+    () => authClient.twoFactor.generateBackupCodes({ password }),
+    {
+      400: 'Falsches Passwort',
+      default: 'Ein Fehler ist aufgetreten',
+    },
+  )
 
-    if (result.error) {
-      if (result.error.status === 400) {
-        errorMessage.value = 'Falsches Passwort'
-      } else {
-        errorMessage.value = 'Ein Fehler ist aufgetreten'
-      }
-      return
-    }
-
-    if (result.data) {
-      backupCodes.value = result.data.backupCodes
-      showBackupCodes.value = true
-      successMessage.value = 'Neue Backup-Codes wurden generiert'
-      passwordForm.resetForm()
-      dialogOpen.value = false
-    }
-  } catch {
-    errorMessage.value = 'Ein Fehler ist aufgetreten'
-  } finally {
-    isLoading.value = false
+  if (data) {
+    backupCodes.value = data.backupCodes
+    showBackupCodes.value = true
+    successMessage.value = 'Neue Backup-Codes wurden generiert'
+    passwordForm.resetForm()
+    dialogOpen.value = false
   }
-}
-
-async function copyBackupCode(code: string, index: number) {
-  await navigator.clipboard.writeText(code)
-  copiedIndex.value = index
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
-}
-
-async function copyAllBackupCodes() {
-  await navigator.clipboard.writeText(backupCodes.value.join('\n'))
-  copiedIndex.value = -1
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
 }
 
 const onSubmit = passwordForm.handleSubmit((values) => {
@@ -150,39 +115,15 @@ function closeBackupCodes() {
       </div>
 
       <!-- Backup Codes Display -->
-      <div v-if="showBackupCodes" class="mb-6 space-y-4">
-        <div
-          class="rounded-md border bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+      <div v-if="showBackupCodes" class="mb-6">
+        <TwoFactorBackupCodes
+          :codes="backupCodes"
+          warning-text="Dies sind Ihre neuen Backup-Codes. Die alten Codes sind nicht mehr gültig."
         >
-          <strong>Wichtig:</strong> Dies sind Ihre neuen Backup-Codes. Die alten
-          Codes sind nicht mehr gültig.
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div
-            v-for="(code, index) in backupCodes"
-            :key="code"
-            class="bg-muted flex items-center justify-between rounded px-3 py-2"
-          >
-            <code class="text-sm">{{ code }}</code>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-6"
-              @click="copyBackupCode(code, index)"
-            >
-              <Check v-if="copiedIndex === index" class="size-3" />
-              <Copy v-else class="size-3" />
-            </Button>
-          </div>
-        </div>
-        <Button variant="outline" class="w-full" @click="copyAllBackupCodes">
-          <Check v-if="copiedIndex === -1" class="size-4" />
-          <Copy v-else class="size-4" />
-          Alle Codes kopieren
-        </Button>
-        <Button variant="ghost" class="w-full" @click="closeBackupCodes">
-          Schließen
-        </Button>
+          <Button variant="ghost" class="w-full" @click="closeBackupCodes">
+            Schließen
+          </Button>
+        </TwoFactorBackupCodes>
       </div>
 
       <!-- Regenerate Backup Codes Form -->

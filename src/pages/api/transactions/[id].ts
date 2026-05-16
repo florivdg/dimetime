@@ -2,10 +2,12 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import {
   deleteTransaction,
-  getTransactionWithPlanStatus,
+  requireUnarchivedTransaction,
   updateTransaction,
+  validateTransactionPlanChange,
 } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
+import { error, json, validateBody } from '@/lib/api/responses'
 
 const updateTransactionSchema = z.object({
   name: z
@@ -30,121 +32,27 @@ const updateTransactionSchema = z.object({
 })
 
 export const PUT: APIRoute = async ({ params, request }) => {
-  const { id } = params
+  const existing = await requireUnarchivedTransaction(params.id, 'bearbeitet')
+  if (existing instanceof Response) return existing
 
-  if (!id) {
-    return new Response(
-      JSON.stringify({ error: 'Transaktions-ID ist erforderlich' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = await validateBody(request, updateTransactionSchema)
+  if (data instanceof Response) return data
 
-  const existing = await getTransactionWithPlanStatus(id)
-  if (!existing) {
-    return new Response(
-      JSON.stringify({ error: 'Transaktion nicht gefunden' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const planError = await validateTransactionPlanChange(
+    existing.planId,
+    data.planId,
+    getPlanById,
+  )
+  if (planError) return error(planError.message, planError.status)
 
-  // Reject if plan is archived
-  if (existing.planIsArchived) {
-    return new Response(
-      JSON.stringify({
-        error:
-          'Transaktion kann nicht bearbeitet werden, da der zugehörige Plan archiviert ist.',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = updateTransactionSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  // Validate target plan if moving to a different plan
-  if (parsed.data.planId) {
-    if (parsed.data.planId === existing.planId) {
-      return new Response(
-        JSON.stringify({ error: 'Transaktion ist bereits in diesem Plan' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-
-    const targetPlan = await getPlanById(parsed.data.planId)
-    if (!targetPlan) {
-      return new Response(
-        JSON.stringify({ error: 'Zielplan nicht gefunden' }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-
-    if (targetPlan.isArchived) {
-      return new Response(
-        JSON.stringify({
-          error:
-            'Transaktion kann nicht zu einem archivierten Plan verschoben werden',
-        }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-  }
-
-  const updated = await updateTransaction(id, parsed.data)
-
-  return new Response(JSON.stringify(updated), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  const updated = await updateTransaction(existing.id, data)
+  return json(updated)
 }
 
 export const DELETE: APIRoute = async ({ params }) => {
-  const { id } = params
+  const existing = await requireUnarchivedTransaction(params.id, 'gelöscht')
+  if (existing instanceof Response) return existing
 
-  if (!id) {
-    return new Response(
-      JSON.stringify({ error: 'Transaktions-ID ist erforderlich' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  const existing = await getTransactionWithPlanStatus(id)
-  if (!existing) {
-    return new Response(
-      JSON.stringify({ error: 'Transaktion nicht gefunden' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  // Reject if plan is archived
-  if (existing.planIsArchived) {
-    return new Response(
-      JSON.stringify({
-        error:
-          'Transaktion kann nicht gelöscht werden, da der zugehörige Plan archiviert ist.',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  await deleteTransaction(id)
-
-  return new Response(
-    JSON.stringify({ success: true, message: 'Transaktion wurde gelöscht' }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  await deleteTransaction(existing.id)
+  return json({ success: true, message: 'Transaktion wurde gelöscht' })
 }

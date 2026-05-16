@@ -1,14 +1,8 @@
 export type ImportPreset = 'ing_csv_v1' | 'easybank_xlsx_v1'
 
-export type ImportSourceKind = 'bank_account' | 'credit_card' | 'other'
-
 export type DefaultPlanAssignment = 'auto_month' | 'none'
 
 export type ImportFileType = 'csv' | 'xlsx'
-
-export type ImportPhase = 'preview' | 'commit'
-
-export type ImportStatus = 'success' | 'failed'
 
 export type BankTransactionStatus = 'booked' | 'pending' | 'unknown'
 

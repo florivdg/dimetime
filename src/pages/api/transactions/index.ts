@@ -4,9 +4,18 @@ import {
   createTransaction,
   getBudgetSpendingForBudgets,
   getTransactions,
+  parseTransactionQueryParams,
 } from '@/lib/transactions'
-import { getPlanById } from '@/lib/plans'
 import { getSetting } from '@/lib/settings'
+import {
+  handle,
+  json,
+  unwrap,
+  validate,
+  validateBody,
+} from '@/lib/api/responses'
+import { requireUnarchivedPlan } from '@/lib/api/plan-guards'
+import { paginationFields, sortDirField } from '@/lib/api/pagination-schema'
 
 const querySchema = z.object({
   search: z.string().optional(),
@@ -32,15 +41,8 @@ const querySchema = z.object({
     .transform((v) => v === 'true')
     .optional(),
   sortBy: z.enum(['name', 'dueDate', 'categoryName', 'amount']).optional(),
-  sortDir: z.enum(['asc', 'desc']).optional(),
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce
-    .number()
-    .refine((v) => v === -1 || (v >= 1 && v <= 100), {
-      message: 'Limit must be -1 (unlimited) or between 1 and 100',
-    })
-    .optional()
-    .default(20),
+  sortDir: sortDirField,
+  ...paginationFields,
 })
 
 const createSchema = z.object({
@@ -55,31 +57,13 @@ const createSchema = z.object({
   categoryId: z.uuid().nullable().optional(),
 })
 
+// fallow-ignore-next-line complexity
 export const GET: APIRoute = async ({ url, locals }) => {
-  const rawParams = {
-    search: url.searchParams.get('search') || undefined,
-    categoryId: url.searchParams.get('categoryId') || undefined,
-    planId: url.searchParams.get('planId') || undefined,
-    type: url.searchParams.get('type') || undefined,
-    isDone: url.searchParams.get('isDone') || undefined,
-    dateFrom: url.searchParams.get('dateFrom') || undefined,
-    dateTo: url.searchParams.get('dateTo') || undefined,
-    amountMin: url.searchParams.get('amountMin') || undefined,
-    amountMax: url.searchParams.get('amountMax') || undefined,
-    hideZeroValue: url.searchParams.get('hideZeroValue') || undefined,
-    sortBy: url.searchParams.get('sortBy') || undefined,
-    sortDir: url.searchParams.get('sortDir') || undefined,
-    page: url.searchParams.get('page') || undefined,
-    limit: url.searchParams.get('limit') || undefined,
-  }
-
-  const parsed = querySchema.safeParse(rawParams)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  const data = validate(
+    querySchema,
+    parseTransactionQueryParams(url.searchParams),
+  )
+  if (data instanceof Response) return data
 
   const userId = locals.user?.id
   const groupByType = userId
@@ -87,7 +71,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
     : false
 
   const result = await getTransactions({
-    ...parsed.data,
+    ...data,
     groupByType,
   })
 
@@ -97,61 +81,22 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const budgetSpending =
     budgetIds.length > 0 ? await getBudgetSpendingForBudgets(budgetIds) : {}
 
-  return new Response(JSON.stringify({ ...result, budgetSpending }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json({ ...result, budgetSpending })
 }
 
-export const POST: APIRoute = async ({ request }) => {
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = createSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  // Check if the target plan exists and is not archived
-  const targetPlan = await getPlanById(parsed.data.planId)
-  if (!targetPlan) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  if (targetPlan.isArchived) {
-    return new Response(
-      JSON.stringify({
-        error:
-          'Transaktionen können nicht zu einem archivierten Plan hinzugefügt werden.',
-      }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  try {
-    const transaction = await createTransaction(parsed.data)
-    return new Response(JSON.stringify(transaction), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Failed to create transaction:', error)
-    return new Response(
-      JSON.stringify({ error: 'Transaktion konnte nicht erstellt werden' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-}
+export const POST: APIRoute = async ({ request }) =>
+  handle(
+    async () => {
+      const data = unwrap(await validateBody(request, createSchema))
+      unwrap(
+        await requireUnarchivedPlan(data.planId, {
+          archived:
+            'Transaktionen können nicht zu einem archivierten Plan hinzugefügt werden.',
+          archivedStatus: 403,
+        }),
+      )
+      return json(await createTransaction(data), 201)
+    },
+    'Transaktion konnte nicht erstellt werden',
+    'Failed to create transaction',
+  )

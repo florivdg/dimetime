@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useForm } from 'vee-validate'
-import { z } from 'zod'
 import { qrcode } from '@lowlighter/qrcode'
 import { authClient } from '@/lib/auth-client'
+import { useAuthAction } from '@/composables/useAuthAction'
+import { usePasswordForm } from '@/composables/usePasswordForm'
+import { useTwoFactorVerify } from '@/composables/useTwoFactorVerify'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -33,28 +34,25 @@ import {
   InputGroupInput,
 } from '@/components/ui/input-group'
 import { ShieldCheck, Copy, Check, Loader2 } from 'lucide-vue-next'
+import TwoFactorBackupCodes from '@/components/TwoFactorBackupCodes.vue'
 
 type SetupStep = 'password' | 'qrcode' | 'verify' | 'backup'
 
 const currentStep = ref<SetupStep>('password')
-const isLoading = ref(false)
-const errorMessage = ref<string | null>(null)
 const totpUri = ref<string | null>(null)
 const totpSecret = ref<string | null>(null)
 const backupCodes = ref<string[]>([])
-const copiedIndex = ref<number | null>(null)
 const { copy: copySecret, copied: secretCopied } = useClipboard()
 
-const passwordSchema = z.object({
-  password: z.string().min(1, 'Passwort ist erforderlich'),
-})
-
-const passwordForm = useForm({
-  validationSchema: passwordSchema,
-  initialValues: { password: '' },
-})
-
-const totpCode = ref<string[]>([])
+const auth = useAuthAction()
+const { isLoading, errorMessage, runWithErrorHandling } = auth
+const { passwordForm } = usePasswordForm()
+const { totpCode, verifyTotp, handlePinComplete } = useTwoFactorVerify(
+  auth,
+  () => {
+    currentStep.value = 'backup'
+  },
+)
 
 const qrCodeSvg = computed(() => {
   if (!totpUri.value) return null
@@ -62,80 +60,22 @@ const qrCodeSvg = computed(() => {
 })
 
 async function enableTwoFactor(password: string) {
-  isLoading.value = true
-  errorMessage.value = null
+  const data = await runWithErrorHandling(
+    () => authClient.twoFactor.enable({ password }),
+    {
+      400: 'Falsches Passwort',
+      default: 'Ein Fehler ist aufgetreten',
+    },
+  )
 
-  try {
-    const result = await authClient.twoFactor.enable({ password })
-
-    if (result.error) {
-      if (result.error.status === 400) {
-        errorMessage.value = 'Falsches Passwort'
-      } else {
-        errorMessage.value = 'Ein Fehler ist aufgetreten'
-      }
-      return
-    }
-
-    if (result.data) {
-      totpUri.value = result.data.totpURI
-      // Extract secret from URI since Better Auth doesn't return it separately
-      const uriParams = new URL(result.data.totpURI).searchParams
-      totpSecret.value = uriParams.get('secret')
-      backupCodes.value = result.data.backupCodes
-      currentStep.value = 'qrcode'
-    }
-  } catch {
-    errorMessage.value = 'Ein Fehler ist aufgetreten'
-  } finally {
-    isLoading.value = false
+  if (data) {
+    totpUri.value = data.totpURI
+    // Better Auth doesn't return the secret separately, so parse it from the URI
+    const uriParams = new URL(data.totpURI).searchParams
+    totpSecret.value = uriParams.get('secret')
+    backupCodes.value = data.backupCodes
+    currentStep.value = 'qrcode'
   }
-}
-
-async function verifyTotp() {
-  const code = totpCode.value.join('')
-  if (code.length !== 6) {
-    errorMessage.value = 'Bitte geben Sie einen 6-stelligen Code ein'
-    return
-  }
-
-  isLoading.value = true
-  errorMessage.value = null
-
-  try {
-    const result = await authClient.twoFactor.verifyTotp({
-      code,
-      trustDevice: true,
-    })
-
-    if (result.error) {
-      errorMessage.value = 'Ungültiger Code. Bitte versuchen Sie es erneut.'
-      totpCode.value = []
-      return
-    }
-
-    currentStep.value = 'backup'
-  } catch {
-    errorMessage.value = 'Ein Fehler ist aufgetreten'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-async function copyBackupCode(code: string, index: number) {
-  await navigator.clipboard.writeText(code)
-  copiedIndex.value = index
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
-}
-
-async function copyAllBackupCodes() {
-  await navigator.clipboard.writeText(backupCodes.value.join('\n'))
-  copiedIndex.value = -1
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
 }
 
 function finishSetup() {
@@ -145,13 +85,6 @@ function finishSetup() {
 const onPasswordSubmit = passwordForm.handleSubmit((values) => {
   enableTwoFactor(values.password)
 })
-
-function handlePinComplete(value: string[]) {
-  totpCode.value = value
-  if (value.join('').length === 6) {
-    verifyTotp()
-  }
-}
 </script>
 
 <template>
@@ -273,41 +206,15 @@ function handlePinComplete(value: string[]) {
       </div>
 
       <!-- Step 4: Backup Codes -->
-      <div v-else class="space-y-4">
-        <div
-          class="rounded-md border bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200"
-        >
-          <strong>Wichtig:</strong> Speichern Sie diese Codes sicher. Sie können
-          diese nutzen, wenn Sie keinen Zugriff auf Ihre Authenticator-App
-          haben.
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div
-            v-for="(code, index) in backupCodes"
-            :key="code"
-            class="bg-muted flex items-center justify-between rounded px-3 py-2"
-          >
-            <code class="text-sm">{{ code }}</code>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-6"
-              @click="copyBackupCode(code, index)"
-            >
-              <Check v-if="copiedIndex === index" class="size-3" />
-              <Copy v-else class="size-3" />
-            </Button>
-          </div>
-        </div>
-        <Button variant="outline" class="w-full" @click="copyAllBackupCodes">
-          <Check v-if="copiedIndex === -1" class="size-4" />
-          <Copy v-else class="size-4" />
-          Alle Codes kopieren
-        </Button>
+      <TwoFactorBackupCodes
+        v-else
+        :codes="backupCodes"
+        warning-text="Speichern Sie diese Codes sicher. Sie können diese nutzen, wenn Sie keinen Zugriff auf Ihre Authenticator-App haben."
+      >
         <Button class="w-full" @click="finishSetup">
           Einrichtung abschließen
         </Button>
-      </div>
+      </TwoFactorBackupCodes>
     </CardContent>
   </Card>
 </template>

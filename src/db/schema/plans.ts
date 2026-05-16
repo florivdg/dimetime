@@ -7,6 +7,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 import { user } from './auth'
+import { timestamps, transactionCoreColumns } from './_columns'
 
 export const category = sqliteTable(
   'category',
@@ -17,10 +18,7 @@ export const category = sqliteTable(
     name: text('name').notNull(),
     slug: text('slug').notNull(), // URL-friendly identifier (e.g., "miete", "lebensmittel")
     color: text('color'), // Hex color for UI display
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     index('category_name_idx').on(table.name),
@@ -40,10 +38,7 @@ export const plan = sqliteTable(
     isArchived: integer('is_archived', { mode: 'boolean' })
       .default(false)
       .notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [index('plan_date_idx').on(table.date)],
 )
@@ -51,25 +46,14 @@ export const plan = sqliteTable(
 export const plannedTransaction = sqliteTable(
   'planned_transaction',
   {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    name: text('name').notNull(),
-    note: text('note'), // Longer description
-    type: text('type', { enum: ['income', 'expense'] })
-      .notNull()
-      .default('expense'),
+    ...transactionCoreColumns(),
     dueDate: text('due_date').notNull(), // YYYY-MM-DD format
-    amount: integer('amount').notNull().default(0), // Cents (e.g., 1234 = €12.34)
     isDone: integer('is_done', { mode: 'boolean' }).default(false).notNull(),
     completedAt: integer('completed_at', { mode: 'timestamp_ms' }), // When marked done
     isBudget: integer('is_budget', { mode: 'boolean' })
       .default(false)
       .notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
     planId: text('plan_id').references(() => plan.id, { onDelete: 'cascade' }),
     userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
     categoryId: text('category_id').references(() => category.id, {
@@ -134,10 +118,7 @@ export const importSource = sqliteTable(
       .notNull()
       .default('auto_month'),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     index('importSource_preset_idx').on(table.preset),
@@ -145,16 +126,20 @@ export const importSource = sqliteTable(
   ],
 )
 
+const importSourceLinkColumns = () => ({
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  sourceId: text('source_id')
+    .notNull()
+    .references(() => importSource.id, { onDelete: 'cascade' }),
+})
+
 // Statement Import Runs
 export const statementImport = sqliteTable(
   'statement_import',
   {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    sourceId: text('source_id')
-      .notNull()
-      .references(() => importSource.id, { onDelete: 'cascade' }),
+    ...importSourceLinkColumns(),
     fileName: text('file_name').notNull(),
     fileSha256: text('file_sha256').notNull(),
     fileType: text('file_type', { enum: ['csv', 'xlsx'] }).notNull(),
@@ -181,12 +166,7 @@ export const statementImport = sqliteTable(
 export const bankTransaction = sqliteTable(
   'bank_transaction',
   {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    sourceId: text('source_id')
-      .notNull()
-      .references(() => importSource.id, { onDelete: 'cascade' }),
+    ...importSourceLinkColumns(),
     firstSeenImportId: text('first_seen_import_id').references(
       () => statementImport.id,
       {
@@ -241,10 +221,7 @@ export const bankTransaction = sqliteTable(
       .notNull(),
     isSplit: integer('is_split', { mode: 'boolean' }).default(false).notNull(),
     importSeenCount: integer('import_seen_count').notNull().default(1),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     uniqueIndex('bankTransaction_sourceId_dedupeKey_idx').on(
@@ -285,10 +262,7 @@ export const bankTransactionSplit = sqliteTable(
     isArchived: integer('is_archived', { mode: 'boolean' })
       .default(false)
       .notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     index('bankTransactionSplit_bankTransactionId_idx').on(
@@ -304,15 +278,7 @@ export const bankTransactionSplit = sqliteTable(
 export const transactionPreset = sqliteTable(
   'transaction_preset',
   {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    name: text('name').notNull(),
-    note: text('note'),
-    type: text('type', { enum: ['income', 'expense'] })
-      .notNull()
-      .default('expense'),
-    amount: integer('amount').notNull().default(0), // Cents
+    ...transactionCoreColumns(),
     recurrence: text('recurrence', {
       enum: ['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'],
     })
@@ -331,10 +297,7 @@ export const transactionPreset = sqliteTable(
       .default(false)
       .notNull(),
     lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [
     index('transactionPreset_userId_idx').on(table.userId),

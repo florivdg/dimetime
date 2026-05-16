@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { authClient } from '@/lib/auth-client'
+import { useAuthAction } from '@/composables/useAuthAction'
+import { useTwoFactorVerify } from '@/composables/useTwoFactorVerify'
 import { getSafeRedirectUrl } from '@/lib/redirect'
 import { syncSettingsToLocalStorage } from '@/lib/sync-settings'
 import { Button } from '@/components/ui/button'
@@ -23,42 +25,18 @@ const props = defineProps<{
   redirectTo?: string
 }>()
 
-const isLoading = ref(false)
-const errorMessage = ref<string | null>(null)
-const totpCode = ref<string[]>([])
 const showBackupInput = ref(false)
 const backupCode = ref('')
 
-async function verifyTotp() {
-  const code = totpCode.value.join('')
-  if (code.length !== 6) {
-    errorMessage.value = 'Bitte geben Sie einen 6-stelligen Code ein'
-    return
-  }
-
-  isLoading.value = true
-  errorMessage.value = null
-
-  try {
-    const result = await authClient.twoFactor.verifyTotp({
-      code,
-      trustDevice: true,
-    })
-
-    if (result.error) {
-      errorMessage.value = 'Ungültiger Code. Bitte versuchen Sie es erneut.'
-      totpCode.value = []
-      return
-    }
-
+const auth = useAuthAction()
+const { isLoading, errorMessage, runWithErrorHandling } = auth
+const { totpCode, verifyTotp, handlePinComplete } = useTwoFactorVerify(
+  auth,
+  async () => {
     await syncSettingsToLocalStorage()
     window.location.href = getSafeRedirectUrl(props.redirectTo)
-  } catch {
-    errorMessage.value = 'Ein Fehler ist aufgetreten'
-  } finally {
-    isLoading.value = false
-  }
-}
+  },
+)
 
 async function verifyBackupCode() {
   if (!backupCode.value.trim()) {
@@ -66,33 +44,21 @@ async function verifyBackupCode() {
     return
   }
 
-  isLoading.value = true
-  errorMessage.value = null
+  const data = await runWithErrorHandling(
+    () =>
+      authClient.twoFactor.verifyBackupCode({
+        code: backupCode.value.trim(),
+        trustDevice: true,
+      }),
+    {
+      default: 'Ungültiger Backup-Code',
+      network: 'Ein Fehler ist aufgetreten',
+    },
+  )
 
-  try {
-    const result = await authClient.twoFactor.verifyBackupCode({
-      code: backupCode.value.trim(),
-      trustDevice: true,
-    })
-
-    if (result.error) {
-      errorMessage.value = 'Ungültiger Backup-Code'
-      return
-    }
-
+  if (data) {
     await syncSettingsToLocalStorage()
     window.location.href = getSafeRedirectUrl(props.redirectTo)
-  } catch {
-    errorMessage.value = 'Ein Fehler ist aufgetreten'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-function handlePinComplete(value: string[]) {
-  totpCode.value = value
-  if (value.join('').length === 6) {
-    verifyTotp()
   }
 }
 </script>

@@ -1,164 +1,58 @@
 import type { APIRoute } from 'astro'
-import { z } from 'zod'
 import { updatePreset, deletePreset, getPresetById } from '@/lib/presets'
+import {
+  error,
+  handle,
+  json,
+  requireOwned,
+  validateBody,
+} from '@/lib/api/responses'
+import { updatePresetSchema } from './_schema'
 
-const updateSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  note: z.string().max(2000).nullable().optional(),
-  type: z.enum(['income', 'expense']).optional(),
-  amount: z.number().int().min(0).optional(),
-  recurrence: z
-    .enum(['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'])
-    .optional(),
-  startMonth: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/)
-    .nullable()
-    .optional(),
-  endDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable()
-    .optional(),
-  categoryId: z.uuid().nullable().optional(),
-  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-  isBudget: z.boolean().optional(),
-})
-
+// fallow-ignore-next-line code-duplication
 export const PUT: APIRoute = async ({ params, request, locals }) => {
-  const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const owned = await requireOwned(
+    params,
+    'id',
+    'Preset-ID',
+    locals,
+    getPresetById,
+    'Vorlage nicht gefunden',
+  )
+  if (owned instanceof Response) return owned
 
-  const { id } = params
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Fehlende Preset-ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const data = await validateBody(request, updatePresetSchema)
+  if (data instanceof Response) return data
 
-  // Verify preset exists and belongs to user
-  const existing = await getPresetById(id)
-  if (!existing) {
-    return new Response(JSON.stringify({ error: 'Vorlage nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  if (existing.userId !== userId) {
-    return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiger Request-Body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const parsed = updateSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  try {
-    const updated = await updatePreset(id, parsed.data)
-    if (!updated) {
-      return new Response(JSON.stringify({ error: 'Vorlage nicht gefunden' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-
-    return new Response(JSON.stringify(updated), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (error) {
-    console.error('Error updating preset:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Aktualisieren der Vorlage',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  return handle(
+    async () => {
+      const updated = await updatePreset(owned.id, data)
+      if (!updated) return error('Vorlage nicht gefunden', 404)
+      return json(updated)
+    },
+    'Fehler beim Aktualisieren der Vorlage',
+    'Error updating preset',
+  )
 }
 
 export const DELETE: APIRoute = async ({ params, locals }) => {
-  const userId = locals.user?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Nicht authentifiziert' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const owned = await requireOwned(
+    params,
+    'id',
+    'Preset-ID',
+    locals,
+    getPresetById,
+    'Vorlage nicht gefunden',
+  )
+  if (owned instanceof Response) return owned
 
-  const { id } = params
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Fehlende Preset-ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  // Verify preset exists and belongs to user
-  const existing = await getPresetById(id)
-  if (!existing) {
-    return new Response(JSON.stringify({ error: 'Vorlage nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  if (existing.userId !== userId) {
-    return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  try {
-    const success = await deletePreset(id)
-    if (!success) {
-      return new Response(JSON.stringify({ error: 'Vorlage nicht gefunden' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-
-    return new Response(
-      JSON.stringify({ success: true, message: 'Vorlage wurde gelöscht' }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
-  } catch (error) {
-    console.error('Error deleting preset:', error)
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Fehler beim Löschen der Vorlage',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
+  return handle(
+    async () => {
+      const success = await deletePreset(owned.id)
+      if (!success) return error('Vorlage nicht gefunden', 404)
+      return json({ success: true, message: 'Vorlage wurde gelöscht' })
+    },
+    'Fehler beim Löschen der Vorlage',
+    'Error deleting preset',
+  )
 }

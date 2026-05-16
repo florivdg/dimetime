@@ -121,118 +121,215 @@ function findHeaderRow(records: string[][]): {
   )
 }
 
+interface IngColumnIndexes {
+  bookingDate: number
+  valueDate: number
+  counterparty: number
+  bookingText: number
+  purpose: number
+  balance: number
+  amount: number
+  balanceCurrency: number | undefined
+  amountCurrency: number | undefined
+}
+
+function ensureCsvExtension(fileName: string): void {
+  if (fileName.toLowerCase().endsWith('.csv')) return
+  throw validationError(
+    'Ungültiger Dateityp für ING-Import. Erwartet wird eine CSV-Datei.',
+  )
+}
+
+function ensureRequiredHeadersPresent(
+  headerMap: Record<string, number[]>,
+): void {
+  const missingRequired = REQUIRED_ING_HEADERS.filter(
+    (required) => (headerMap[required] ?? []).length === 0,
+  )
+  if (missingRequired.length === 0) return
+  throw validationError(
+    `ING-CSV konnte nicht gelesen werden: Pflichtspalten fehlen (${missingRequired.map((key) => REQUIRED_ING_HEADER_LABELS[key]).join(', ')}).`,
+  )
+}
+
+function firstIndex(headerMap: Record<string, number[]>, key: string): number {
+  return headerMap[key]?.[0] as number
+}
+
+function resolveCurrencyIndexes(
+  currencyIndexes: number[],
+  balance: number,
+  amount: number,
+): { balanceCurrency: number | undefined; amountCurrency: number | undefined } {
+  const balanceCurrency = currencyIndexes.find(
+    (index) => index > balance && index < amount,
+  )
+  const amountCurrency =
+    currencyIndexes.find((index) => index > amount) ??
+    currencyIndexes.find((index) => index !== balanceCurrency)
+  return { balanceCurrency, amountCurrency }
+}
+
+function resolveColumnIndexes(
+  headerMap: Record<string, number[]>,
+): IngColumnIndexes {
+  const balance = firstIndex(headerMap, 'saldo')
+  const amount = firstIndex(headerMap, 'betrag')
+  const currencyIndexes = headerMap.waehrung ?? []
+  const { balanceCurrency, amountCurrency } = resolveCurrencyIndexes(
+    currencyIndexes,
+    balance,
+    amount,
+  )
+
+  return {
+    bookingDate: firstIndex(headerMap, 'buchung'),
+    valueDate: firstIndex(headerMap, 'wertstellungsdatum'),
+    counterparty: firstIndex(headerMap, 'auftraggeberempfaenger'),
+    bookingText: firstIndex(headerMap, 'buchungstext'),
+    purpose: firstIndex(headerMap, 'verwendungszweck'),
+    balance,
+    amount,
+    balanceCurrency,
+    amountCurrency,
+  }
+}
+
+function readNormalized(
+  values: string[],
+  index: number | undefined,
+): string | null {
+  if (index === undefined) return null
+  return normalizeText(values[index])
+}
+
+interface NormalizedIngRowFields {
+  bookingDateRaw: string | null
+  valueDateRaw: string | null
+  counterparty: string | null
+  bookingText: string | null
+  purpose: string | null
+  balanceRaw: string | null
+  amountRaw: string | null
+  balanceCurrency: string | null
+  amountCurrency: string | null
+}
+
+function readNormalizedRowFields(
+  values: string[],
+  cols: IngColumnIndexes,
+): NormalizedIngRowFields {
+  return {
+    bookingDateRaw: readNormalized(values, cols.bookingDate),
+    valueDateRaw: readNormalized(values, cols.valueDate),
+    counterparty: readNormalized(values, cols.counterparty),
+    bookingText: readNormalized(values, cols.bookingText),
+    purpose: readNormalized(values, cols.purpose),
+    balanceRaw: readNormalized(values, cols.balance),
+    amountRaw: readNormalized(values, cols.amount),
+    balanceCurrency: readNormalized(values, cols.balanceCurrency),
+    amountCurrency: readNormalized(values, cols.amountCurrency),
+  }
+}
+
+function pickCurrency(primary: string | null, fallback: string | null): string {
+  return primary ?? fallback ?? 'EUR'
+}
+
+function parseIngRow(
+  values: string[],
+  cols: IngColumnIndexes,
+): ParsedImportFile['rows'][number] | null {
+  const fields = readNormalizedRowFields(values, cols)
+  const bookingDate = parseGermanDateToIso(fields.bookingDateRaw ?? '')
+  const valueDate = parseGermanDateToIso(fields.valueDateRaw ?? '')
+
+  const amount = parseGermanMoney(
+    values[cols.amount],
+    pickCurrency(fields.amountCurrency, fields.balanceCurrency),
+  )
+  if (!bookingDate || !amount) return null
+
+  const balance = parseGermanMoney(
+    values[cols.balance],
+    pickCurrency(fields.balanceCurrency, fields.amountCurrency),
+  )
+
+  return {
+    externalTransactionId: null,
+    bookingDate,
+    valueDate,
+    amountCents: amount.amountCents,
+    currency: normalizeCurrency(amount.currency, 'EUR'),
+    originalAmountCents: null,
+    originalCurrency: null,
+    counterparty: fields.counterparty,
+    bookingText: fields.bookingText,
+    description: null,
+    purpose: fields.purpose,
+    status: 'booked',
+    balanceAfterCents: balance?.amountCents ?? null,
+    balanceCurrency: balance?.currency ?? null,
+    country: null,
+    cardLast4: null,
+    cardholder: null,
+    rawData: {
+      buchung: fields.bookingDateRaw,
+      wertstellungsdatum: fields.valueDateRaw,
+      auftraggeberEmpfaenger: fields.counterparty,
+      buchungstext: fields.bookingText,
+      verwendungszweck: fields.purpose,
+      saldo: fields.balanceRaw,
+      saldoWaehrung: fields.balanceCurrency,
+      betrag: fields.amountRaw,
+      betragWaehrung: fields.amountCurrency,
+    },
+  }
+}
+
+function isEmptyRow(values: string[]): boolean {
+  return values.every((value) => !normalizeText(value))
+}
+
+function parseIngRows(
+  records: string[][],
+  headerLineIndex: number,
+  cols: IngColumnIndexes,
+): { rows: ParsedImportFile['rows']; warnings: string[] } {
+  const warnings: string[] = []
+  const rows: ParsedImportFile['rows'] = []
+
+  for (let i = headerLineIndex + 1; i < records.length; i += 1) {
+    const values = records[i] ?? []
+    if (isEmptyRow(values)) continue
+
+    const parsed = parseIngRow(values, cols)
+    if (!parsed) {
+      warnings.push(
+        `Zeile ${i + 1} konnte nicht importiert werden und wurde übersprungen.`,
+      )
+      continue
+    }
+    rows.push(parsed)
+  }
+
+  return { rows, warnings }
+}
+
 export async function parseIngCsvFile(
   fileName: string,
   bytes: Uint8Array,
 ): Promise<ParsedImportFile> {
-  if (!fileName.toLowerCase().endsWith('.csv')) {
-    throw validationError(
-      'Ungültiger Dateityp für ING-Import. Erwartet wird eine CSV-Datei.',
-    )
-  }
+  ensureCsvExtension(fileName)
 
   const content = new TextDecoder('iso-8859-1').decode(bytes)
   const records = parseRows(content)
   const { headerLineIndex, headerColumns } = findHeaderRow(records)
   const headerMap = buildHeaderIndex(headerColumns)
 
-  const missingRequired = REQUIRED_ING_HEADERS.filter(
-    (required) => (headerMap[required] ?? []).length === 0,
-  )
-  if (missingRequired.length > 0) {
-    throw validationError(
-      `ING-CSV konnte nicht gelesen werden: Pflichtspalten fehlen (${missingRequired.map((key) => REQUIRED_ING_HEADER_LABELS[key]).join(', ')}).`,
-    )
-  }
-
-  const bookingDateIndex = headerMap.buchung?.[0] as number
-  const valueDateIndex = headerMap.wertstellungsdatum?.[0] as number
-  const counterpartyIndex = headerMap.auftraggeberempfaenger?.[0] as number
-  const bookingTextIndex = headerMap.buchungstext?.[0] as number
-  const purposeIndex = headerMap.verwendungszweck?.[0] as number
-  const balanceIndex = headerMap.saldo?.[0] as number
-  const amountIndex = headerMap.betrag?.[0] as number
-  const currencyIndexes = headerMap.waehrung ?? []
-
-  const balanceCurrencyIndex = currencyIndexes.find(
-    (index) => index > balanceIndex && index < amountIndex,
-  )
-  const amountCurrencyIndex =
-    currencyIndexes.find((index) => index > amountIndex) ??
-    currencyIndexes.find((index) => index !== balanceCurrencyIndex)
-
-  const warnings: string[] = []
-  const rows: ParsedImportFile['rows'] = []
-
-  for (let i = headerLineIndex + 1; i < records.length; i += 1) {
-    const values = records[i] ?? []
-    if (values.every((value) => !normalizeText(value))) continue
-
-    const bookingDate = parseGermanDateToIso(values[bookingDateIndex] ?? '')
-    const valueDate = parseGermanDateToIso(values[valueDateIndex] ?? '')
-
-    const amountCurrency =
-      amountCurrencyIndex === undefined
-        ? null
-        : normalizeText(values[amountCurrencyIndex])
-    const balanceCurrency =
-      balanceCurrencyIndex === undefined
-        ? null
-        : normalizeText(values[balanceCurrencyIndex])
-
-    const amount = parseGermanMoney(
-      values[amountIndex],
-      amountCurrency || balanceCurrency || 'EUR',
-    )
-    if (!bookingDate || !amount) {
-      warnings.push(
-        `Zeile ${i + 1} konnte nicht importiert werden und wurde übersprungen.`,
-      )
-      continue
-    }
-
-    const balance = parseGermanMoney(
-      values[balanceIndex],
-      balanceCurrency || amountCurrency || 'EUR',
-    )
-
-    rows.push({
-      externalTransactionId: null,
-      bookingDate,
-      valueDate,
-      amountCents: amount.amountCents,
-      currency: normalizeCurrency(amount.currency, 'EUR'),
-      originalAmountCents: null,
-      originalCurrency: null,
-      counterparty: normalizeText(values[counterpartyIndex]),
-      bookingText: normalizeText(values[bookingTextIndex]),
-      description: null,
-      purpose: normalizeText(values[purposeIndex]),
-      status: 'booked',
-      balanceAfterCents: balance?.amountCents ?? null,
-      balanceCurrency: balance?.currency ?? null,
-      country: null,
-      cardLast4: null,
-      cardholder: null,
-      rawData: {
-        buchung: normalizeText(values[bookingDateIndex]),
-        wertstellungsdatum: normalizeText(values[valueDateIndex]),
-        auftraggeberEmpfaenger: normalizeText(values[counterpartyIndex]),
-        buchungstext: normalizeText(values[bookingTextIndex]),
-        verwendungszweck: normalizeText(values[purposeIndex]),
-        saldo: normalizeText(values[balanceIndex]),
-        saldoWaehrung:
-          balanceCurrencyIndex === undefined
-            ? null
-            : normalizeText(values[balanceCurrencyIndex]),
-        betrag: normalizeText(values[amountIndex]),
-        betragWaehrung:
-          amountCurrencyIndex === undefined
-            ? null
-            : normalizeText(values[amountCurrencyIndex]),
-      },
-    })
-  }
+  ensureRequiredHeadersPresent(headerMap)
+  const cols = resolveColumnIndexes(headerMap)
+  const { rows, warnings } = parseIngRows(records, headerLineIndex, cols)
 
   return {
     rows,

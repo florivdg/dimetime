@@ -6,7 +6,11 @@ import { bulkAssignBudgetToSplits } from '@/lib/bank-transaction-splits'
 import { getTransactionById } from '@/lib/transactions'
 import { db } from '@/db/database'
 import { bankTransaction, bankTransactionSplit } from '@/db/schema/plans'
-import { jsonError, jsonResponse } from '@/lib/bank-import/api-helpers'
+import {
+  jsonError,
+  jsonResponse,
+  parseJsonBody,
+} from '@/lib/bank-import/api-helpers'
 
 const bulkAssignBudgetSchema = z
   .object({
@@ -18,74 +22,78 @@ const bulkAssignBudgetSchema = z
     message: 'Mindestens eine Transaktions- oder Split-ID ist erforderlich',
   })
 
-export const POST: APIRoute = async ({ request }) => {
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return jsonError('Ungültiger Request-Body')
-  }
+type BulkAssignBudgetInput = z.infer<typeof bulkAssignBudgetSchema>
 
-  const parsed = bulkAssignBudgetSchema.safeParse(body)
-  if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message ?? 'Ungültige Eingabe')
-  }
+async function fetchTargetTxPlanIds(ids: string[]) {
+  if (ids.length === 0) return []
+  return db
+    .select({ id: bankTransaction.id, planId: bankTransaction.planId })
+    .from(bankTransaction)
+    .where(inArray(bankTransaction.id, ids))
+}
 
-  if (parsed.data.budgetId) {
-    const budget = await getTransactionById(parsed.data.budgetId)
-    if (!budget) return jsonError('Budget nicht gefunden', 404)
-    if (!budget.isBudget) return jsonError('Transaktion ist kein Budget')
-
-    // Verify all targeted transactions/splits belong to the budget's plan
-    const [targetTxs, targetSplits] = await Promise.all([
-      parsed.data.ids.length > 0
-        ? db
-            .select({ id: bankTransaction.id, planId: bankTransaction.planId })
-            .from(bankTransaction)
-            .where(inArray(bankTransaction.id, parsed.data.ids))
-        : [],
-      parsed.data.splitIds.length > 0
-        ? db
-            .select({
-              id: bankTransactionSplit.id,
-              planId: bankTransactionSplit.planId,
-            })
-            .from(bankTransactionSplit)
-            .where(inArray(bankTransactionSplit.id, parsed.data.splitIds))
-        : [],
-    ])
-
-    const mismatch =
-      targetTxs.some((tx) => tx.planId !== budget.planId) ||
-      targetSplits.some((s) => s.planId !== budget.planId)
-    if (mismatch) {
-      return jsonError(
-        'Alle Transaktionen/Splits müssen dem Plan des Budgets zugewiesen sein',
-      )
-    }
-  }
-
-  try {
-    const count = await db.transaction(async (tx) => {
-      const [txCount, splitCount] = await Promise.all([
-        parsed.data.ids.length > 0
-          ? bulkAssignBudgetToTransactions(
-              parsed.data.ids,
-              parsed.data.budgetId,
-              tx,
-            )
-          : 0,
-        parsed.data.splitIds.length > 0
-          ? bulkAssignBudgetToSplits(
-              parsed.data.splitIds,
-              parsed.data.budgetId,
-              tx,
-            )
-          : 0,
-      ])
-      return txCount + splitCount
+async function fetchTargetSplitPlanIds(splitIds: string[]) {
+  if (splitIds.length === 0) return []
+  return db
+    .select({
+      id: bankTransactionSplit.id,
+      planId: bankTransactionSplit.planId,
     })
+    .from(bankTransactionSplit)
+    .where(inArray(bankTransactionSplit.id, splitIds))
+}
 
+async function validateBudgetAndPlan(
+  data: BulkAssignBudgetInput,
+): Promise<Response | null> {
+  if (!data.budgetId) return null
+  const budget = await getTransactionById(data.budgetId)
+  if (!budget) return jsonError('Budget nicht gefunden', 404)
+  if (!budget.isBudget) return jsonError('Transaktion ist kein Budget')
+
+  const [targetTxs, targetSplits] = await Promise.all([
+    fetchTargetTxPlanIds(data.ids),
+    fetchTargetSplitPlanIds(data.splitIds),
+  ])
+
+  const mismatch =
+    targetTxs.some((tx) => tx.planId !== budget.planId) ||
+    targetSplits.some((s) => s.planId !== budget.planId)
+  if (mismatch) {
+    return jsonError(
+      'Alle Transaktionen/Splits müssen dem Plan des Budgets zugewiesen sein',
+    )
+  }
+  return null
+}
+
+async function applyBulkAssign(data: BulkAssignBudgetInput): Promise<number> {
+  return db.transaction(async (tx) => {
+    const [txCount, splitCount] = await Promise.all([
+      data.ids.length > 0
+        ? bulkAssignBudgetToTransactions(data.ids, data.budgetId, tx)
+        : 0,
+      data.splitIds.length > 0
+        ? bulkAssignBudgetToSplits(data.splitIds, data.budgetId, tx)
+        : 0,
+    ])
+    return txCount + splitCount
+  })
+}
+
+export const POST: APIRoute = async ({ request }) => {
+  const parsedResult = await parseJsonBody(
+    request,
+    bulkAssignBudgetSchema,
+    'Ungültiger Request-Body',
+  )
+  if ('error' in parsedResult) return parsedResult.error
+
+  const validationError = await validateBudgetAndPlan(parsedResult.data)
+  if (validationError) return validationError
+
+  try {
+    const count = await applyBulkAssign(parsedResult.data)
     return jsonResponse({ success: true, count })
   } catch (error) {
     console.error('Error bulk assigning budget to bank transactions:', error)

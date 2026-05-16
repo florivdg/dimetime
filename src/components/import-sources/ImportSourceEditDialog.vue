@@ -62,6 +62,19 @@ watch(
   { immediate: true },
 )
 
+function buildEditPayload() {
+  return {
+    name: editName.value.trim(),
+    preset: editPreset.value,
+    sourceKind: editSourceKind.value,
+    bankName: editBankName.value.trim() || null,
+    accountLabel: editAccountLabel.value.trim() || null,
+    accountIdentifier: editAccountIdentifier.value.trim() || null,
+    defaultPlanAssignment: editDefaultPlanAssignment.value,
+    isActive: editIsActive.value,
+  }
+}
+
 async function handleSubmit() {
   if (!props.source || !editName.value.trim()) return
 
@@ -71,16 +84,7 @@ async function handleSubmit() {
     const response = await fetch(`/api/import-sources/${props.source.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: editName.value.trim(),
-        preset: editPreset.value,
-        sourceKind: editSourceKind.value,
-        bankName: editBankName.value.trim() || null,
-        accountLabel: editAccountLabel.value.trim() || null,
-        accountIdentifier: editAccountIdentifier.value.trim() || null,
-        defaultPlanAssignment: editDefaultPlanAssignment.value,
-        isActive: editIsActive.value,
-      }),
+      body: JSON.stringify(buildEditPayload()),
     })
 
     if (!response.ok) {
