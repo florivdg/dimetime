@@ -15,7 +15,13 @@ beforeEach(() => {
   originalFetch = globalThis.fetch
   fetchCalls = []
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    fetchCalls.push({ url: String(input), init })
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    fetchCalls.push({ url, init })
     return fetchResponse
   }) as unknown as typeof globalThis.fetch
 })

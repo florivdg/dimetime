@@ -229,4 +229,34 @@ describe('commitBankImport', () => {
     const result = await commitBankImport({ sourceId, file: makeCsvFile() })
     expect(result.unassigned).toBeGreaterThan(0)
   })
+
+  it('upgrades a pre-existing pending row when matching booked row is imported', async () => {
+    // Pre-seed a "pending" bank tx whose semantic key (bookingDate|amountCents|description)
+    // matches the first booked CSV row. The ING parser leaves description=null, so
+    // the seeded pending row must also use a null/empty description for the match.
+    await testDb.insert(plansSchema.bankTransaction).values({
+      id: 'bt-pending',
+      sourceId,
+      dedupeKey: 'unique-pending-key',
+      bookingDate: '2026-03-01',
+      amountCents: -4500,
+      currency: 'EUR',
+      description: null,
+      status: 'pending',
+      rawDataJson: '{}',
+      isArchived: false,
+      isSplit: false,
+      importSeenCount: 1,
+      planAssignment: 'none',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const result = await commitBankImport({ sourceId, file: makeCsvFile() })
+    expect(result.updated).toBeGreaterThanOrEqual(1)
+    const upgraded = await testDb.query.bankTransaction.findFirst({
+      where: (t, { eq: e }) => e(t.id, 'bt-pending'),
+    })
+    expect(upgraded?.status).toBe('booked')
+  })
 })

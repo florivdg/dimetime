@@ -35,7 +35,7 @@ const ImportSourceEditDialog = (await import('./ImportSourceEditDialog.vue'))
 describe('ImportSourceEditDialog.vue', () => {
   it('mounts in create mode (no source)', () => {
     const wrapper = mount(ImportSourceEditDialog, {
-      props: { open: true, source: null },
+      props: { open: true, source: null, importTypes: [] },
     })
     expect(wrapper.html()).toBeTruthy()
   })
@@ -44,6 +44,7 @@ describe('ImportSourceEditDialog.vue', () => {
     const wrapper = mount(ImportSourceEditDialog, {
       props: {
         open: true,
+        importTypes: [],
         source: {
           id: 'src-1',
           name: 'ING Main',

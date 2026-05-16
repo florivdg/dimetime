@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { getSafeRedirectUrl } from './redirect'
 
 describe('getSafeRedirectUrl', () => {
@@ -51,5 +51,38 @@ describe('getSafeRedirectUrl', () => {
   it('honors a custom fallback', () => {
     expect(getSafeRedirectUrl(null, '/login')).toBe('/login')
     expect(getSafeRedirectUrl('//evil', '/login')).toBe('/login')
+  })
+
+  describe('client-side same-origin check', () => {
+    let originalWindow: typeof globalThis.window | undefined
+
+    beforeAll(() => {
+      originalWindow = globalThis.window
+      // Simulate a browser environment
+      globalThis.window = {
+        location: { origin: 'http://example.com' },
+      } as never
+    })
+
+    afterAll(() => {
+      if (originalWindow === undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (globalThis as any).window
+      } else {
+        globalThis.window = originalWindow
+      }
+    })
+
+    it('accepts a safe relative URL when window is defined', () => {
+      expect(getSafeRedirectUrl('/dashboard')).toBe('/dashboard')
+    })
+
+    it('falls back when same-origin URL construction throws', () => {
+      // Override origin to something that breaks URL parsing
+      globalThis.window = {
+        location: { origin: 'not-a-valid-base' },
+      } as never
+      expect(getSafeRedirectUrl('/x')).toBe('/')
+    })
   })
 })

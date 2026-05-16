@@ -172,4 +172,60 @@ describe('POST /api/bank-transactions/bulk-assign-budget', () => {
     )) as Response
     expect(res.status).toBe(200)
   })
+
+  it('assigns budget to splits whose plan matches', async () => {
+    const splitId = '77777777-7777-4777-8777-777777777777'
+    await testDb
+      .update(plansSchema.bankTransaction)
+      .set({ isSplit: true })
+      .where(
+        (await import('drizzle-orm')).eq(plansSchema.bankTransaction.id, btId),
+      )
+    await testDb.insert(plansSchema.bankTransactionSplit).values({
+      id: splitId,
+      bankTransactionId: btId,
+      amountCents: -500,
+      planId: planA,
+      isArchived: false,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const res = (await POST(
+      buildApiContext({
+        method: 'POST',
+        body: { budgetId, ids: [], splitIds: [splitId] },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.count).toBe(1)
+  })
+
+  it('returns 400 when split plan differs from budget plan', async () => {
+    const splitId = '88888888-8888-4888-8888-888888888888'
+    await testDb
+      .update(plansSchema.bankTransaction)
+      .set({ isSplit: true })
+      .where(
+        (await import('drizzle-orm')).eq(plansSchema.bankTransaction.id, btId),
+      )
+    await testDb.insert(plansSchema.bankTransactionSplit).values({
+      id: splitId,
+      bankTransactionId: btId,
+      amountCents: -500,
+      planId: planB,
+      isArchived: false,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const res = (await POST(
+      buildApiContext({
+        method: 'POST',
+        body: { budgetId, ids: [], splitIds: [splitId] },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(400)
+  })
 })
