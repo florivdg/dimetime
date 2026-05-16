@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { presetMatchesPlanMonth, isPresetExpired } from './presets'
+import { presetMatchesPlanMonth } from './preset-matching'
 import type { TransactionPreset } from './presets'
 
 function makePreset(
@@ -97,19 +97,5 @@ describe('presetMatchesPlanMonth', () => {
       startMonth: '2024-01',
     })
     expect(presetMatchesPlanMonth(preset, '2024-01')).toBe(false)
-  })
-})
-
-describe('isPresetExpired', () => {
-  it('returns false when endDate is null', () => {
-    expect(isPresetExpired(makePreset({ endDate: null }))).toBe(false)
-  })
-
-  it('returns true for past endDate', () => {
-    expect(isPresetExpired(makePreset({ endDate: '2020-01-01' }))).toBe(true)
-  })
-
-  it('returns false for future endDate', () => {
-    expect(isPresetExpired(makePreset({ endDate: '2099-12-31' }))).toBe(false)
   })
 })
