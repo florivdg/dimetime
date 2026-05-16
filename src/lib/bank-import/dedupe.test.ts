@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { buildDedupeKey } from './dedupe-key'
+import { buildDedupeKey, hashFileSha256 } from './dedupe-key'
 import {
   buildSemanticKey,
   dedupeByStatusUpgrade,
@@ -68,6 +68,30 @@ describe('buildDedupeKey', () => {
     const key1 = await buildDedupeKey(makeRow({ amountCents: -1000 }))
     const key2 = await buildDedupeKey(makeRow({ amountCents: -2000 }))
     expect(key1).not.toBe(key2)
+  })
+})
+
+describe('hashFileSha256', () => {
+  it('returns 64-char hex for non-empty bytes', async () => {
+    const hash = await hashFileSha256(new Uint8Array([1, 2, 3, 4]))
+    expect(hash).toBeTypeOf('string')
+    expect(hash.length).toBe(64)
+    expect(hash).toMatch(/^[0-9a-f]+$/)
+  })
+
+  it('returns 64-char hex for empty bytes', async () => {
+    const hash = await hashFileSha256(new Uint8Array([]))
+    expect(hash.length).toBe(64)
+    // SHA-256 of empty input is well-known
+    expect(hash).toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    )
+  })
+
+  it('produces different hashes for different inputs', async () => {
+    const h1 = await hashFileSha256(new Uint8Array([1, 2, 3]))
+    const h2 = await hashFileSha256(new Uint8Array([1, 2, 4]))
+    expect(h1).not.toBe(h2)
   })
 })
 
