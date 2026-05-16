@@ -1,31 +1,39 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
+import * as plansSchema from '@/db/schema/plans'
+import { createTestDb } from '@/lib/__fixtures__/test-db'
 
-const planSpy = mock<
-  (
-    id: string,
-  ) => Promise<
-    { id: string; date: string; isArchived: boolean } | null | undefined
-  >
->(async () => null)
+const harness = createTestDb()
+const testDb = harness.db
 
-void mock.module('@/lib/plans', () => ({
-  getPlanById: (id: string) => planSpy(id),
+void mock.module('@/db/database', () => ({
+  db: testDb,
 }))
 
 const { requireUnarchivedPlan } = await import('./plan-guards')
 
+const now = new Date('2026-03-09T00:00:00.000Z')
+
+async function seedPlan(id: string, isArchived = false) {
+  await testDb.insert(plansSchema.plan).values({
+    id,
+    date: '2026-03-01',
+    isArchived,
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
 beforeEach(() => {
-  planSpy.mockReset()
+  harness.reset()
 })
 
-afterEach(() => {
-  planSpy.mockReset()
+afterAll(() => {
+  harness.close()
 })
 
 describe('requireUnarchivedPlan', () => {
   it('returns 404 when the plan is not found', async () => {
-    planSpy.mockResolvedValueOnce(null)
-    const result = await requireUnarchivedPlan('plan-1')
+    const result = await requireUnarchivedPlan('missing')
     expect(result).toBeInstanceOf(Response)
     expect((result as Response).status).toBe(404)
     expect(await (result as Response).json()).toEqual({
@@ -34,12 +42,8 @@ describe('requireUnarchivedPlan', () => {
   })
 
   it('returns 400 when the plan is archived', async () => {
-    planSpy.mockResolvedValueOnce({
-      id: 'plan-1',
-      date: '2026-03-01',
-      isArchived: true,
-    })
-    const result = await requireUnarchivedPlan('plan-1')
+    await seedPlan('p-1', true)
+    const result = await requireUnarchivedPlan('p-1')
     expect((result as Response).status).toBe(400)
     expect(await (result as Response).json()).toEqual({
       error: 'Plan ist archiviert',
@@ -47,23 +51,14 @@ describe('requireUnarchivedPlan', () => {
   })
 
   it('returns the plan when it is unarchived', async () => {
-    const plan = {
-      id: 'plan-1',
-      date: '2026-03-01',
-      isArchived: false,
-      name: null,
-      notes: null,
-      createdAt: new Date('2026-03-01'),
-      updatedAt: new Date('2026-03-01'),
-    }
-    planSpy.mockResolvedValueOnce(plan)
-    const result = await requireUnarchivedPlan('plan-1')
-    expect(result).toEqual(plan)
+    await seedPlan('p-1', false)
+    const result = await requireUnarchivedPlan('p-1')
+    expect(result).not.toBeInstanceOf(Response)
+    expect((result as { id: string }).id).toBe('p-1')
   })
 
   it('honors custom not-found message', async () => {
-    planSpy.mockResolvedValueOnce(null)
-    const result = await requireUnarchivedPlan('plan-1', {
+    const result = await requireUnarchivedPlan('missing', {
       notFound: 'Eigene Meldung',
     })
     expect(await (result as Response).json()).toEqual({
@@ -72,12 +67,8 @@ describe('requireUnarchivedPlan', () => {
   })
 
   it('honors custom archived message and status', async () => {
-    planSpy.mockResolvedValueOnce({
-      id: 'plan-1',
-      date: '2026-03-01',
-      isArchived: true,
-    })
-    const result = await requireUnarchivedPlan('plan-1', {
+    await seedPlan('p-1', true)
+    const result = await requireUnarchivedPlan('p-1', {
       archived: 'Custom archived',
       archivedStatus: 403,
     })

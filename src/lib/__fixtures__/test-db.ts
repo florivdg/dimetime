@@ -220,13 +220,19 @@ function createDrizzle(sqlite: Database) {
   })
 }
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __dimetimeTestDb: TestDb | undefined
+}
+
 export function createTestDb(): TestDb {
+  if (globalThis.__dimetimeTestDb) return globalThis.__dimetimeTestDb
   const sqlite = new Database(':memory:')
   sqlite.run('PRAGMA foreign_keys = ON;')
   runStatements(sqlite, DDL)
   const db = createDrizzle(sqlite)
 
-  return {
+  globalThis.__dimetimeTestDb = {
     sqlite,
     db,
     reset: () => {
@@ -234,6 +240,10 @@ export function createTestDb(): TestDb {
         sqlite.run(`DELETE FROM "${table}"`)
       }
     },
-    close: () => sqlite.close(),
+    close: () => {
+      // No-op: closing would break sibling test files that share this singleton.
+      // The process exits when the runner finishes, releasing the in-memory DB.
+    },
   }
+  return globalThis.__dimetimeTestDb
 }
