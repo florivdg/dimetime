@@ -6,6 +6,8 @@ function hasDangerousProtocol(url: string): boolean {
 }
 
 function isSameOriginClientSide(url: string): boolean {
+  // Server-side: prior protocol/leading-slash checks have already rejected
+  // anything that could escape the origin, so same-origin is implied.
   if (typeof window === 'undefined') return true
   try {
     const parsed = new URL(url, window.location.origin)
