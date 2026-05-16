@@ -126,16 +126,20 @@ export const importSource = sqliteTable(
   ],
 )
 
+const importSourceLinkColumns = () => ({
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  sourceId: text('source_id')
+    .notNull()
+    .references(() => importSource.id, { onDelete: 'cascade' }),
+})
+
 // Statement Import Runs
 export const statementImport = sqliteTable(
   'statement_import',
   {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    sourceId: text('source_id')
-      .notNull()
-      .references(() => importSource.id, { onDelete: 'cascade' }),
+    ...importSourceLinkColumns(),
     fileName: text('file_name').notNull(),
     fileSha256: text('file_sha256').notNull(),
     fileType: text('file_type', { enum: ['csv', 'xlsx'] }).notNull(),
@@ -162,12 +166,7 @@ export const statementImport = sqliteTable(
 export const bankTransaction = sqliteTable(
   'bank_transaction',
   {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    sourceId: text('source_id')
-      .notNull()
-      .references(() => importSource.id, { onDelete: 'cascade' }),
+    ...importSourceLinkColumns(),
     firstSeenImportId: text('first_seen_import_id').references(
       () => statementImport.id,
       {
