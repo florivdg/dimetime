@@ -48,9 +48,15 @@ export async function handle<T>(
   try {
     return await fn()
   } catch (err) {
+    if (err instanceof Response) return err
     console.error(`${logTag}:`, err)
     return error(err instanceof Error ? err.message : fallbackMsg, 500)
   }
+}
+
+export function unwrap<T>(value: T | Response): T {
+  if (value instanceof Response) throw value
+  return value
 }
 
 export async function requireExisting<T>(
