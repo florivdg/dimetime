@@ -1,35 +1,14 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { describe, expect, it } from 'bun:test'
+import { seedCategory } from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { GET, POST } = await import('./index')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
-
-beforeEach(() => {
-  harness.reset()
-})
-
-afterAll(() => {
-  harness.close()
-})
-
 async function insertCategory(id: string, name: string, slug = id) {
-  await testDb.insert(plansSchema.category).values({
-    id,
-    name,
-    slug,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedCategory(testDb, { id, name, slug })
 }
 
 describe('GET /api/categories', () => {

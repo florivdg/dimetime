@@ -6,16 +6,7 @@ import { getSortIcon as resolveSortIcon } from '@/composables/useSortIcon'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import BudgetUtilizationBadge from './BudgetUtilizationBadge.vue'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import DeleteTransactionDialog from '@/components/shared/DeleteTransactionDialog.vue'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -324,25 +315,9 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
   </TooltipProvider>
 
   <!-- Delete confirmation dialog -->
-  <AlertDialog v-model:open="deleteDialogOpen">
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Transaktion löschen?</AlertDialogTitle>
-        <AlertDialogDescription>
-          Möchten Sie die Transaktion "{{ transactionToDelete?.name }}" wirklich
-          löschen? Diese Aktion kann nicht rückgängig gemacht werden.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-        <AlertDialogAction
-          @click="
-            transactionToDelete && deleteTransaction(transactionToDelete.id)
-          "
-        >
-          Löschen
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
+  <DeleteTransactionDialog
+    v-model:open="deleteDialogOpen"
+    :transaction="transactionToDelete"
+    @confirm="deleteTransaction"
+  />
 </template>

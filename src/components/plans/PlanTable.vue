@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import type { Plan } from '@/lib/plans'
 import { formatDate, getPlanDisplayName, truncateText } from '@/lib/format'
+import { mutateJson } from '@/lib/http'
 import { useDeleteConfirmation } from '@/composables/useDeleteConfirmation'
 import { useEditInputRefs } from '@/composables/useEditInputRefs'
 import { Button } from '@/components/ui/button'
@@ -81,56 +82,34 @@ function cancelEditing() {
 }
 
 async function updatePlan(id: string) {
-  const payload = {
-    name: editName.value.trim() || null,
-    date: editDate.value,
-    notes: editNotes.value.trim() || null,
-    isArchived: editIsArchived.value,
-  }
-  try {
-    const response = await fetch(`/api/plans/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Aktualisieren')
-    }
-
-    cancelEditing()
-    emit('updated')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Plan konnte nicht aktualisiert werden.',
-    )
-  }
+  await mutateJson({
+    url: `/api/plans/${id}`,
+    method: 'PUT',
+    body: {
+      name: editName.value.trim() || null,
+      date: editDate.value,
+      notes: editNotes.value.trim() || null,
+      isArchived: editIsArchived.value,
+    },
+    notOkMessage: 'Fehler beim Aktualisieren',
+    fallbackMessage: 'Plan konnte nicht aktualisiert werden.',
+    onSuccess: () => {
+      cancelEditing()
+      emit('updated')
+    },
+    onError: (message) => emit('error', message),
+  })
 }
 
 async function deletePlan(id: string) {
-  try {
-    const response = await fetch(`/api/plans/${id}`, {
-      method: 'DELETE',
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Löschen')
-    }
-
-    emit('deleted')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Plan konnte nicht gelöscht werden.',
-    )
-  }
+  await mutateJson({
+    url: `/api/plans/${id}`,
+    method: 'DELETE',
+    notOkMessage: 'Fehler beim Löschen',
+    fallbackMessage: 'Plan konnte nicht gelöscht werden.',
+    onSuccess: () => emit('deleted'),
+    onError: (message) => emit('error', message),
+  })
 }
 </script>
 

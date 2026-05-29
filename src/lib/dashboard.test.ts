@@ -1,29 +1,19 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  seedCategory,
+  seedPlan,
+  seedPlannedTransaction,
+} from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { getDashboardStats, getMonthlyChartData } = await import('./dashboard')
-
-const now = new Date('2026-03-09T00:00:00.000Z')
 
 async function insertPlanForCurrentMonth(id = 'plan-current') {
   const today = new Date()
   const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-  await testDb.insert(plansSchema.plan).values({
-    id,
-    name: 'Current',
-    date: `${currentMonth}-01`,
-    isArchived: false,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedPlan(testDb, { id, name: 'Current', date: `${currentMonth}-01` })
   return id
 }
 
@@ -32,14 +22,7 @@ async function insertCategory(
   name: string,
   color: string | null = '#fff',
 ) {
-  await testDb.insert(plansSchema.category).values({
-    id,
-    name,
-    slug: id,
-    color,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedCategory(testDb, { id, name, slug: id, color })
 }
 
 async function insertTransaction({
@@ -59,28 +42,17 @@ async function insertTransaction({
   isDone?: boolean
   categoryId?: string | null
 }) {
-  await testDb.insert(plansSchema.plannedTransaction).values({
+  await seedPlannedTransaction(testDb, {
     id,
     name: id,
     type,
     dueDate,
     amount,
     isDone,
-    isBudget: false,
     planId,
     categoryId,
-    createdAt: now,
-    updatedAt: now,
   })
 }
-
-beforeEach(() => {
-  harness.reset()
-})
-
-afterAll(() => {
-  harness.close()
-})
 
 describe('getDashboardStats', () => {
   it('returns empty stats when there is no current-month plan', async () => {

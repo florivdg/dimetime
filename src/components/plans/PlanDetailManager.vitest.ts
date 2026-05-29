@@ -1,19 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import {
-  shadcnButton,
-  shadcnDropdownMenu,
-  shadcnTooltip,
-} from '@/../test/component-mocks'
 
 vi.mock('vue-sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
-vi.mock('@/components/ui/button', () => shadcnButton)
-vi.mock('@/components/ui/dropdown-menu', () => shadcnDropdownMenu)
-vi.mock('@/components/ui/tooltip', () => shadcnTooltip)
-
 const stub = defineComponent({ setup: () => () => h('div') })
 vi.mock('./PlanTransactionFilters.vue', () => ({ default: stub }))
 vi.mock('./PlanTransactionTable.vue', () => ({ default: stub }))

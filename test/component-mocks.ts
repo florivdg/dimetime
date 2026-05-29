@@ -70,6 +70,14 @@ export const shadcnForm = {
   FormLabel: passthrough('label'),
   FormMessage: passthrough('span'),
 }
+export const shadcnLabel = { Label: passthrough('label') }
+export const shadcnCheckbox = {
+  Checkbox: defineComponent({
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    setup: () => () => h('input', { type: 'checkbox' }),
+  }),
+}
 export const shadcnAlertDialog = {
   AlertDialog: passthrough(),
   AlertDialogAction: button,
@@ -84,6 +92,7 @@ export const shadcnAlertDialog = {
 export const shadcnDialog = {
   Dialog: passthrough(),
   DialogContent: passthrough(),
+  DialogScrollContent: passthrough(),
   DialogDescription: passthrough('p'),
   DialogFooter: passthrough(),
   DialogHeader: passthrough('header'),

@@ -1,76 +1,35 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
+import { itGuardsIdRoute } from '@/lib/__fixtures__/route-guards'
+import { seedBankTransaction, seedImportSource } from '@/lib/__fixtures__/seeds'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { POST, DELETE } = await import('../[id]/split')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const sourceId = 'src-1'
 const btId = 'bt-1'
 
 async function seed() {
-  await testDb.insert(plansSchema.importSource).values({
-    id: sourceId,
-    name: 'S',
-    preset: 'ing_csv_v1',
-    sourceKind: 'bank_account',
-    defaultPlanAssignment: 'none',
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  })
-  await testDb.insert(plansSchema.bankTransaction).values({
+  await seedImportSource(testDb, { id: sourceId })
+  await seedBankTransaction(testDb, {
     id: btId,
     sourceId,
-    dedupeKey: 'k1',
-    bookingDate: '2026-03-01',
     amountCents: -2000,
-    currency: 'EUR',
-    status: 'booked',
-    rawDataJson: '{}',
-    isArchived: false,
-    isSplit: false,
-    importSeenCount: 1,
-    planAssignment: 'none',
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
 beforeEach(async () => {
-  harness.reset()
   await seed()
 })
 
-afterAll(() => {
-  harness.close()
-})
-
 describe('POST /api/bank-transactions/[id]/split', () => {
-  it('returns 400 when id missing', async () => {
-    const res = (await POST(
-      buildApiContext({ method: 'POST', body: { splits: [] } }) as never,
-    )) as Response
-    expect(res.status).toBe(400)
-  })
-
-  it('returns 404 when transaction not found', async () => {
-    const res = (await POST(
-      buildApiContext({
-        method: 'POST',
-        body: { splits: [] },
-        params: { id: 'missing' },
-      }) as never,
-    )) as Response
-    expect(res.status).toBe(404)
+  itGuardsIdRoute(POST, {
+    method: 'POST',
+    body: { splits: [] },
+    unknownId: 'missing',
+    notFoundName: 'returns 404 when transaction not found',
   })
 
   it('returns 400 on invalid JSON', async () => {
@@ -126,21 +85,10 @@ describe('POST /api/bank-transactions/[id]/split', () => {
 })
 
 describe('DELETE /api/bank-transactions/[id]/split', () => {
-  it('returns 400 when id missing', async () => {
-    const res = (await DELETE(
-      buildApiContext({ method: 'DELETE' }) as never,
-    )) as Response
-    expect(res.status).toBe(400)
-  })
-
-  it('returns 404 when transaction not found', async () => {
-    const res = (await DELETE(
-      buildApiContext({
-        method: 'DELETE',
-        params: { id: 'missing' },
-      }) as never,
-    )) as Response
-    expect(res.status).toBe(404)
+  itGuardsIdRoute(DELETE, {
+    method: 'DELETE',
+    unknownId: 'missing',
+    notFoundName: 'returns 404 when transaction not found',
   })
 
   it('returns 400 when not currently split', async () => {

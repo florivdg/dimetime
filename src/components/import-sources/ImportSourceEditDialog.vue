@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import type { ImportSource } from '@/lib/bank-transactions'
 import type { ImportTypeDescriptor } from '@/lib/bank-import/types'
+import { mutateJson } from '@/lib/http'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -79,31 +80,19 @@ async function handleSubmit() {
   if (!props.source || !editName.value.trim()) return
 
   isSaving.value = true
-
-  try {
-    const response = await fetch(`/api/import-sources/${props.source.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildEditPayload()),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Aktualisieren')
-    }
-
-    open.value = false
-    emit('updated')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Import-Quelle konnte nicht aktualisiert werden.',
-    )
-  } finally {
-    isSaving.value = false
-  }
+  await mutateJson({
+    url: `/api/import-sources/${props.source.id}`,
+    method: 'PUT',
+    body: buildEditPayload(),
+    notOkMessage: 'Fehler beim Aktualisieren',
+    fallbackMessage: 'Import-Quelle konnte nicht aktualisiert werden.',
+    onSuccess: () => {
+      open.value = false
+      emit('updated')
+    },
+    onError: (message) => emit('error', message),
+  })
+  isSaving.value = false
 }
 </script>
 

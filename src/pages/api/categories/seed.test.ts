@@ -1,26 +1,11 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { describe, expect, it } from 'bun:test'
+import { seedCategory } from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { POST } = await import('./seed')
-
-const now = new Date('2026-03-09T00:00:00.000Z')
-
-beforeEach(() => {
-  harness.reset()
-})
-
-afterAll(() => {
-  harness.close()
-})
 
 describe('POST /api/categories/seed', () => {
   it('inserts all defaults when no categories exist', async () => {
@@ -36,13 +21,7 @@ describe('POST /api/categories/seed', () => {
   })
 
   it('skips existing slugs and reports them', async () => {
-    await testDb.insert(plansSchema.category).values({
-      id: 'pre',
-      name: 'Miete',
-      slug: 'miete',
-      createdAt: now,
-      updatedAt: now,
-    })
+    await seedCategory(testDb, { id: 'pre', name: 'Miete', slug: 'miete' })
     const res = (await POST(
       buildApiContext({ method: 'POST' }) as never,
     )) as Response

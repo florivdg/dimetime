@@ -160,33 +160,22 @@ describe('buildSemanticKey', () => {
 })
 
 describe('dedupeByStatusUpgrade', () => {
-  it('returns all rows when only booked rows exist', () => {
-    const rows = [
-      makeRow({ status: 'booked', externalTransactionId: 'B1' }),
-      makeRow({
-        status: 'booked',
-        externalTransactionId: 'B2',
-        amountCents: -500,
-      }),
-    ]
-    const result = dedupeByStatusUpgrade(rows)
-    expect(result.rows).toHaveLength(2)
-    expect(result.pendingDropped).toBe(0)
-  })
-
-  it('returns all rows when only pending rows exist', () => {
-    const rows = [
-      makeRow({ status: 'pending', externalTransactionId: 'P1' }),
-      makeRow({
-        status: 'pending',
-        externalTransactionId: 'P2',
-        amountCents: -500,
-      }),
-    ]
-    const result = dedupeByStatusUpgrade(rows)
-    expect(result.rows).toHaveLength(2)
-    expect(result.pendingDropped).toBe(0)
-  })
+  for (const status of ['booked', 'pending'] as const) {
+    const prefix = status === 'booked' ? 'B' : 'P'
+    it(`returns all rows when only ${status} rows exist`, () => {
+      const rows = [
+        makeRow({ status, externalTransactionId: `${prefix}1` }),
+        makeRow({
+          status,
+          externalTransactionId: `${prefix}2`,
+          amountCents: -500,
+        }),
+      ]
+      const result = dedupeByStatusUpgrade(rows)
+      expect(result.rows).toHaveLength(2)
+      expect(result.pendingDropped).toBe(0)
+    })
+  }
 
   it('removes pending when matching booked exists (single pair)', () => {
     const rows = [

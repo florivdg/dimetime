@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
 import { useBankTransactions } from './useBankTransactions'
+import { jsonResponse } from '@/../test/composable-helpers'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Filters = any
@@ -105,11 +106,14 @@ afterEach(() => {
   globalThis.fetch = originalFetch
 })
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+/** Prime the fetch mock for a mutation (200) followed by a list reload. */
+function primeReload() {
+  mockFetch.mockResolvedValueOnce(jsonResponse({})).mockResolvedValueOnce(
+    jsonResponse({
+      rows: [],
+      pagination: { total: 0, page: 1, limit: 20, totalPages: 0 },
+    }),
+  )
 }
 
 describe('useBankTransactions', () => {
@@ -169,12 +173,7 @@ describe('useBankTransactions', () => {
   })
 
   it('bulkArchiveTransactions reloads on success', async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({})).mockResolvedValueOnce(
-      jsonResponse({
-        rows: [],
-        pagination: { total: 0, page: 1, limit: 20, totalPages: 0 },
-      }),
-    )
+    primeReload()
     const hook = setupHook(makeFilters())
     const ok = await hook.bulkArchiveTransactions(['r-1'], true)
     expect(ok).toBe(true)
@@ -189,24 +188,14 @@ describe('useBankTransactions', () => {
   })
 
   it('deleteTransaction reloads on success', async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({})).mockResolvedValueOnce(
-      jsonResponse({
-        rows: [],
-        pagination: { total: 0, page: 1, limit: 20, totalPages: 0 },
-      }),
-    )
+    primeReload()
     const hook = setupHook(makeFilters())
     const ok = await hook.deleteTransaction('r-1')
     expect(ok).toBe(true)
   })
 
   it('splitTransaction posts splits and reloads', async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({})).mockResolvedValueOnce(
-      jsonResponse({
-        rows: [],
-        pagination: { total: 0, page: 1, limit: 20, totalPages: 0 },
-      }),
-    )
+    primeReload()
     const hook = setupHook(makeFilters())
     const ok = await hook.splitTransaction('r-1', [
       { amountCents: -1000 },
@@ -216,12 +205,7 @@ describe('useBankTransactions', () => {
   })
 
   it('unsplitTransaction posts DELETE and reloads', async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({})).mockResolvedValueOnce(
-      jsonResponse({
-        rows: [],
-        pagination: { total: 0, page: 1, limit: 20, totalPages: 0 },
-      }),
-    )
+    primeReload()
     const hook = setupHook(makeFilters())
     const ok = await hook.unsplitTransaction('r-1')
     expect(ok).toBe(true)

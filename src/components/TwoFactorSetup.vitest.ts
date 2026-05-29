@@ -1,13 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import {
-  shadcnButton,
-  shadcnCard,
-  shadcnForm,
-  shadcnInput,
-  shadcnInputGroup,
-  shadcnPinInput,
-} from '@/../test/component-mocks'
 
 vi.mock('@/lib/auth-client', () => ({
   authClient: {
@@ -21,13 +13,6 @@ vi.mock('@/lib/auth-client', () => ({
 vi.mock('@lowlighter/qrcode', () => ({
   qrcode: () => '<svg></svg>',
 }))
-
-vi.mock('@/components/ui/button', () => shadcnButton)
-vi.mock('@/components/ui/input', () => shadcnInput)
-vi.mock('@/components/ui/card', () => shadcnCard)
-vi.mock('@/components/ui/form', () => shadcnForm)
-vi.mock('@/components/ui/pin-input', () => shadcnPinInput)
-vi.mock('@/components/ui/input-group', () => shadcnInputGroup)
 
 const TwoFactorSetup = (await import('./TwoFactorSetup.vue')).default
 

@@ -1,35 +1,14 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { describe, expect, it } from 'bun:test'
+import { seedPlan as seedPlanRow } from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { requireUnarchivedPlan } = await import('./plan-guards')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
-
 async function seedPlan(id: string, isArchived = false) {
-  await testDb.insert(plansSchema.plan).values({
-    id,
-    date: '2026-03-01',
-    isArchived,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedPlanRow(testDb, { id, isArchived })
 }
-
-beforeEach(() => {
-  harness.reset()
-})
-
-afterAll(() => {
-  harness.close()
-})
 
 describe('requireUnarchivedPlan', () => {
   it('returns 404 when the plan is not found', async () => {

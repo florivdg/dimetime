@@ -1,22 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import {
-  shadcnButton,
-  shadcnInput,
-  shadcnSelect,
-} from '@/../test/component-mocks'
 
-vi.mock('@/components/ui/button', () => shadcnButton)
-vi.mock('@/components/ui/input', () => shadcnInput)
-vi.mock('@/components/ui/select', () => shadcnSelect)
-vi.mock('@/components/ui/label', () => ({
-  Label: defineComponent({
-    setup(_, { slots }) {
-      return () => h('label', {}, slots.default?.())
-    },
-  }),
-}))
 vi.mock('@/components/ui/switch', () => ({
   Switch: defineComponent({
     props: ['modelValue'],

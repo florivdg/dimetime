@@ -6,6 +6,8 @@ import type { Plan } from '@/lib/plans'
 import type { PlanBalance } from '@/lib/transactions'
 import type { FilterState } from './PlanTransactionFilters.vue'
 import { useUrlState } from '@/composables/useUrlState'
+import { usePresetDialog } from '@/composables/usePresetDialog'
+import { toggleSort } from '@/lib/table-sort'
 import { formatAmount, formatDate, getPlanDisplayName } from '@/lib/format'
 import { ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-vue-next'
 
@@ -28,7 +30,6 @@ import TransactionEditDialog from '@/components/transactions/TransactionEditDial
 import TransactionCreateDialog from '@/components/transactions/TransactionCreateDialog.vue'
 import TransactionMoveDialog from '@/components/transactions/TransactionMoveDialog.vue'
 import PresetCreateDialog from '@/components/presets/PresetCreateDialog.vue'
-import type { PresetInitialValues } from '@/components/presets/PresetCreateDialog.vue'
 import FillFromPresetsDialog from '@/components/presets/FillFromPresetsDialog.vue'
 import CopyFromPlanDialog from '@/components/transactions/CopyFromPlanDialog.vue'
 import { Button } from '@/components/ui/button'
@@ -200,8 +201,12 @@ const transactionToMove = ref<TransactionWithCategory | null>(null)
 const fillFromPresetsDialogOpen = ref(false)
 
 // Preset dialog state
-const presetDialogOpen = ref(false)
-const presetInitialValues = ref<PresetInitialValues | undefined>(undefined)
+const {
+  presetDialogOpen,
+  presetInitialValues,
+  handleSaveAsPreset,
+  handlePresetCreated,
+} = usePresetDialog()
 
 // Copy from plan dialog state
 const copyFromPlanDialogOpen = ref(false)
@@ -403,28 +408,7 @@ function handleError(message: string) {
 }
 
 function handleSort(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
-  if (sortBy.value === column) {
-    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    sortBy.value = column
-    sortDir.value = 'asc'
-  }
-}
-
-function handleSaveAsPreset(transaction: TransactionWithCategory) {
-  presetInitialValues.value = {
-    name: transaction.name,
-    note: transaction.note,
-    amount: transaction.amount,
-    type: transaction.type,
-    categoryId: transaction.categoryId,
-    isBudget: transaction.isBudget,
-  }
-  presetDialogOpen.value = true
-}
-
-function handlePresetCreated() {
-  toast.success('Vorlage erstellt')
+  toggleSort(sortBy, sortDir, column)
 }
 
 function handleFillFromPresets() {

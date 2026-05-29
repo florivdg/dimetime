@@ -1,40 +1,19 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { describe, expect, it } from 'bun:test'
+import { seedPlan, seedPlannedTransaction } from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { GET } = await import('./chart')
-
-const now = new Date('2026-03-09T00:00:00.000Z')
-
-beforeEach(() => {
-  harness.reset()
-})
-
-afterAll(() => {
-  harness.close()
-})
 
 async function seedTx(
   date: string,
   amount: number,
   type: 'income' | 'expense',
 ) {
-  await testDb.insert(plansSchema.plan).values({
-    id: `p-${date}`,
-    date,
-    isArchived: false,
-    createdAt: now,
-    updatedAt: now,
-  })
-  await testDb.insert(plansSchema.plannedTransaction).values({
+  await seedPlan(testDb, { id: `p-${date}`, date, isArchived: false })
+  await seedPlannedTransaction(testDb, {
     id: `t-${date}-${type}`,
     name: 'tx',
     type,
@@ -43,8 +22,6 @@ async function seedTx(
     isDone: false,
     isBudget: false,
     planId: `p-${date}`,
-    createdAt: now,
-    updatedAt: now,
   })
 }
 

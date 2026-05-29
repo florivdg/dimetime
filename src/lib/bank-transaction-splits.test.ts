@@ -1,13 +1,14 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  seedBankTransaction,
+  seedBankTransactionSplit,
+  seedImportSource,
+  seedPlan,
+  seedPlannedTransaction,
+} from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { splitBankTransaction, unsplitBankTransaction, getSplitById } =
   await import('./bank-transaction-splits')
@@ -17,56 +18,30 @@ const splitRoute = await import('@/pages/api/bank-transactions/[id]/split.ts')
 const splitPatchRoute =
   await import('@/pages/api/bank-transactions/splits/[splitId].ts')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const planAId = '11111111-1111-4111-8111-111111111111'
 const planBId = '22222222-2222-4222-8222-222222222222'
 const budgetAId = '33333333-3333-4333-8333-333333333333'
 const budgetBId = '44444444-4444-4444-8444-444444444444'
 
 beforeEach(async () => {
-  harness.reset()
   await createSource()
 })
 
-afterAll(() => {
-  harness.close()
-})
-
 async function createSource(id = 'source-1') {
-  await testDb.insert(plansSchema.importSource).values({
-    id,
-    name: 'Testkonto',
-    preset: 'ing_csv_v1',
-    sourceKind: 'bank_account',
-    defaultPlanAssignment: 'none',
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedImportSource(testDb, { id, name: 'Testkonto' })
 }
 
 async function createPlan(id: string, date: string, isArchived = false) {
-  await testDb.insert(plansSchema.plan).values({
-    id,
-    name: id,
-    date,
-    isArchived,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedPlan(testDb, { id, name: id, date, isArchived })
 }
 
 async function createBudget(id: string, planId: string) {
-  await testDb.insert(plansSchema.plannedTransaction).values({
+  await seedPlannedTransaction(testDb, {
     id,
     name: id,
-    type: 'expense',
     dueDate: `${datePrefix(planId)}-05`,
     amount: 0,
-    isDone: false,
     isBudget: true,
-    createdAt: now,
-    updatedAt: now,
     planId,
   })
 }
@@ -90,27 +65,20 @@ async function createBankTransactionRow({
   preSplitBudgetId?: string | null
   isSplit?: boolean
 }) {
-  await testDb.insert(plansSchema.bankTransaction).values({
+  await seedBankTransaction(testDb, {
     id,
     sourceId: 'source-1',
     dedupeKey: `dedupe-${id}`,
     bookingDate: '2026-03-01',
     amountCents,
-    currency: 'EUR',
     counterparty,
     description,
-    status: 'booked',
-    rawDataJson: '{}',
     note: null,
     planId,
     planAssignment: planId ? 'manual' : 'none',
     budgetId,
     preSplitBudgetId,
-    isArchived: false,
     isSplit,
-    importSeenCount: 1,
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
@@ -129,16 +97,13 @@ async function createSplitRow({
   planId?: string | null
   budgetId?: string | null
 }) {
-  await testDb.insert(plansSchema.bankTransactionSplit).values({
+  await seedBankTransactionSplit(testDb, {
     id,
     bankTransactionId: parentId,
     amountCents,
     label,
     planId,
     budgetId,
-    sortOrder: 0,
-    createdAt: now,
-    updatedAt: now,
   })
 }
 

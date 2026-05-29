@@ -1,19 +1,16 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as authSchema from '@/db/schema/auth'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  seedPlan,
+  seedPlannedTransaction,
+  seedUser,
+} from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { POST } = await import('./bulk-copy')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const userId = '11111111-1111-4111-8111-111111111111'
 const sourcePlanId = '22222222-2222-4222-8222-222222222222'
 const targetPlanId = '33333333-3333-4333-8333-333333333333'
@@ -22,67 +19,42 @@ const tx1 = '55555555-5555-4555-8555-555555555555'
 const tx2 = '66666666-6666-4666-8666-666666666666'
 
 async function seed() {
-  await testDb.insert(authSchema.user).values({
-    id: userId,
-    name: 'A',
-    email: 'a@example.com',
-    createdAt: now,
-    updatedAt: now,
+  await seedUser(testDb, { id: userId, name: 'A', email: 'a@example.com' })
+  await seedPlan(testDb, {
+    id: sourcePlanId,
+    date: '2026-01-31',
+    isArchived: false,
   })
-  await testDb.insert(plansSchema.plan).values([
-    {
-      id: sourcePlanId,
-      date: '2026-01-31',
-      isArchived: false,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: targetPlanId,
-      date: '2026-02-01',
-      isArchived: false,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: archivedTargetId,
-      date: '2026-02-15',
-      isArchived: true,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ])
-  await testDb.insert(plansSchema.plannedTransaction).values([
-    {
-      id: tx1,
-      name: 'A',
-      type: 'expense',
-      dueDate: '2026-01-31',
-      amount: 100,
-      planId: sourcePlanId,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: tx2,
-      name: 'B',
-      type: 'income',
-      dueDate: '2026-01-15',
-      amount: 200,
-      planId: sourcePlanId,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ])
+  await seedPlan(testDb, {
+    id: targetPlanId,
+    date: '2026-02-01',
+    isArchived: false,
+  })
+  await seedPlan(testDb, {
+    id: archivedTargetId,
+    date: '2026-02-15',
+    isArchived: true,
+  })
+  await seedPlannedTransaction(testDb, {
+    id: tx1,
+    name: 'A',
+    type: 'expense',
+    dueDate: '2026-01-31',
+    amount: 100,
+    planId: sourcePlanId,
+  })
+  await seedPlannedTransaction(testDb, {
+    id: tx2,
+    name: 'B',
+    type: 'income',
+    dueDate: '2026-01-15',
+    amount: 200,
+    planId: sourcePlanId,
+  })
 }
 
 beforeEach(async () => {
-  harness.reset()
   await seed()
-})
-
-afterAll(() => {
-  harness.close()
 })
 
 describe('POST /api/transactions/bulk-copy', () => {

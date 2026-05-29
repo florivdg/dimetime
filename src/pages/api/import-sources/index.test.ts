@@ -1,26 +1,11 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { describe, expect, it } from 'bun:test'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
+import { seedImportSource } from '@/lib/__fixtures__/seeds'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { GET, POST } = await import('./index')
-
-const now = new Date('2026-03-09T00:00:00.000Z')
-
-beforeEach(() => {
-  harness.reset()
-})
-
-afterAll(() => {
-  harness.close()
-})
 
 describe('GET /api/import-sources', () => {
   it('returns an empty list when none exist', async () => {
@@ -31,15 +16,10 @@ describe('GET /api/import-sources', () => {
   })
 
   it('returns existing sources', async () => {
-    await testDb.insert(plansSchema.importSource).values({
+    await seedImportSource(testDb, {
       id: 'src-1',
       name: 'ING',
-      preset: 'ing_csv_v1',
-      sourceKind: 'bank_account',
       defaultPlanAssignment: 'auto_month',
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
     })
     const res = (await GET(buildApiContext() as never)) as Response
     const body = await res.json()

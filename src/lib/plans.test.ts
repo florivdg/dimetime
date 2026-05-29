@@ -1,13 +1,8 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import { seedPlan } from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const {
   createPlan,
@@ -21,8 +16,6 @@ const {
   updatePlan,
 } = await import('./plans')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
-
 async function insertPlan(
   id: string,
   date: string,
@@ -32,24 +25,20 @@ async function insertPlan(
     notes?: string | null
   } = {},
 ) {
-  await testDb.insert(plansSchema.plan).values({
+  await seedPlan(testDb, {
     id,
     name: options.name ?? null,
     date,
     notes: options.notes ?? null,
     isArchived: options.isArchived ?? false,
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
-beforeEach(() => {
-  harness.reset()
-})
-
-afterAll(() => {
-  harness.close()
-})
+/** Current month as `YYYY-MM` — for plans that must match the live "now". */
+function currentMonthPrefix(): string {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+}
 
 describe('createPlan', () => {
   it('creates a plan with defaults for nullable fields', async () => {
@@ -205,9 +194,7 @@ describe('getAvailableYears', () => {
 
 describe('getCurrentMonthPlan', () => {
   it('finds an active plan whose date starts with the current YYYY-MM', async () => {
-    const today = new Date()
-    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-    await insertPlan('current', `${currentMonth}-15`)
+    await insertPlan('current', `${currentMonthPrefix()}-15`)
     await insertPlan('other', '1999-01-01')
     const plan = await getCurrentMonthPlan()
     expect(plan?.id).toBe('current')
@@ -220,18 +207,16 @@ describe('getCurrentMonthPlan', () => {
   })
 
   it('skips archived plans even if they match the current month', async () => {
-    const today = new Date()
-    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-    await insertPlan('archived', `${currentMonth}-15`, { isArchived: true })
+    await insertPlan('archived', `${currentMonthPrefix()}-15`, {
+      isArchived: true,
+    })
     expect(await getCurrentMonthPlan()).toBeUndefined()
   })
 })
 
 describe('getSidebarPlans', () => {
   it('returns current month + latest non-archived plan', async () => {
-    const today = new Date()
-    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-    await insertPlan('current', `${currentMonth}-01`)
+    await insertPlan('current', `${currentMonthPrefix()}-01`)
     await insertPlan('future', '2099-12-01')
     await insertPlan('archived', '2099-12-15', { isArchived: true })
     const result = await getSidebarPlans()

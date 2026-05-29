@@ -1,55 +1,20 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { describe, expect, it } from 'bun:test'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
+import { seedBankTransaction, seedImportSource } from '@/lib/__fixtures__/seeds'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { GET } = await import('./index')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
-
 async function seed() {
-  await testDb.insert(plansSchema.importSource).values({
-    id: 'src-1',
-    name: 'S',
-    preset: 'ing_csv_v1',
-    sourceKind: 'bank_account',
-    defaultPlanAssignment: 'none',
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  })
-  await testDb.insert(plansSchema.bankTransaction).values({
+  await seedImportSource(testDb, { id: 'src-1' })
+  await seedBankTransaction(testDb, {
     id: 'bt-1',
     sourceId: 'src-1',
-    dedupeKey: 'k1',
-    bookingDate: '2026-03-01',
     amountCents: -1000,
-    currency: 'EUR',
-    status: 'booked',
-    rawDataJson: '{}',
-    isArchived: false,
-    isSplit: false,
-    importSeenCount: 1,
-    planAssignment: 'none',
-    createdAt: now,
-    updatedAt: now,
   })
 }
-
-beforeEach(async () => {
-  harness.reset()
-})
-
-afterAll(() => {
-  harness.close()
-})
 
 describe('GET /api/bank-transactions', () => {
   it('returns empty when no rows', async () => {

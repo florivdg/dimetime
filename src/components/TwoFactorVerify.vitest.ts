@@ -1,11 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import {
-  shadcnButton,
-  shadcnCard,
-  shadcnInput,
-  shadcnPinInput,
-} from '@/../test/component-mocks'
 
 vi.mock('@/lib/auth-client', () => ({
   authClient: {
@@ -19,11 +13,6 @@ vi.mock('@/lib/auth-client', () => ({
 vi.mock('@/lib/sync-settings', () => ({
   syncSettingsToLocalStorage: vi.fn().mockResolvedValue(undefined),
 }))
-
-vi.mock('@/components/ui/button', () => shadcnButton)
-vi.mock('@/components/ui/input', () => shadcnInput)
-vi.mock('@/components/ui/card', () => shadcnCard)
-vi.mock('@/components/ui/pin-input', () => shadcnPinInput)
 
 const TwoFactorVerify = (await import('./TwoFactorVerify.vue')).default
 

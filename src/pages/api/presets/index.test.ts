@@ -1,38 +1,22 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as authSchema from '@/db/schema/auth'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
+import {
+  getExpectOkBody,
+  postExpectCreated,
+  postExpectStatus,
+} from '@/lib/__fixtures__/bulk-route-assertions'
+import { seedUser } from '@/lib/__fixtures__/seeds'
+import { seedScopedPreset } from '@/lib/__fixtures__/route-guards-user'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { GET, POST } = await import('./index')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const userId = '11111111-1111-4111-8111-111111111111'
 
-async function seedUser() {
-  await testDb.insert(authSchema.user).values({
-    id: userId,
-    name: 'A',
-    email: 'a@example.com',
-    createdAt: now,
-    updatedAt: now,
-  })
-}
-
 beforeEach(async () => {
-  harness.reset()
-  await seedUser()
-})
-
-afterAll(() => {
-  harness.close()
+  await seedUser(testDb, { id: userId, name: 'A', email: 'a@example.com' })
 })
 
 describe('GET /api/presets', () => {
@@ -42,20 +26,12 @@ describe('GET /api/presets', () => {
   })
 
   it('returns paginated presets for the user', async () => {
-    await testDb.insert(plansSchema.transactionPreset).values({
-      id: '11111111-1111-4111-8111-aaaaaaaaaaaa',
-      name: 'Rent',
-      type: 'expense',
-      amount: 1000,
-      recurrence: 'monatlich',
+    await seedScopedPreset(
+      testDb,
+      '11111111-1111-4111-8111-aaaaaaaaaaaa',
       userId,
-      isBudget: false,
-      createdAt: now,
-      updatedAt: now,
-    })
-    const res = (await GET(buildApiContext({ userId }) as never)) as Response
-    expect(res.status).toBe(200)
-    const body = await res.json()
+    )
+    const body = await getExpectOkBody(GET, userId)
     expect(body.presets).toHaveLength(1)
   })
 
@@ -72,36 +48,18 @@ describe('GET /api/presets', () => {
 
 describe('POST /api/presets', () => {
   it('returns 401 without user', async () => {
-    const res = (await POST(
-      buildApiContext({
-        method: 'POST',
-        body: { name: 'X', amount: 100 },
-      }) as never,
-    )) as Response
-    expect(res.status).toBe(401)
+    await postExpectStatus(POST, { body: { name: 'X', amount: 100 } }, 401)
   })
 
   it('rejects invalid body', async () => {
-    const res = (await POST(
-      buildApiContext({
-        method: 'POST',
-        body: {},
-        userId,
-      }) as never,
-    )) as Response
-    expect(res.status).toBe(400)
+    await postExpectStatus(POST, { body: {}, userId }, 400)
   })
 
   it('creates and returns 201', async () => {
-    const res = (await POST(
-      buildApiContext({
-        method: 'POST',
-        body: { name: 'Rent', amount: 1000 },
-        userId,
-      }) as never,
-    )) as Response
-    expect(res.status).toBe(201)
-    const body = await res.json()
+    const body = await postExpectCreated(POST, {
+      body: { name: 'Rent', amount: 1000 },
+      userId,
+    })
     expect(body.name).toBe('Rent')
   })
 })

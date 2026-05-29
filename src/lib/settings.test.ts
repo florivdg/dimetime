@@ -1,13 +1,8 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as authSchema from '@/db/schema/auth'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import { seedUser as seedUserRow } from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { getAllSettings, getSetting, updateSettings } =
   await import('./settings')
@@ -15,23 +10,15 @@ const { getAllSettings, getSetting, updateSettings } =
 const userId = 'user-1'
 
 async function seedUser() {
-  const now = new Date()
-  await testDb.insert(authSchema.user).values({
+  await seedUserRow(testDb, {
     id: userId,
     name: 'Tester',
     email: 'tester@example.com',
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
 beforeEach(async () => {
-  harness.reset()
   await seedUser()
-})
-
-afterAll(() => {
-  harness.close()
 })
 
 describe('getSetting', () => {

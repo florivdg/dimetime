@@ -1,33 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
-import {
-  shadcnButton,
-  shadcnDialog,
-  shadcnForm,
-  shadcnInput,
-  shadcnSelect,
-} from '@/../test/component-mocks'
-
-vi.mock('@/components/ui/button', () => shadcnButton)
-vi.mock('@/components/ui/input', () => shadcnInput)
-vi.mock('@/components/ui/dialog', () => shadcnDialog)
-vi.mock('@/components/ui/form', () => shadcnForm)
-vi.mock('@/components/ui/select', () => shadcnSelect)
-vi.mock('@/components/ui/label', () => ({
-  Label: defineComponent({
-    setup(_, { slots }) {
-      return () => h('label', {}, slots.default?.())
-    },
-  }),
-}))
-vi.mock('@/components/ui/checkbox', () => ({
-  Checkbox: defineComponent({
-    props: ['modelValue'],
-    emits: ['update:modelValue'],
-    setup: () => () => h('input', { type: 'checkbox' }),
-  }),
-}))
 
 const ImportSourceEditDialog = (await import('./ImportSourceEditDialog.vue'))
   .default

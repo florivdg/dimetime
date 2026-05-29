@@ -1,19 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
 import { useAuthAction } from './useAuthAction'
-
-function withComposable<T>(setup: () => T): T {
-  let captured: T | undefined
-  const Comp = defineComponent({
-    setup() {
-      captured = setup()
-      return () => h('div')
-    },
-  })
-  mount(Comp)
-  return captured as T
-}
+import { withComposable } from '@/../test/composable-helpers'
 
 describe('useAuthAction', () => {
   it('returns data on success and clears errorMessage', async () => {

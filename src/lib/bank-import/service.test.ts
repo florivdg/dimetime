@@ -1,14 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { beforeEach, describe, expect, it } from 'bun:test'
 import * as authSchema from '@/db/schema/auth'
 import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { resetTestDb, setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { commitBankImport, getImportTypes, previewBankImport } =
   await import('./service')
@@ -53,14 +48,9 @@ async function seedUser(id: string) {
 }
 
 beforeEach(async () => {
-  harness.reset()
   await seedSource()
   await seedUser('user-1')
   await seedUser('user-2')
-})
-
-afterAll(() => {
-  harness.close()
 })
 
 describe('getImportTypes', () => {
@@ -84,7 +74,7 @@ describe('previewBankImport', () => {
   })
 
   it('rejects inactive sources', async () => {
-    harness.reset()
+    resetTestDb()
     await seedSource({ isActive: false })
     expect(
       previewBankImport({
@@ -191,7 +181,7 @@ describe('commitBankImport', () => {
   })
 
   it('auto-assigns to plan when defaultPlanAssignment=auto_month and exactly one matching plan exists', async () => {
-    harness.reset()
+    resetTestDb()
     await seedSource({ defaultPlanAssignment: 'auto_month' })
     await testDb.insert(plansSchema.plan).values({
       id: 'p-march',
@@ -208,7 +198,7 @@ describe('commitBankImport', () => {
   })
 
   it('leaves rows unassigned when auto_month finds zero or multiple matches', async () => {
-    harness.reset()
+    resetTestDb()
     await seedSource({ defaultPlanAssignment: 'auto_month' })
     await testDb.insert(plansSchema.plan).values([
       {

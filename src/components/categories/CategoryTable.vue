@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { formatDate } from '@/lib/format'
+import { mutateJson } from '@/lib/http'
 import { useEditInputRefs } from '@/composables/useEditInputRefs'
 import type { Category } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
@@ -71,54 +72,33 @@ function cancelEditing() {
 }
 
 async function updateCategory(id: string) {
-  try {
-    const response = await fetch(`/api/categories/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: editName.value.trim(),
-        slug: editSlug.value.trim(),
-        color: editColor.value || null,
-      }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Aktualisieren')
-    }
-
-    cancelEditing()
-    emit('updated')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Kategorie konnte nicht aktualisiert werden.',
-    )
-  }
+  await mutateJson({
+    url: `/api/categories/${id}`,
+    method: 'PUT',
+    body: {
+      name: editName.value.trim(),
+      slug: editSlug.value.trim(),
+      color: editColor.value || null,
+    },
+    notOkMessage: 'Fehler beim Aktualisieren',
+    fallbackMessage: 'Kategorie konnte nicht aktualisiert werden.',
+    onSuccess: () => {
+      cancelEditing()
+      emit('updated')
+    },
+    onError: (message) => emit('error', message),
+  })
 }
 
 async function deleteCategory(id: string) {
-  try {
-    const response = await fetch(`/api/categories/${id}`, {
-      method: 'DELETE',
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Löschen')
-    }
-
-    emit('deleted')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Kategorie konnte nicht gelöscht werden.',
-    )
-  }
+  await mutateJson({
+    url: `/api/categories/${id}`,
+    method: 'DELETE',
+    notOkMessage: 'Fehler beim Löschen',
+    fallbackMessage: 'Kategorie konnte nicht gelöscht werden.',
+    onSuccess: () => emit('deleted'),
+    onError: (message) => emit('error', message),
+  })
 }
 </script>
 

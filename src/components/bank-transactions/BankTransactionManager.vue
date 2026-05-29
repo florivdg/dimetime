@@ -21,16 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationFirst,
-  PaginationItem,
-  PaginationLast,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination'
+import PaginationControls from '@/components/shared/PaginationControls.vue'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -663,32 +654,12 @@ async function handleSingleArchive(
 
       <!-- Pagination -->
       <div v-if="pagination.totalPages > 1" class="mt-4">
-        <Pagination
+        <PaginationControls
           :total="pagination.total"
-          :sibling-count="1"
           :items-per-page="pagination.limit"
           :page="filters.page.value"
-          show-edges
           @update:page="handlePageChange"
-        >
-          <PaginationContent v-slot="{ items }">
-            <PaginationFirst />
-            <PaginationPrevious />
-            <template v-for="(item, index) in items">
-              <PaginationItem
-                v-if="item.type === 'page'"
-                :key="index"
-                :value="item.value"
-                :is-active="item.value === filters.page.value"
-              >
-                {{ item.value }}
-              </PaginationItem>
-              <PaginationEllipsis v-else :key="item.type" :index="index" />
-            </template>
-            <PaginationNext />
-            <PaginationLast />
-          </PaginationContent>
-        </Pagination>
+        />
       </div>
 
       <!-- Import Dialog -->

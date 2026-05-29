@@ -1,14 +1,13 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as authSchema from '@/db/schema/auth'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  seedCategory,
+  seedPlan as seedPlanRow,
+  seedTransactionPreset,
+  seedUser,
+} from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const {
   applyMultiplePresetsToPlan,
@@ -22,80 +21,43 @@ const {
   updatePreset,
 } = await import('./presets')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const userId = 'user-1'
 const otherUserId = 'user-2'
 const planId = 'plan-1'
 const archivedPlanId = 'plan-archived'
 
 async function seedUsers() {
-  await testDb.insert(authSchema.user).values([
-    {
-      id: userId,
-      name: 'A',
-      email: 'a@example.com',
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: otherUserId,
-      name: 'B',
-      email: 'b@example.com',
-      createdAt: now,
-      updatedAt: now,
-    },
-  ])
+  await seedUser(testDb, { id: userId, name: 'A', email: 'a@example.com' })
+  await seedUser(testDb, { id: otherUserId, name: 'B', email: 'b@example.com' })
 }
 
 async function seedPlan(id = planId, isArchived = false) {
-  await testDb.insert(plansSchema.plan).values({
-    id,
-    name: id,
-    date: '2026-03-01',
-    isArchived,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedPlanRow(testDb, { id, name: id, isArchived })
 }
 
 async function insertCategory(id = 'cat-1', name = 'Cat') {
-  await testDb.insert(plansSchema.category).values({
-    id,
-    name,
-    slug: id,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedCategory(testDb, { id, name, slug: id })
 }
 
 async function insertPreset(
   id: string,
-  overrides: Partial<typeof plansSchema.transactionPreset.$inferInsert> = {},
+  overrides: Parameters<typeof seedTransactionPreset>[1] = {},
 ) {
-  await testDb.insert(plansSchema.transactionPreset).values({
+  await seedTransactionPreset(testDb, {
     id,
     name: id,
-    type: 'expense',
-    amount: 1000,
     recurrence: 'monatlich',
     startMonth: '2026-01',
     userId,
     isBudget: false,
-    createdAt: now,
-    updatedAt: now,
     ...overrides,
   })
 }
 
 beforeEach(async () => {
-  harness.reset()
   await seedUsers()
   await seedPlan()
   await seedPlan(archivedPlanId, true)
-})
-
-afterAll(() => {
-  harness.close()
 })
 
 describe('createPreset', () => {
@@ -342,13 +304,7 @@ describe('applyPresetToPlan', () => {
     expect(tx.dueDate).toBe('2026-03-31')
 
     // Use a different plan in February
-    await testDb.insert(plansSchema.plan).values({
-      id: 'plan-feb',
-      date: '2026-02-01',
-      isArchived: false,
-      createdAt: now,
-      updatedAt: now,
-    })
+    await seedPlanRow(testDb, { id: 'plan-feb', date: '2026-02-01' })
     tx = await applyPresetToPlan('p-1', { planId: 'plan-feb' })
     expect(tx.dueDate).toBe('2026-02-28')
   })

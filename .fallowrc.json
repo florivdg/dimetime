@@ -20,5 +20,8 @@
     "maxCyclomatic": 10,
     "maxCognitive": 15,
     "maxCrap": 110
+  },
+  "duplicates": {
+    "ignoreImports": true
   }
 }

@@ -1,13 +1,14 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  seedBankTransaction,
+  seedBankTransactionSplit,
+  seedImportSource,
+  seedPlan as seedPlanRow,
+  seedPlannedTransaction,
+} from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const {
   buildSpendingRecord,
@@ -21,67 +22,42 @@ const {
   updateSplitFields,
 } = await import('./bank-transaction-splits')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const planAId = 'plan-a'
 const planBId = 'plan-b'
 
 async function seedSource() {
-  await testDb.insert(plansSchema.importSource).values({
-    id: 'src-1',
-    name: 'Source',
-    preset: 'ing_csv_v1',
-    sourceKind: 'bank_account',
-    defaultPlanAssignment: 'none',
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedImportSource(testDb, { id: 'src-1', name: 'Source' })
 }
 
 async function seedPlan(id: string) {
-  await testDb.insert(plansSchema.plan).values({
+  await seedPlanRow(testDb, {
     id,
     name: id,
     date: id === planBId ? '2026-04-01' : '2026-03-01',
-    isArchived: false,
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
 async function seedBudget(id: string, planId: string) {
-  await testDb.insert(plansSchema.plannedTransaction).values({
+  await seedPlannedTransaction(testDb, {
     id,
     name: id,
-    type: 'expense',
     dueDate: '2026-03-05',
     amount: 0,
     isBudget: true,
     planId,
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
 async function seedBankTx(
   id: string,
-  overrides: Partial<typeof plansSchema.bankTransaction.$inferInsert> = {},
+  overrides: Parameters<typeof seedBankTransaction>[1] = {},
 ) {
-  await testDb.insert(plansSchema.bankTransaction).values({
+  await seedBankTransaction(testDb, {
     id,
     sourceId: 'src-1',
     dedupeKey: `dk-${id}`,
     bookingDate: '2026-03-10',
     amountCents: -3000,
-    currency: 'EUR',
-    status: 'booked',
-    rawDataJson: '{}',
-    isArchived: false,
-    isSplit: false,
-    importSeenCount: 1,
-    planAssignment: 'none',
-    createdAt: now,
-    updatedAt: now,
     ...overrides,
   })
 }
@@ -89,29 +65,20 @@ async function seedBankTx(
 async function seedSplit(
   id: string,
   parentId: string,
-  overrides: Partial<typeof plansSchema.bankTransactionSplit.$inferInsert> = {},
+  overrides: Parameters<typeof seedBankTransactionSplit>[1] = {},
 ) {
-  await testDb.insert(plansSchema.bankTransactionSplit).values({
+  await seedBankTransactionSplit(testDb, {
     id,
     bankTransactionId: parentId,
     amountCents: -1500,
-    sortOrder: 0,
-    isArchived: false,
-    createdAt: now,
-    updatedAt: now,
     ...overrides,
   })
 }
 
 beforeEach(async () => {
-  harness.reset()
   await seedSource()
   await seedPlan(planAId)
   await seedPlan(planBId)
-})
-
-afterAll(() => {
-  harness.close()
 })
 
 describe('splitBankTransaction validation errors', () => {

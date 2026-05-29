@@ -1,56 +1,33 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as authSchema from '@/db/schema/auth'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  seedPlan,
+  seedPlannedTransaction,
+  seedUser,
+} from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
+import { getExpectOkBody } from '@/lib/__fixtures__/bulk-route-assertions'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { GET, POST } = await import('./index')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const planId = '11111111-1111-4111-8111-111111111111'
 const archivedPlanId = '22222222-2222-4222-8222-222222222222'
 const userId = '33333333-3333-4333-8333-333333333333'
 
 async function seed() {
-  await testDb.insert(authSchema.user).values({
-    id: userId,
-    name: 'A',
-    email: 'a@example.com',
-    createdAt: now,
-    updatedAt: now,
+  await seedUser(testDb, { id: userId, name: 'A', email: 'a@example.com' })
+  await seedPlan(testDb, { id: planId, date: '2026-03-01', isArchived: false })
+  await seedPlan(testDb, {
+    id: archivedPlanId,
+    date: '2026-02-01',
+    isArchived: true,
   })
-  await testDb.insert(plansSchema.plan).values([
-    {
-      id: planId,
-      date: '2026-03-01',
-      isArchived: false,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: archivedPlanId,
-      date: '2026-02-01',
-      isArchived: true,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ])
 }
 
 beforeEach(async () => {
-  harness.reset()
   await seed()
-})
-
-afterAll(() => {
-  harness.close()
 })
 
 describe('GET /api/transactions', () => {
@@ -64,25 +41,21 @@ describe('GET /api/transactions', () => {
   })
 
   it('returns paginated transactions', async () => {
-    await testDb.insert(plansSchema.plannedTransaction).values({
+    await seedPlannedTransaction(testDb, {
       id: 't-1',
       name: 'Test',
       type: 'expense',
       dueDate: '2026-03-15',
       amount: 1000,
       planId,
-      createdAt: now,
-      updatedAt: now,
     })
-    const res = (await GET(buildApiContext({ userId }) as never)) as Response
-    expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await getExpectOkBody(GET, userId)
     expect(body.transactions.length).toBe(1)
     expect(body.budgetSpending).toEqual({})
   })
 
   it('includes budget spending for budget rows', async () => {
-    await testDb.insert(plansSchema.plannedTransaction).values({
+    await seedPlannedTransaction(testDb, {
       id: 'budget-1',
       name: 'Budget',
       type: 'expense',
@@ -90,8 +63,6 @@ describe('GET /api/transactions', () => {
       amount: 5000,
       isBudget: true,
       planId,
-      createdAt: now,
-      updatedAt: now,
     })
     const res = (await GET(buildApiContext({ userId }) as never)) as Response
     const body = await res.json()

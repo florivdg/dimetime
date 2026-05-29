@@ -223,6 +223,19 @@ export function useBankTransactions(
     }
   }
 
+  // Reload the current page; if it is now empty but results remain, jump to
+  // the last valid page.
+  async function reloadAndClampPage(): Promise<void> {
+    await loadTransactions()
+    if (
+      rows.value.length === 0 &&
+      pagination.value.total > 0 &&
+      filters.page.value > 1
+    ) {
+      filters.page.value = Math.max(1, pagination.value.totalPages)
+    }
+  }
+
   async function bulkArchiveTransactions(
     ids: string[],
     isArchived: boolean,
@@ -235,15 +248,7 @@ export function useBankTransactions(
         body: JSON.stringify({ ids, splitIds, isArchived }),
       })
       if (!response.ok) throw new Error('Bulk archive failed')
-      await loadTransactions()
-      // If current page is now empty but there are still results, jump to last valid page
-      if (
-        rows.value.length === 0 &&
-        pagination.value.total > 0 &&
-        filters.page.value > 1
-      ) {
-        filters.page.value = Math.max(1, pagination.value.totalPages)
-      }
+      await reloadAndClampPage()
       return true
     } catch {
       errorMessage.value = 'Archivierung konnte nicht durchgeführt werden.'
@@ -363,14 +368,7 @@ export function useBankTransactions(
         method: 'DELETE',
       })
       if (!response.ok) throw new Error('Delete failed')
-      await loadTransactions()
-      if (
-        rows.value.length === 0 &&
-        pagination.value.total > 0 &&
-        filters.page.value > 1
-      ) {
-        filters.page.value = Math.max(1, pagination.value.totalPages)
-      }
+      await reloadAndClampPage()
       return true
     } catch {
       return false

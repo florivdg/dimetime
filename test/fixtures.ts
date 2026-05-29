@@ -1,0 +1,22 @@
+/** A representative `TransactionWithCategory` row for component tests. */
+export const sampleTransactionRow = {
+  id: 'tx-1',
+  name: 'Rent',
+  note: null,
+  type: 'expense' as const,
+  dueDate: '2026-03-01',
+  amount: 100000,
+  isDone: false,
+  isBudget: false,
+  completedAt: null,
+  planId: 'plan-1',
+  userId: null,
+  categoryId: null,
+  categoryName: null,
+  categoryColor: null,
+  planName: 'March',
+  planDate: '2026-03-01',
+  planIsArchived: false,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+}

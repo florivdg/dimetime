@@ -1,52 +1,33 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as authSchema from '@/db/schema/auth'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
+import {
+  seedPlan as seedPlanFixture,
+  seedPlannedTransaction,
+  seedTransactionPreset,
+  seedUser,
+} from '@/lib/__fixtures__/seeds'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const balanceRoute = await import('./balance')
 const budgetsRoute = await import('./budgets')
 const budgetSpendingRoute = await import('./budget-spending')
 const matchingPresetsRoute = await import('./matching-presets')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const planId = 'p1'
 const userId = 'user-1'
 
 async function seedPlan() {
-  await testDb.insert(plansSchema.plan).values({
+  await seedPlanFixture(testDb, {
     id: planId,
     date: '2026-03-01',
     isArchived: false,
-    createdAt: now,
-    updatedAt: now,
-  })
-}
-
-async function seedUser() {
-  await testDb.insert(authSchema.user).values({
-    id: userId,
-    name: 'A',
-    email: 'a@example.com',
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
 beforeEach(async () => {
-  harness.reset()
-  await seedUser()
-})
-
-afterAll(() => {
-  harness.close()
+  await seedUser(testDb, { id: userId, name: 'A', email: 'a@example.com' })
 })
 
 describe('GET /api/plans/[id]/balance', () => {
@@ -68,28 +49,22 @@ describe('GET /api/plans/[id]/balance', () => {
 
   it('aggregates income vs expense', async () => {
     await seedPlan()
-    await testDb.insert(plansSchema.plannedTransaction).values([
-      {
-        id: 't1',
-        name: 'i',
-        type: 'income',
-        dueDate: '2026-03-05',
-        amount: 1000,
-        planId,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 't2',
-        name: 'e',
-        type: 'expense',
-        dueDate: '2026-03-10',
-        amount: 300,
-        planId,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ])
+    await seedPlannedTransaction(testDb, {
+      id: 't1',
+      name: 'i',
+      type: 'income',
+      dueDate: '2026-03-05',
+      amount: 1000,
+      planId,
+    })
+    await seedPlannedTransaction(testDb, {
+      id: 't2',
+      name: 'e',
+      type: 'expense',
+      dueDate: '2026-03-10',
+      amount: 300,
+      planId,
+    })
     const res = (await balanceRoute.GET(
       buildApiContext({ params: { id: planId } }) as never,
     )) as Response
@@ -108,29 +83,23 @@ describe('GET /api/plans/[id]/budgets', () => {
 
   it('returns budget transactions for the plan', async () => {
     await seedPlan()
-    await testDb.insert(plansSchema.plannedTransaction).values([
-      {
-        id: 'b1',
-        name: 'Groceries',
-        type: 'expense',
-        dueDate: '2026-03-05',
-        amount: 0,
-        isBudget: true,
-        planId,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'b2',
-        name: 'Not Budget',
-        type: 'expense',
-        dueDate: '2026-03-06',
-        amount: 0,
-        planId,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ])
+    await seedPlannedTransaction(testDb, {
+      id: 'b1',
+      name: 'Groceries',
+      type: 'expense',
+      dueDate: '2026-03-05',
+      amount: 0,
+      isBudget: true,
+      planId,
+    })
+    await seedPlannedTransaction(testDb, {
+      id: 'b2',
+      name: 'Not Budget',
+      type: 'expense',
+      dueDate: '2026-03-06',
+      amount: 0,
+      planId,
+    })
     const res = (await budgetsRoute.GET(
       buildApiContext({ params: { id: planId } }) as never,
     )) as Response
@@ -178,7 +147,7 @@ describe('GET /api/plans/[id]/matching-presets', () => {
 
   it('returns presets with match status', async () => {
     await seedPlan()
-    await testDb.insert(plansSchema.transactionPreset).values({
+    await seedTransactionPreset(testDb, {
       id: 'preset-1',
       name: 'Rent',
       type: 'expense',
@@ -187,8 +156,6 @@ describe('GET /api/plans/[id]/matching-presets', () => {
       startMonth: '2026-01',
       userId,
       isBudget: false,
-      createdAt: now,
-      updatedAt: now,
     })
     const res = (await matchingPresetsRoute.GET(
       buildApiContext({

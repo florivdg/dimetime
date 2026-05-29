@@ -30,6 +30,20 @@ afterEach(() => {
   globalThis.fetch = originalFetch
 })
 
+/**
+ * Run `deleteTransaction('tx-1')` with an error-collecting `onError` callback
+ * and return the messages it emitted.
+ */
+async function collectDeleteErrors(): Promise<string[]> {
+  const errors: string[] = []
+  const { deleteTransaction } = useDeleteTransactionDialog(
+    () => undefined,
+    (msg) => errors.push(msg),
+  )
+  await deleteTransaction('tx-1')
+  return errors
+}
+
 describe('useDeleteTransactionDialog', () => {
   it('openDeleteDialog sets the dialog state', () => {
     const { deleteDialogOpen, transactionToDelete, openDeleteDialog } =
@@ -62,36 +76,18 @@ describe('useDeleteTransactionDialog', () => {
     fetchResponse = new Response(JSON.stringify({ error: 'Server says no' }), {
       status: 400,
     })
-    const errors: string[] = []
-    const { deleteTransaction } = useDeleteTransactionDialog(
-      () => undefined,
-      (msg) => errors.push(msg),
-    )
-    await deleteTransaction('tx-1')
-    expect(errors).toEqual(['Server says no'])
+    expect(await collectDeleteErrors()).toEqual(['Server says no'])
   })
 
   it('emits fallback error when error body has no message', async () => {
     fetchResponse = new Response('{}', { status: 500 })
-    const errors: string[] = []
-    const { deleteTransaction } = useDeleteTransactionDialog(
-      () => undefined,
-      (msg) => errors.push(msg),
-    )
-    await deleteTransaction('tx-1')
-    expect(errors).toEqual(['Fehler beim Löschen'])
+    expect(await collectDeleteErrors()).toEqual(['Fehler beim Löschen'])
   })
 
   it('emits network fallback on fetch reject', async () => {
     globalThis.fetch = (async () => {
       throw new Error('network down')
     }) as unknown as typeof globalThis.fetch
-    const errors: string[] = []
-    const { deleteTransaction } = useDeleteTransactionDialog(
-      () => undefined,
-      (msg) => errors.push(msg),
-    )
-    await deleteTransaction('tx-1')
-    expect(errors).toEqual(['network down'])
+    expect(await collectDeleteErrors()).toEqual(['network down'])
   })
 })

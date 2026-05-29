@@ -1,13 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
-import {
-  shadcnAlertDialog,
-  shadcnButton,
-  shadcnCard,
-  shadcnForm,
-  shadcnInput,
-} from '@/../test/component-mocks'
 
 const sessionRef = ref<{
   data: { user: { twoFactorEnabled: boolean } } | null
@@ -25,12 +18,6 @@ vi.mock('@/lib/auth-client', () => ({
     },
   },
 }))
-
-vi.mock('@/components/ui/button', () => shadcnButton)
-vi.mock('@/components/ui/input', () => shadcnInput)
-vi.mock('@/components/ui/card', () => shadcnCard)
-vi.mock('@/components/ui/form', () => shadcnForm)
-vi.mock('@/components/ui/alert-dialog', () => shadcnAlertDialog)
 
 const TwoFactorManager = (await import('./TwoFactorManager.vue')).default
 

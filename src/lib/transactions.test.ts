@@ -1,13 +1,15 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as plansSchema from '@/db/schema/plans'
-import { createTestDb } from '@/lib/__fixtures__/test-db'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  seedBankTransaction,
+  seedBankTransactionSplit,
+  seedCategory,
+  seedImportSource,
+  seedPlan,
+  seedPlannedTransaction,
+} from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const harness = createTestDb()
-const testDb = harness.db
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const {
   adjustDueDateToMonth,
@@ -25,19 +27,11 @@ const {
   validateTransactionPlanChange,
 } = await import('./transactions')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const planId = 'plan-1'
 const archivedPlanId = 'plan-archived'
 
 async function insertPlan(id: string, isArchived = false) {
-  await testDb.insert(plansSchema.plan).values({
-    id,
-    name: id,
-    date: '2026-03-01',
-    isArchived,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedPlan(testDb, { id, name: id, isArchived })
 }
 
 async function insertCategory(
@@ -45,56 +39,53 @@ async function insertCategory(
   name = id,
   color: string | null = null,
 ) {
-  await testDb.insert(plansSchema.category).values({
-    id,
-    name,
-    slug: id,
-    color,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedCategory(testDb, { id, name, slug: id, color })
 }
 
 async function insertSource(id = 'src-1') {
-  await testDb.insert(plansSchema.importSource).values({
-    id,
-    name: id,
-    preset: 'ing_csv_v1',
-    sourceKind: 'bank_account',
-    defaultPlanAssignment: 'none',
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedImportSource(testDb, { id, name: id })
 }
 
 async function insertTx(
   id: string,
-  overrides: Partial<typeof plansSchema.plannedTransaction.$inferInsert> = {},
+  overrides: Parameters<typeof seedPlannedTransaction>[1] = {},
 ) {
-  await testDb.insert(plansSchema.plannedTransaction).values({
+  await seedPlannedTransaction(testDb, {
     id,
     name: id,
-    type: 'expense',
     dueDate: '2026-03-15',
-    amount: 1000,
-    isDone: false,
-    isBudget: false,
     planId,
-    createdAt: now,
-    updatedAt: now,
     ...overrides,
   })
 }
 
+/** Seed a bank transaction linked to `budget-tx` via `budgetId` (id `bt-1`). */
+async function insertBudgetBankTx(
+  overrides: Parameters<typeof seedBankTransaction>[1] = {},
+) {
+  await seedBankTransaction(testDb, {
+    id: 'bt-1',
+    sourceId: 'src-1',
+    dedupeKey: 'k-1',
+    bookingDate: '2026-03-15',
+    planId,
+    planAssignment: 'manual',
+    budgetId: 'budget-tx',
+    ...overrides,
+  })
+}
+
+/** Read back the `budgetId` of the seeded `bt-1` bank transaction. */
+async function bt1BudgetId(): Promise<string | null | undefined> {
+  const bt = await testDb.query.bankTransaction.findFirst({
+    where: (t, { eq: e }) => e(t.id, 'bt-1'),
+  })
+  return bt?.budgetId
+}
+
 beforeEach(async () => {
-  harness.reset()
   await insertPlan(planId)
   await insertPlan(archivedPlanId, true)
-})
-
-afterAll(() => {
-  harness.close()
 })
 
 describe('parseTransactionQueryParams', () => {
@@ -271,88 +262,28 @@ describe('updateTransaction', () => {
     await insertPlan('plan-2')
     await insertSource()
     await insertTx('budget-tx', { isBudget: true })
-    await testDb.insert(plansSchema.bankTransaction).values({
-      id: 'bt-1',
-      sourceId: 'src-1',
-      dedupeKey: 'k-1',
-      bookingDate: '2026-03-15',
-      amountCents: -1000,
-      currency: 'EUR',
-      rawDataJson: '{}',
-      status: 'booked',
-      planId,
-      planAssignment: 'manual',
-      budgetId: 'budget-tx',
-      isArchived: false,
-      isSplit: false,
-      importSeenCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    })
+    await insertBudgetBankTx()
 
     await updateTransaction('budget-tx', { planId: 'plan-2' })
-    const bt = await testDb.query.bankTransaction.findFirst({
-      where: (t, { eq: e }) => e(t.id, 'bt-1'),
-    })
-    expect(bt?.budgetId).toBeNull()
+    expect(await bt1BudgetId()).toBeNull()
   })
 
   it('clears bank-transaction.budgetId when isBudget set to false', async () => {
     await insertSource()
     await insertTx('budget-tx', { isBudget: true })
-    await testDb.insert(plansSchema.bankTransaction).values({
-      id: 'bt-1',
-      sourceId: 'src-1',
-      dedupeKey: 'k-1',
-      bookingDate: '2026-03-15',
-      amountCents: -1000,
-      currency: 'EUR',
-      rawDataJson: '{}',
-      status: 'booked',
-      planId,
-      planAssignment: 'manual',
-      budgetId: 'budget-tx',
-      isArchived: false,
-      isSplit: false,
-      importSeenCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    })
+    await insertBudgetBankTx()
 
     await updateTransaction('budget-tx', { isBudget: false })
-    const bt = await testDb.query.bankTransaction.findFirst({
-      where: (t, { eq: e }) => e(t.id, 'bt-1'),
-    })
-    expect(bt?.budgetId).toBeNull()
+    expect(await bt1BudgetId()).toBeNull()
   })
 
   it('does not clear budgetId when plan and isBudget unchanged', async () => {
     await insertSource()
     await insertTx('budget-tx', { isBudget: true })
-    await testDb.insert(plansSchema.bankTransaction).values({
-      id: 'bt-1',
-      sourceId: 'src-1',
-      dedupeKey: 'k-1',
-      bookingDate: '2026-03-15',
-      amountCents: -1000,
-      currency: 'EUR',
-      rawDataJson: '{}',
-      status: 'booked',
-      planId,
-      planAssignment: 'manual',
-      budgetId: 'budget-tx',
-      isArchived: false,
-      isSplit: false,
-      importSeenCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    })
+    await insertBudgetBankTx()
 
     await updateTransaction('budget-tx', { name: 'Renamed' })
-    const bt = await testDb.query.bankTransaction.findFirst({
-      where: (t, { eq: e }) => e(t.id, 'bt-1'),
-    })
-    expect(bt?.budgetId).toBe('budget-tx')
+    expect(await bt1BudgetId()).toBe('budget-tx')
   })
 })
 
@@ -534,40 +465,22 @@ describe('getBudgetSpendingForBudgets', () => {
   it('aggregates bank transactions (absolute amounts) by budgetId', async () => {
     await insertSource()
     await insertTx('budget-a', { isBudget: true })
-    await testDb.insert(plansSchema.bankTransaction).values([
-      {
-        id: 'bt-1',
-        sourceId: 'src-1',
-        dedupeKey: 'k-1',
-        bookingDate: '2026-03-01',
-        amountCents: -1500,
-        currency: 'EUR',
-        rawDataJson: '{}',
-        status: 'booked',
-        budgetId: 'budget-a',
-        isArchived: false,
-        isSplit: false,
-        importSeenCount: 1,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'bt-2',
-        sourceId: 'src-1',
-        dedupeKey: 'k-2',
-        bookingDate: '2026-03-02',
-        amountCents: -500,
-        currency: 'EUR',
-        rawDataJson: '{}',
-        status: 'booked',
-        budgetId: 'budget-a',
-        isArchived: false,
-        isSplit: false,
-        importSeenCount: 1,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ])
+    await seedBankTransaction(testDb, {
+      id: 'bt-1',
+      sourceId: 'src-1',
+      dedupeKey: 'k-1',
+      bookingDate: '2026-03-01',
+      amountCents: -1500,
+      budgetId: 'budget-a',
+    })
+    await seedBankTransaction(testDb, {
+      id: 'bt-2',
+      sourceId: 'src-1',
+      dedupeKey: 'k-2',
+      bookingDate: '2026-03-02',
+      amountCents: -500,
+      budgetId: 'budget-a',
+    })
     const spending = await getBudgetSpendingForBudgets(['budget-a'])
     expect(spending['budget-a']).toBe(2000)
   })
@@ -582,33 +495,20 @@ describe('getBudgetSpendingForPlan', () => {
   it('aggregates bank transactions and splits per plan budget', async () => {
     await insertSource()
     await insertTx('budget-a', { isBudget: true })
-    await testDb.insert(plansSchema.bankTransaction).values({
+    await seedBankTransaction(testDb, {
       id: 'bt-1',
       sourceId: 'src-1',
       dedupeKey: 'k-1',
       bookingDate: '2026-03-01',
-      amountCents: -1000,
-      currency: 'EUR',
-      rawDataJson: '{}',
-      status: 'booked',
       planId,
       budgetId: 'budget-a',
-      isArchived: false,
-      isSplit: false,
-      importSeenCount: 1,
-      createdAt: now,
-      updatedAt: now,
     })
-    await testDb.insert(plansSchema.bankTransactionSplit).values({
+    await seedBankTransactionSplit(testDb, {
       id: 'split-1',
       bankTransactionId: 'bt-1',
       amountCents: -500,
       planId,
       budgetId: 'budget-a',
-      sortOrder: 0,
-      isArchived: false,
-      createdAt: now,
-      updatedAt: now,
     })
 
     const spending = await getBudgetSpendingForPlan(planId)
