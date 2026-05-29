@@ -1,0 +1,3 @@
+# Generated shadcn-vue components — keep as upstream-generated, do not reformat.
+# Mirrors the fallow ignorePatterns entry in .fallowrc.json.
+src/components/ui/
