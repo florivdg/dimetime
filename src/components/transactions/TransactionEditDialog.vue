@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
+import { mutateJson } from '@/lib/http'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,12 +13,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -27,7 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Minus, Plus } from 'lucide-vue-next'
+import { Loader2 } from 'lucide-vue-next'
+import AmountInputGroup from '@/components/shared/AmountInputGroup.vue'
 
 const props = defineProps<{
   transaction: TransactionWithCategory | null
@@ -78,48 +74,32 @@ watch(
   { immediate: true },
 )
 
-function toggleType() {
-  editType.value = editType.value === 'income' ? 'expense' : 'income'
-}
-
 async function handleSubmit() {
   if (!props.transaction || !editName.value.trim() || !editDueDate.value) return
 
   isSaving.value = true
-
-  try {
-    const response = await fetch(`/api/transactions/${props.transaction.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: editName.value.trim(),
-        note: editNote.value.trim() || null,
-        dueDate: editDueDate.value,
-        amount: Math.round(editAmount.value * 100),
-        type: editType.value,
-        categoryId: editCategoryId.value,
-        isDone: editIsDone.value,
-        isBudget: editIsBudget.value,
-      }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Speichern')
-    }
-
-    open.value = false
-    emit('updated')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Transaktion konnte nicht gespeichert werden.',
-    )
-  } finally {
-    isSaving.value = false
-  }
+  await mutateJson({
+    url: `/api/transactions/${props.transaction.id}`,
+    method: 'PUT',
+    body: {
+      name: editName.value.trim(),
+      note: editNote.value.trim() || null,
+      dueDate: editDueDate.value,
+      amount: Math.round(editAmount.value * 100),
+      type: editType.value,
+      categoryId: editCategoryId.value,
+      isDone: editIsDone.value,
+      isBudget: editIsBudget.value,
+    },
+    notOkMessage: 'Fehler beim Speichern',
+    fallbackMessage: 'Transaktion konnte nicht gespeichert werden.',
+    onSuccess: () => {
+      open.value = false
+      emit('updated')
+    },
+    onError: (message) => emit('error', message),
+  })
+  isSaving.value = false
 }
 </script>
 
@@ -160,29 +140,10 @@ async function handleSubmit() {
 
         <div class="space-y-2">
           <Label>Betrag</Label>
-          <InputGroup>
-            <InputGroupAddon>
-              <InputGroupButton
-                type="button"
-                :class="
-                  editType === 'income'
-                    ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
-                    : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
-                "
-                @click="toggleType"
-              >
-                <Plus v-if="editType === 'income'" class="size-4" />
-                <Minus v-else class="size-4" />
-              </InputGroupButton>
-            </InputGroupAddon>
-            <InputGroupInput
-              v-model.number="editAmount"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0,00"
-            />
-          </InputGroup>
+          <AmountInputGroup
+            v-model:amount="editAmount"
+            v-model:type="editType"
+          />
           <p class="text-muted-foreground text-xs">
             {{ editType === 'income' ? 'Einnahme' : 'Ausgabe' }} - Klicken Sie
             auf das Symbol, um zu wechseln.

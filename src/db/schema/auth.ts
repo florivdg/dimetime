@@ -1,7 +1,6 @@
 import { relations } from 'drizzle-orm'
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
-import { plannedTransaction } from './plans'
-import { userSetting } from './settings'
+import { timestamps } from './_columns'
 
 export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
@@ -11,10 +10,7 @@ export const user = sqliteTable('user', {
     .default(false)
     .notNull(),
   image: text('image'),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-    .$onUpdate(() => new Date())
-    .notNull(),
+  ...timestamps(),
   role: text('role'),
   banned: integer('banned', { mode: 'boolean' }).default(false),
   banReason: text('ban_reason'),
@@ -30,10 +26,7 @@ export const session = sqliteTable(
     id: text('id').primaryKey(),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
     token: text('token').notNull().unique(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
     userId: text('user_id')
@@ -64,10 +57,7 @@ export const account = sqliteTable(
     }),
     scope: text('scope'),
     password: text('password'),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [index('account_userId_idx').on(table.userId)],
 )
@@ -79,10 +69,7 @@ export const verification = sqliteTable(
     identifier: text('identifier').notNull(),
     value: text('value').notNull(),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .$onUpdate(() => new Date())
-      .notNull(),
+    ...timestamps(),
   },
   (table) => [index('verification_identifier_idx').on(table.identifier)],
 )
@@ -116,21 +103,13 @@ export const twoFactor = sqliteTable(
     id: text('id').primaryKey(),
     secret: text('secret').notNull(),
     backupCodes: text('backup_codes').notNull(),
+    verified: integer('verified', { mode: 'boolean' }).default(true).notNull(),
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
   },
   (table) => [index('twoFactor_userId_idx').on(table.userId)],
 )
-
-export const userRelations = relations(user, ({ many, one }) => ({
-  sessions: many(session),
-  accounts: many(account),
-  passkeys: many(passkey),
-  plannedTransactions: many(plannedTransaction),
-  settings: many(userSetting),
-  twoFactor: one(twoFactor),
-}))
 
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, {

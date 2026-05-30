@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { Category } from '@/lib/categories'
+import type { PresetInitialValues } from './preset-types'
+import { mutateJson } from '@/lib/http'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,12 +15,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -28,16 +24,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Minus, Plus } from 'lucide-vue-next'
-
-export interface PresetInitialValues {
-  name: string
-  note: string | null
-  amount: number // in cents
-  type: 'income' | 'expense'
-  categoryId: string | null
-  isBudget: boolean
-}
+import { Loader2 } from 'lucide-vue-next'
+import AmountInputGroup from '@/components/shared/AmountInputGroup.vue'
 
 const props = defineProps<{
   categories: Category[]
@@ -99,51 +87,35 @@ watch(open, (isOpen) => {
   }
 })
 
-function toggleType() {
-  newType.value = newType.value === 'income' ? 'expense' : 'income'
-}
-
 async function handleSubmit() {
   if (!newName.value.trim()) return
 
   isCreating.value = true
-
-  try {
-    const response = await fetch('/api/presets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: newName.value.trim(),
-        note: newNote.value.trim() || null,
-        amount: Math.round(newAmount.value * 100),
-        type: newType.value,
-        recurrence: newRecurrence.value,
-        startMonth: newStartMonth.value || null,
-        endDate: newEndDate.value || null,
-        categoryId: newCategoryId.value,
-        dayOfMonth: newDayOfMonth.value,
-        isBudget: newIsBudget.value,
-      }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Erstellen')
-    }
-
-    resetForm()
-    open.value = false
-    emit('created')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Vorlage konnte nicht erstellt werden.',
-    )
-  } finally {
-    isCreating.value = false
-  }
+  await mutateJson({
+    url: '/api/presets',
+    method: 'POST',
+    body: {
+      name: newName.value.trim(),
+      note: newNote.value.trim() || null,
+      amount: Math.round(newAmount.value * 100),
+      type: newType.value,
+      recurrence: newRecurrence.value,
+      startMonth: newStartMonth.value || null,
+      endDate: newEndDate.value || null,
+      categoryId: newCategoryId.value,
+      dayOfMonth: newDayOfMonth.value,
+      isBudget: newIsBudget.value,
+    },
+    notOkMessage: 'Fehler beim Erstellen',
+    fallbackMessage: 'Vorlage konnte nicht erstellt werden.',
+    onSuccess: () => {
+      resetForm()
+      open.value = false
+      emit('created')
+    },
+    onError: (message) => emit('error', message),
+  })
+  isCreating.value = false
 }
 </script>
 
@@ -188,29 +160,10 @@ async function handleSubmit() {
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
             <Label>Betrag</Label>
-            <InputGroup>
-              <InputGroupAddon>
-                <InputGroupButton
-                  type="button"
-                  :class="
-                    newType === 'income'
-                      ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
-                      : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
-                  "
-                  @click="toggleType"
-                >
-                  <Plus v-if="newType === 'income'" class="size-4" />
-                  <Minus v-else class="size-4" />
-                </InputGroupButton>
-              </InputGroupAddon>
-              <InputGroupInput
-                v-model.number="newAmount"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0,00"
-              />
-            </InputGroup>
+            <AmountInputGroup
+              v-model:amount="newAmount"
+              v-model:type="newType"
+            />
           </div>
 
           <div class="space-y-2">

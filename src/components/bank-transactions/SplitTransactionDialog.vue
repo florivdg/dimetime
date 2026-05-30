@@ -62,26 +62,31 @@ const canAddSplit = computed(() => {
   return true
 })
 
-const canFinish = computed(() => {
-  const inputValid =
-    currentCents.value > 0 && currentCents.value <= remainingAbsCents.value
+function isInputValid(): boolean {
+  return currentCents.value > 0 && currentCents.value <= remainingAbsCents.value
+}
 
-  // 0 entries + valid input that's less than total → 2-way split
-  if (
+function canFinishTwoWaySplit(): boolean {
+  return (
     entries.value.length === 0 &&
-    inputValid &&
+    isInputValid() &&
     currentCents.value < totalAbsCents.value
   )
-    return true
-  // 1+ entries with remaining → auto-create remainder (with or without valid input)
-  if (entries.value.length >= 1 && remainingAbsCents.value > 0) {
-    return currentCents.value === 0 || inputValid
-  }
-  // 2+ entries exactly sum to total
-  if (entries.value.length >= 2 && remainingAbsCents.value === 0) return true
+}
 
-  return false
-})
+function canFinishWithRemainder(): boolean {
+  if (entries.value.length < 1 || remainingAbsCents.value <= 0) return false
+  return currentCents.value === 0 || isInputValid()
+}
+
+function canFinishExactSum(): boolean {
+  return entries.value.length >= 2 && remainingAbsCents.value === 0
+}
+
+const canFinish = computed(
+  () =>
+    canFinishTwoWaySplit() || canFinishWithRemainder() || canFinishExactSum(),
+)
 
 const pendingCents = computed(() =>
   currentCents.value > 0
@@ -129,39 +134,42 @@ function removeSplit(index: number) {
   entries.value.splice(index, 1)
 }
 
+type SplitPayload = { amountCents: number; label?: string }
+
+function buildEntrySplit(entry: SplitEntry): SplitPayload {
+  const absCents = eurosToCents(entry.amountEuros)
+  return {
+    amountCents: signedAmount(absCents),
+    ...(entry.label ? { label: entry.label } : {}),
+  }
+}
+
+function buildCurrentSplit(): SplitPayload {
+  return {
+    amountCents: signedAmount(currentCents.value),
+    ...(currentLabel.value ? { label: currentLabel.value } : {}),
+  }
+}
+
+function buildRemainderSplit(absCents: number): SplitPayload {
+  return { amountCents: signedAmount(absCents) }
+}
+
+function appendCurrentAndRemainder(splits: SplitPayload[]): void {
+  splits.push(buildCurrentSplit())
+  const afterInput = remainingAbsCents.value - currentCents.value
+  if (afterInput > 0) splits.push(buildRemainderSplit(afterInput))
+}
+
 function finish() {
   if (!canFinish.value) return
 
-  const splits: { amountCents: number; label?: string }[] = entries.value.map(
-    (e) => {
-      const absCents = eurosToCents(e.amountEuros)
-      return {
-        amountCents: isNegative.value ? -absCents : absCents,
-        ...(e.label ? { label: e.label } : {}),
-      }
-    },
-  )
+  const splits: SplitPayload[] = entries.value.map(buildEntrySplit)
 
-  if (currentCents.value > 0 && currentCents.value <= remainingAbsCents.value) {
-    // Include current input as a split
-    splits.push({
-      amountCents: isNegative.value ? -currentCents.value : currentCents.value,
-      ...(currentLabel.value ? { label: currentLabel.value } : {}),
-    })
-    // Auto-create remainder if anything left after current input
-    const afterInput = remainingAbsCents.value - currentCents.value
-    if (afterInput > 0) {
-      splits.push({
-        amountCents: isNegative.value ? -afterInput : afterInput,
-      })
-    }
+  if (isInputValid()) {
+    appendCurrentAndRemainder(splits)
   } else if (remainingAbsCents.value > 0) {
-    // No current input, auto-create remainder
-    splits.push({
-      amountCents: isNegative.value
-        ? -remainingAbsCents.value
-        : remainingAbsCents.value,
-    })
+    splits.push(buildRemainderSplit(remainingAbsCents.value))
   }
 
   emit('split', splits)

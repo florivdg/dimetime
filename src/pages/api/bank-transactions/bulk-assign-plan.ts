@@ -4,7 +4,11 @@ import { bulkAssignPlanToTransactions } from '@/lib/bank-transactions'
 import { bulkAssignPlanToSplits } from '@/lib/bank-transaction-splits'
 import { getPlanById } from '@/lib/plans'
 import { db } from '@/db/database'
-import { jsonError, jsonResponse } from '@/lib/bank-import/api-helpers'
+import {
+  jsonError,
+  jsonResponse,
+  parseJsonBody,
+} from '@/lib/bank-import/api-helpers'
 
 const bulkAssignPlanSchema = z
   .object({
@@ -16,46 +20,49 @@ const bulkAssignPlanSchema = z
     message: 'Mindestens eine Transaktions- oder Split-ID ist erforderlich',
   })
 
+type BulkAssignPlanInput = z.infer<typeof bulkAssignPlanSchema>
+
+async function validateTargetPlan(
+  planId: string | null,
+): Promise<Response | null> {
+  if (!planId) return null
+  const targetPlan = await getPlanById(planId)
+  if (!targetPlan) return jsonError('Zielplan nicht gefunden', 404)
+  if (targetPlan.isArchived) {
+    return jsonError(
+      'Banktransaktionen können nicht einem archivierten Plan zugeordnet werden.',
+    )
+  }
+  return null
+}
+
+async function applyBulkAssign(data: BulkAssignPlanInput): Promise<number> {
+  return db.transaction(async (tx) => {
+    const [txCount, splitCount] = await Promise.all([
+      data.ids.length > 0
+        ? bulkAssignPlanToTransactions(data.ids, data.planId, tx)
+        : 0,
+      data.splitIds.length > 0
+        ? bulkAssignPlanToSplits(data.splitIds, data.planId, tx)
+        : 0,
+    ])
+    return txCount + splitCount
+  })
+}
+
 export const POST: APIRoute = async ({ request }) => {
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return jsonError('Ungültiger Request-Body')
-  }
+  const parsedResult = await parseJsonBody(
+    request,
+    bulkAssignPlanSchema,
+    'Ungültiger Request-Body',
+  )
+  if ('error' in parsedResult) return parsedResult.error
 
-  const parsed = bulkAssignPlanSchema.safeParse(body)
-  if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message ?? 'Ungültige Eingabe')
-  }
-
-  if (parsed.data.planId) {
-    const targetPlan = await getPlanById(parsed.data.planId)
-    if (!targetPlan) return jsonError('Zielplan nicht gefunden', 404)
-    if (targetPlan.isArchived) {
-      return jsonError(
-        'Banktransaktionen können nicht einem archivierten Plan zugeordnet werden.',
-      )
-    }
-  }
+  const planError = await validateTargetPlan(parsedResult.data.planId)
+  if (planError) return planError
 
   try {
-    const count = await db.transaction(async (tx) => {
-      const [txCount, splitCount] = await Promise.all([
-        parsed.data.ids.length > 0
-          ? bulkAssignPlanToTransactions(
-              parsed.data.ids,
-              parsed.data.planId,
-              tx,
-            )
-          : 0,
-        parsed.data.splitIds.length > 0
-          ? bulkAssignPlanToSplits(parsed.data.splitIds, parsed.data.planId, tx)
-          : 0,
-      ])
-      return txCount + splitCount
-    })
-
+    const count = await applyBulkAssign(parsedResult.data)
     return jsonResponse({ success: true, count })
   } catch (error) {
     console.error('Error bulk assigning plan to bank transactions:', error)

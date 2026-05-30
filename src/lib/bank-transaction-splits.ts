@@ -2,49 +2,24 @@ import { db, type DbOrTransaction } from '@/db/database'
 import {
   bankTransaction,
   bankTransactionSplit,
-  plan,
   plannedTransaction,
 } from '@/db/schema/plans'
 import { and, eq, inArray, sum } from 'drizzle-orm'
+import { buildSetValues } from '@/lib/db/partial-update'
+import { partitionByPlan } from '@/lib/plan-partition'
 
 export type BankTransactionSplit = typeof bankTransactionSplit.$inferSelect
 
-export interface SplitWithBudget extends BankTransactionSplit {
-  budgetName: string | null
-  planDate: string | null
-  planName: string | null
+function isValidSplitAmount(amountCents: number): boolean {
+  return Number.isInteger(amountCents) && amountCents !== 0
 }
 
-export interface SplitParentInfo {
-  id: string
-  bookingDate: string
-  counterparty: string | null
-  description: string | null
-  sourceName: string | null
-  status: string
-  planId: string | null
-  planDate: string | null
-  planName: string | null
-  isArchived: boolean
-}
-
-export interface SplitGroup {
-  parentId: string
-  parent: SplitParentInfo
-  children: SplitWithBudget[]
-}
-
-function assertValidSplitAmounts(
-  parentAmountCents: number,
-  splits: { amountCents: number; label?: string }[],
+function assertSplitMatchesSign(
+  splits: { amountCents: number }[],
+  expectedSign: number,
 ) {
-  if (parentAmountCents === 0) {
-    throw new Error('Transaktionen mit 0,00 EUR können nicht aufgeteilt werden')
-  }
-
-  const expectedSign = Math.sign(parentAmountCents)
   for (const split of splits) {
-    if (!Number.isInteger(split.amountCents) || split.amountCents === 0) {
+    if (!isValidSplitAmount(split.amountCents)) {
       throw new Error(
         'Jeder Teilbetrag muss ein von 0 verschiedener Cent-Betrag sein',
       )
@@ -55,6 +30,17 @@ function assertValidSplitAmounts(
       )
     }
   }
+}
+
+function assertValidSplitAmounts(
+  parentAmountCents: number,
+  splits: { amountCents: number; label?: string }[],
+) {
+  if (parentAmountCents === 0) {
+    throw new Error('Transaktionen mit 0,00 EUR können nicht aufgeteilt werden')
+  }
+
+  assertSplitMatchesSign(splits, Math.sign(parentAmountCents))
 
   const splitSum = splits.reduce((acc, s) => acc + s.amountCents, 0)
   if (splitSum !== parentAmountCents) {
@@ -140,71 +126,7 @@ export async function getSplitById(
   })
 }
 
-export async function getSplitsForTransactionIds(
-  ids: string[],
-  parentInfoMap?: Map<string, SplitParentInfo>,
-): Promise<SplitGroup[]> {
-  if (ids.length === 0) return []
-
-  const rows = await db
-    .select({
-      id: bankTransactionSplit.id,
-      bankTransactionId: bankTransactionSplit.bankTransactionId,
-      amountCents: bankTransactionSplit.amountCents,
-      label: bankTransactionSplit.label,
-      note: bankTransactionSplit.note,
-      budgetId: bankTransactionSplit.budgetId,
-      planId: bankTransactionSplit.planId,
-      sortOrder: bankTransactionSplit.sortOrder,
-      isArchived: bankTransactionSplit.isArchived,
-      createdAt: bankTransactionSplit.createdAt,
-      updatedAt: bankTransactionSplit.updatedAt,
-      budgetName: plannedTransaction.name,
-      planDate: plan.date,
-      planName: plan.name,
-    })
-    .from(bankTransactionSplit)
-    .leftJoin(
-      plannedTransaction,
-      eq(bankTransactionSplit.budgetId, plannedTransaction.id),
-    )
-    .leftJoin(plan, eq(bankTransactionSplit.planId, plan.id))
-    .where(inArray(bankTransactionSplit.bankTransactionId, ids))
-    .orderBy(bankTransactionSplit.sortOrder)
-
-  const grouped = new Map<string, SplitWithBudget[]>()
-  for (const row of rows) {
-    const parentId = row.bankTransactionId
-    if (!grouped.has(parentId)) grouped.set(parentId, [])
-    grouped.get(parentId)!.push({
-      ...row,
-      budgetName: row.budgetName ?? null,
-      planDate: row.planDate ?? null,
-      planName: row.planName ?? null,
-    })
-  }
-
-  return Array.from(grouped.entries())
-    .filter(([parentId]) => !parentInfoMap || parentInfoMap.has(parentId))
-    .map(([parentId, children]) => ({
-      parentId,
-      parent: parentInfoMap?.get(parentId) ?? {
-        id: parentId,
-        bookingDate: '',
-        counterparty: null,
-        description: null,
-        sourceName: null,
-        status: 'unknown',
-        planId: null,
-        planDate: null,
-        planName: null,
-        isArchived: false,
-      },
-      children,
-    }))
-}
-
-function buildSpendingRecord(
+export function buildSpendingRecord(
   rows: { budgetId: string | null; spent: string | number | null }[],
 ): Record<string, number> {
   const spending: Record<string, number> = {}
@@ -241,23 +163,23 @@ export async function updateSplitFields(
     note?: string | null
   },
 ): Promise<BankTransactionSplit | undefined> {
-  const setValues: Partial<typeof bankTransactionSplit.$inferInsert> = {
-    updatedAt: new Date(),
-  }
-
-  if (fields.planId !== undefined) {
-    setValues.planId = fields.planId
-    // Clear budget when plan changes (budget is plan-specific)
-    setValues.budgetId = null
-  }
-
-  if (fields.budgetId !== undefined) {
-    setValues.budgetId = fields.budgetId
-  }
-
-  if (fields.note !== undefined) {
-    setValues.note = fields.note
-  }
+  const setValues = buildSetValues<
+    typeof fields,
+    typeof bankTransactionSplit.$inferInsert
+  >(fields, {
+    planId: (v, s) => {
+      // fallow-ignore-next-line code-duplication
+      s.planId = v
+      // Clear budget when plan changes (budget is plan-specific)
+      s.budgetId = null
+    },
+    budgetId: (v, s) => {
+      s.budgetId = v
+    },
+    note: (v, s) => {
+      s.note = v
+    },
+  })
 
   const [updated] = await db
     .update(bankTransactionSplit)
@@ -266,6 +188,18 @@ export async function updateSplitFields(
     .returning()
 
   return updated
+}
+
+async function updateSplitPlanGroup(
+  txOrDb: DbOrTransaction,
+  ids: string[],
+  values: Partial<typeof bankTransactionSplit.$inferInsert>,
+) {
+  if (ids.length === 0) return
+  await txOrDb
+    .update(bankTransactionSplit)
+    .set(values)
+    .where(inArray(bankTransactionSplit.id, ids))
 }
 
 export async function bulkAssignPlanToSplits(
@@ -286,26 +220,20 @@ export async function bulkAssignPlanToSplits(
 
   if (targetSplits.length === 0) return 0
 
-  const idsToClearBudget = targetSplits
-    .filter((s) => planId === null || s.planId !== planId)
-    .map((s) => s.id)
-  const idsToKeepBudget = targetSplits
-    .filter((s) => planId !== null && s.planId === planId)
-    .map((s) => s.id)
+  const { idsToClearBudget, idsToKeepBudget } = partitionByPlan(
+    targetSplits,
+    planId,
+  )
 
-  if (idsToClearBudget.length > 0) {
-    await txOrDb
-      .update(bankTransactionSplit)
-      .set({ planId, budgetId: null, updatedAt: now })
-      .where(inArray(bankTransactionSplit.id, idsToClearBudget))
-  }
-
-  if (idsToKeepBudget.length > 0) {
-    await txOrDb
-      .update(bankTransactionSplit)
-      .set({ planId, updatedAt: now })
-      .where(inArray(bankTransactionSplit.id, idsToKeepBudget))
-  }
+  await updateSplitPlanGroup(txOrDb, idsToClearBudget, {
+    planId,
+    budgetId: null,
+    updatedAt: now,
+  })
+  await updateSplitPlanGroup(txOrDb, idsToKeepBudget, {
+    planId,
+    updatedAt: now,
+  })
 
   return targetSplits.length
 }

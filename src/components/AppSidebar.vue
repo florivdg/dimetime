@@ -56,74 +56,84 @@ function isActiveSection(url: string): boolean {
   return current.startsWith(url)
 }
 
-const data = computed(() => ({
-  user: {
-    name: session.value?.data?.user?.name || '',
-    email: session.value?.data?.user?.email || '',
-    avatar: session.value?.data?.user?.image || '',
+const DASHBOARD_OTHER_SECTIONS = [
+  '/settings',
+  '/help',
+  '/categories',
+  '/plans',
+  '/transactions',
+  '/bank-transactions',
+  '/presets',
+] as const
+
+function isDashboardActive(): boolean {
+  if (!isActiveSection('/')) return false
+  return DASHBOARD_OTHER_SECTIONS.every((url) => !isActiveSection(url))
+}
+
+const userInfo = computed(() => {
+  const user = session.value?.data?.user
+  return {
+    name: user?.name || '',
+    email: user?.email || '',
+    avatar: user?.image || '',
+  }
+})
+
+const navMain = computed(() => [
+  {
+    title: 'Dashboard',
+    url: '/',
+    icon: Home,
+    isActive: isDashboardActive(),
   },
-  navMain: [
-    {
-      title: 'Dashboard',
-      url: '/',
-      icon: Home,
-      isActive:
-        isActiveSection('/') &&
-        !isActiveSection('/settings') &&
-        !isActiveSection('/help') &&
-        !isActiveSection('/categories') &&
-        !isActiveSection('/plans') &&
-        !isActiveSection('/transactions') &&
-        !isActiveSection('/bank-transactions') &&
-        !isActiveSection('/presets'),
-    },
-    {
-      title: 'Pläne',
-      url: '/plans',
-      icon: CalendarDays,
-      isActive: isActiveSection('/plans') || isActiveSection('/transactions'),
-      defaultOpen: true,
-      items: [
-        { title: 'Alle Transaktionen', url: '/transactions' },
-        ...(props.planItems ?? []),
-      ],
-    },
-    {
-      title: 'Kontoauszüge',
-      url: '/bank-transactions',
-      icon: Landmark,
-      isActive:
-        isActiveSection('/bank-transactions') ||
-        isActiveSection('/import-sources'),
-      items: [{ title: 'Import-Quellen', url: '/import-sources' }],
-    },
-    {
-      title: 'Kategorien',
-      url: '/categories',
-      icon: Tags,
-      isActive: isActiveSection('/categories'),
-    },
-    {
-      title: 'Vorlagen',
-      url: '/presets',
-      icon: BookTemplate,
-      isActive: isActiveSection('/presets'),
-    },
-    {
-      title: 'Einstellungen',
-      url: '/settings',
-      icon: Settings,
-      isActive: isActiveSection('/settings'),
-    },
-  ],
-  navSecondary: [
-    {
-      title: 'Hilfe',
-      url: '/help',
-      icon: LifeBuoy,
-    },
-  ],
-}))
+  {
+    title: 'Pläne',
+    url: '/plans',
+    icon: CalendarDays,
+    isActive: isActiveSection('/plans') || isActiveSection('/transactions'),
+    defaultOpen: true,
+    items: [
+      { title: 'Alle Transaktionen', url: '/transactions' },
+      ...(props.planItems ?? []),
+    ],
+  },
+  {
+    title: 'Kontoauszüge',
+    url: '/bank-transactions',
+    icon: Landmark,
+    isActive:
+      isActiveSection('/bank-transactions') ||
+      isActiveSection('/import-sources'),
+    items: [{ title: 'Import-Quellen', url: '/import-sources' }],
+  },
+  {
+    title: 'Kategorien',
+    url: '/categories',
+    icon: Tags,
+    isActive: isActiveSection('/categories'),
+  },
+  {
+    title: 'Vorlagen',
+    url: '/presets',
+    icon: BookTemplate,
+    isActive: isActiveSection('/presets'),
+  },
+  {
+    title: 'Einstellungen',
+    url: '/settings',
+    icon: Settings,
+    isActive: isActiveSection('/settings'),
+  },
+])
+
+const navSecondary = [
+  {
+    title: 'Hilfe',
+    url: '/help',
+    icon: LifeBuoy,
+  },
+]
 </script>
 
 <template>
@@ -150,11 +160,11 @@ const data = computed(() => ({
       </SidebarMenu>
     </SidebarHeader>
     <SidebarContent>
-      <NavMain :items="data.navMain" />
-      <NavSecondary :items="data.navSecondary" class="mt-auto" />
+      <NavMain :items="navMain" />
+      <NavSecondary :items="navSecondary" class="mt-auto" />
     </SidebarContent>
     <SidebarFooter>
-      <NavUser :user="data.user" />
+      <NavUser :user="userInfo" />
     </SidebarFooter>
   </Sidebar>
 </template>

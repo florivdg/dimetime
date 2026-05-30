@@ -26,29 +26,36 @@ export function useBankTransactions(
   const isLoading = ref(false)
   const errorMessage = ref<string | null>(null)
 
+  function setUnless(
+    params: URLSearchParams,
+    key: string,
+    value: string,
+    excludeValue: string,
+  ): void {
+    if (value !== excludeValue) params.set(key, value)
+  }
+
+  function buildBankTransactionParams(): URLSearchParams {
+    const params = new URLSearchParams()
+    if (filters.search.value) params.set('search', filters.search.value)
+    setUnless(params, 'sourceId', filters.sourceId.value, 'all')
+    setUnless(params, 'status', filters.status.value, 'all')
+    setUnless(params, 'planId', filters.planId.value, 'all')
+    if (filters.dateFrom.value) params.set('dateFrom', filters.dateFrom.value)
+    if (filters.dateTo.value) params.set('dateTo', filters.dateTo.value)
+    if (filters.showArchived.value) params.set('showArchived', 'true')
+    params.set('sortBy', filters.sortBy.value)
+    params.set('sortDir', filters.sortDir.value)
+    params.set('page', filters.page.value.toString())
+    params.set('limit', '20')
+    return params
+  }
+
   async function loadTransactions() {
     isLoading.value = true
     errorMessage.value = null
     try {
-      const params = new URLSearchParams()
-      if (filters.search.value) params.set('search', filters.search.value)
-      if (filters.sourceId.value !== 'all') {
-        params.set('sourceId', filters.sourceId.value)
-      }
-      if (filters.status.value !== 'all') {
-        params.set('status', filters.status.value)
-      }
-      if (filters.planId.value !== 'all') {
-        params.set('planId', filters.planId.value)
-      }
-      if (filters.dateFrom.value) params.set('dateFrom', filters.dateFrom.value)
-      if (filters.dateTo.value) params.set('dateTo', filters.dateTo.value)
-      if (filters.showArchived.value) params.set('showArchived', 'true')
-      params.set('sortBy', filters.sortBy.value)
-      params.set('sortDir', filters.sortDir.value)
-      params.set('page', filters.page.value.toString())
-      params.set('limit', '20')
-
+      const params = buildBankTransactionParams()
       const response = await fetch(
         `/api/bank-transactions?${params.toString()}`,
       )
@@ -85,22 +92,26 @@ export function useBankTransactions(
     }
   }
 
-  async function updateTransactionPlan(
-    id: string,
-    planId: string | null,
-  ): Promise<boolean> {
-    const row = rows.value.find((r) => r.id === id)
-    if (!row) return false
+  function endpointForRow(row: BankTransactionRow, id: string): string {
+    return row.rowType === 'split'
+      ? `/api/bank-transactions/splits/${id}`
+      : `/api/bank-transactions/${id}`
+  }
 
-    const original = {
+  function snapshotPlanFields(row: BankTransactionRow) {
+    return {
       planId: row.planId,
       planName: row.planName,
       planDate: row.planDate,
       budgetId: row.budgetId,
       budgetName: row.budgetName,
     }
+  }
 
-    // Optimistic update
+  function applyOptimisticPlanUpdate(
+    row: BankTransactionRow,
+    planId: string | null,
+  ): void {
     if (planId) {
       const targetPlan = plans.value.find((p) => p.id === planId)
       row.planId = planId
@@ -113,13 +124,27 @@ export function useBankTransactions(
     }
     row.budgetId = null
     row.budgetName = null
+  }
+
+  function restorePlanFields(
+    row: BankTransactionRow,
+    snapshot: ReturnType<typeof snapshotPlanFields>,
+  ): void {
+    Object.assign(row, snapshot)
+  }
+
+  async function updateTransactionPlan(
+    id: string,
+    planId: string | null,
+  ): Promise<boolean> {
+    const row = rows.value.find((r) => r.id === id)
+    if (!row) return false
+
+    const original = snapshotPlanFields(row)
+    applyOptimisticPlanUpdate(row, planId)
 
     try {
-      const endpoint =
-        row.rowType === 'split'
-          ? `/api/bank-transactions/splits/${id}`
-          : `/api/bank-transactions/${id}`
-      const response = await fetch(endpoint, {
+      const response = await fetch(endpointForRow(row, id), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId }),
@@ -127,12 +152,7 @@ export function useBankTransactions(
       if (!response.ok) throw new Error('Update failed')
       return true
     } catch {
-      // Rollback
-      row.planId = original.planId
-      row.planName = original.planName
-      row.planDate = original.planDate
-      row.budgetId = original.budgetId
-      row.budgetName = original.budgetName
+      restorePlanFields(row, original)
       return false
     }
   }
@@ -203,6 +223,19 @@ export function useBankTransactions(
     }
   }
 
+  // Reload the current page; if it is now empty but results remain, jump to
+  // the last valid page.
+  async function reloadAndClampPage(): Promise<void> {
+    await loadTransactions()
+    if (
+      rows.value.length === 0 &&
+      pagination.value.total > 0 &&
+      filters.page.value > 1
+    ) {
+      filters.page.value = Math.max(1, pagination.value.totalPages)
+    }
+  }
+
   async function bulkArchiveTransactions(
     ids: string[],
     isArchived: boolean,
@@ -215,15 +248,7 @@ export function useBankTransactions(
         body: JSON.stringify({ ids, splitIds, isArchived }),
       })
       if (!response.ok) throw new Error('Bulk archive failed')
-      await loadTransactions()
-      // If current page is now empty but there are still results, jump to last valid page
-      if (
-        rows.value.length === 0 &&
-        pagination.value.total > 0 &&
-        filters.page.value > 1
-      ) {
-        filters.page.value = Math.max(1, pagination.value.totalPages)
-      }
+      await reloadAndClampPage()
       return true
     } catch {
       errorMessage.value = 'Archivierung konnte nicht durchgeführt werden.'
@@ -343,14 +368,7 @@ export function useBankTransactions(
         method: 'DELETE',
       })
       if (!response.ok) throw new Error('Delete failed')
-      await loadTransactions()
-      if (
-        rows.value.length === 0 &&
-        pagination.value.total > 0 &&
-        filters.page.value > 1
-      ) {
-        filters.page.value = Math.max(1, pagination.value.totalPages)
-      }
+      await reloadAndClampPage()
       return true
     } catch {
       return false

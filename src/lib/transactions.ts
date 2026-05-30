@@ -20,13 +20,17 @@ import {
   sum,
 } from 'drizzle-orm'
 import {
+  buildSpendingRecord,
   getBudgetSpendingFromSplits,
   getBudgetSpendingFromSplitsForPlan,
 } from '@/lib/bank-transaction-splits'
+import { parseQueryParams } from '@/lib/api/query-params'
+import { error } from '@/lib/api/responses'
+import { buildSetValues } from '@/lib/db/partial-update'
+import { orDefault, orNull } from '@/lib/defaults'
 
 // Infer types from Drizzle schema
 export type Transaction = typeof plannedTransaction.$inferSelect
-export type NewTransaction = typeof plannedTransaction.$inferInsert
 
 // Transaction with category and plan details for display
 export type TransactionWithCategory = Transaction & {
@@ -105,12 +109,31 @@ export interface UpdateTransactionInput {
   planId?: string
 }
 
-/**
- * Get paginated transactions with optional filtering and sorting
- */
-export async function getTransactions(
-  options: TransactionQueryOptions = {},
-): Promise<PaginatedTransactions> {
+const TRANSACTION_QUERY_KEYS = [
+  'search',
+  'categoryId',
+  'planId',
+  'type',
+  'isDone',
+  'dateFrom',
+  'dateTo',
+  'amountMin',
+  'amountMax',
+  'hideZeroValue',
+  'sortBy',
+  'sortDir',
+  'page',
+  'limit',
+] as const
+
+export function parseTransactionQueryParams(
+  searchParams: URLSearchParams,
+): Record<(typeof TRANSACTION_QUERY_KEYS)[number], string | undefined> {
+  return parseQueryParams(searchParams, TRANSACTION_QUERY_KEYS)
+}
+
+// fallow-ignore-next-line complexity
+function buildTransactionFilters(options: TransactionQueryOptions) {
   const {
     search,
     categoryId,
@@ -122,6 +145,32 @@ export async function getTransactions(
     amountMin,
     amountMax,
     hideZeroValue = true,
+  } = options
+  const conditions = []
+  if (search) conditions.push(like(plannedTransaction.name, `%${search}%`))
+  if (categoryId) conditions.push(eq(plannedTransaction.categoryId, categoryId))
+  if (planId) conditions.push(eq(plannedTransaction.planId, planId))
+  if (type) conditions.push(eq(plannedTransaction.type, type))
+  if (isDone !== undefined)
+    conditions.push(eq(plannedTransaction.isDone, isDone))
+  if (dateFrom) conditions.push(gte(plannedTransaction.dueDate, dateFrom))
+  if (dateTo) conditions.push(lte(plannedTransaction.dueDate, dateTo))
+  if (amountMin !== undefined)
+    conditions.push(gte(plannedTransaction.amount, amountMin))
+  if (amountMax !== undefined)
+    conditions.push(lte(plannedTransaction.amount, amountMax))
+  if (hideZeroValue) conditions.push(ne(plannedTransaction.amount, 0))
+  return conditions
+}
+
+/**
+ * Get paginated transactions with optional filtering and sorting
+ */
+// fallow-ignore-next-line complexity
+export async function getTransactions(
+  options: TransactionQueryOptions = {},
+): Promise<PaginatedTransactions> {
+  const {
     sortBy = 'dueDate',
     sortDir = 'desc',
     page = 1,
@@ -129,49 +178,7 @@ export async function getTransactions(
     groupByType = false,
   } = options
 
-  // Build where conditions
-  const conditions = []
-
-  if (search) {
-    conditions.push(like(plannedTransaction.name, `%${search}%`))
-  }
-
-  if (categoryId) {
-    conditions.push(eq(plannedTransaction.categoryId, categoryId))
-  }
-
-  if (planId) {
-    conditions.push(eq(plannedTransaction.planId, planId))
-  }
-
-  if (type) {
-    conditions.push(eq(plannedTransaction.type, type))
-  }
-
-  if (isDone !== undefined) {
-    conditions.push(eq(plannedTransaction.isDone, isDone))
-  }
-
-  if (dateFrom) {
-    conditions.push(gte(plannedTransaction.dueDate, dateFrom))
-  }
-
-  if (dateTo) {
-    conditions.push(lte(plannedTransaction.dueDate, dateTo))
-  }
-
-  if (amountMin !== undefined) {
-    conditions.push(gte(plannedTransaction.amount, amountMin))
-  }
-
-  if (amountMax !== undefined) {
-    conditions.push(lte(plannedTransaction.amount, amountMax))
-  }
-
-  if (hideZeroValue) {
-    conditions.push(ne(plannedTransaction.amount, 0))
-  }
-
+  const conditions = buildTransactionFilters(options)
   const whereClause =
     conditions.length === 0
       ? undefined
@@ -260,7 +267,7 @@ export async function getTransactionById(
  * Get a transaction by ID with its plan's archived status
  * Used for checking if modifications are allowed
  */
-export async function getTransactionWithPlanStatus(
+async function getTransactionWithPlanStatus(
   id: string,
 ): Promise<TransactionWithPlanStatus | undefined> {
   const result = await db
@@ -282,73 +289,142 @@ export async function getTransactionWithPlanStatus(
 }
 
 /**
+ * Resolves a transaction by id and ensures its plan is not archived.
+ * Returns a Response for 400/404/403, otherwise the loaded transaction.
+ */
+export async function requireUnarchivedTransaction(
+  id: string | undefined,
+  action: 'bearbeitet' | 'gelöscht',
+): Promise<TransactionWithPlanStatus | Response> {
+  if (!id) return error('Transaktions-ID ist erforderlich', 400)
+  const existing = await getTransactionWithPlanStatus(id)
+  if (!existing) return error('Transaktion nicht gefunden', 404)
+  if (existing.planIsArchived) {
+    return error(
+      `Transaktion kann nicht ${action} werden, da der zugehörige Plan archiviert ist.`,
+      403,
+    )
+  }
+  return existing
+}
+
+/**
+ * Validates a target plan for an in-flight transaction move.
+ * Returns null if no move requested, otherwise an error tuple.
+ */
+// fallow-ignore-next-line complexity
+export async function validateTransactionPlanChange(
+  currentPlanId: string | null,
+  nextPlanId: string | undefined,
+  loadPlan: (id: string) => Promise<{ isArchived: boolean } | undefined | null>,
+): Promise<{ message: string; status: number } | null> {
+  if (!nextPlanId) return null
+  if (nextPlanId === currentPlanId) {
+    return { message: 'Transaktion ist bereits in diesem Plan', status: 400 }
+  }
+  const targetPlan = await loadPlan(nextPlanId)
+  if (!targetPlan) return { message: 'Zielplan nicht gefunden', status: 404 }
+  if (targetPlan.isArchived) {
+    return {
+      message:
+        'Transaktion kann nicht zu einem archivierten Plan verschoben werden',
+      status: 403,
+    }
+  }
+  return null
+}
+
+/**
  * Update an existing transaction
  */
 export async function updateTransaction(
   id: string,
   input: UpdateTransactionInput,
 ): Promise<Transaction | undefined> {
-  const now = new Date()
-  const updateData: {
-    name?: string
-    note?: string | null
-    type?: 'income' | 'expense'
-    dueDate?: string
-    amount?: number
-    isDone?: boolean
-    isBudget?: boolean
-    categoryId?: string | null
-    planId?: string
-    updatedAt: Date
-  } = {
-    updatedAt: now,
+  // fallow-ignore-next-line code-duplication
+  const updateData = buildSetValues<
+    typeof input,
+    typeof plannedTransaction.$inferInsert
+  >(input, {
+    name: (v, s) => {
+      s.name = v
+    },
+    note: (v, s) => {
+      s.note = v
+    },
+    type: (v, s) => {
+      s.type = v
+    },
+    dueDate: (v, s) => {
+      s.dueDate = v
+    },
+    amount: (v, s) => {
+      s.amount = v
+    },
+    isDone: (v, s) => {
+      s.isDone = v
+    },
+    isBudget: (v, s) => {
+      s.isBudget = v
+    },
+    categoryId: (v, s) => {
+      s.categoryId = v
+    },
+    planId: (v, s) => {
+      s.planId = v
+    },
+  })
+
+  return db.transaction(async (tx) =>
+    runUpdateTransaction(tx, id, input, updateData),
+  )
+}
+
+type TxHandle = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type TransactionUpdateData = { updatedAt: Date } & Partial<
+  typeof plannedTransaction.$inferInsert
+>
+
+function shouldClearBudgetLinks(
+  existing: { planId: string | null; isBudget: boolean },
+  input: UpdateTransactionInput,
+): boolean {
+  const nextPlanId = input.planId ?? existing.planId
+  const nextIsBudget = input.isBudget ?? existing.isBudget
+  return !nextIsBudget || nextPlanId !== existing.planId
+}
+
+async function runUpdateTransaction(
+  tx: TxHandle,
+  id: string,
+  input: UpdateTransactionInput,
+  updateData: TransactionUpdateData,
+): Promise<Transaction | undefined> {
+  const [existing] = await tx
+    .select({
+      planId: plannedTransaction.planId,
+      isBudget: plannedTransaction.isBudget,
+    })
+    .from(plannedTransaction)
+    .where(eq(plannedTransaction.id, id))
+    .limit(1)
+
+  if (!existing) return undefined
+
+  if (shouldClearBudgetLinks(existing, input)) {
+    await tx
+      .update(bankTransaction)
+      .set({ budgetId: null, updatedAt: updateData.updatedAt })
+      .where(eq(bankTransaction.budgetId, id))
   }
 
-  if (input.name !== undefined) updateData.name = input.name
-  if (input.note !== undefined) updateData.note = input.note
-  if (input.type !== undefined) updateData.type = input.type
-  if (input.dueDate !== undefined) updateData.dueDate = input.dueDate
-  if (input.amount !== undefined) updateData.amount = input.amount
-  if (input.isDone !== undefined) updateData.isDone = input.isDone
-  if (input.isBudget !== undefined) updateData.isBudget = input.isBudget
-  if (input.categoryId !== undefined) updateData.categoryId = input.categoryId
-  if (input.planId !== undefined) updateData.planId = input.planId
+  const result = await tx
+    .update(plannedTransaction)
+    .set(updateData)
+    .where(eq(plannedTransaction.id, id))
+    .returning()
 
-  return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({
-        planId: plannedTransaction.planId,
-        isBudget: plannedTransaction.isBudget,
-      })
-      .from(plannedTransaction)
-      .where(eq(plannedTransaction.id, id))
-      .limit(1)
-
-    if (!existing) {
-      return undefined
-    }
-
-    const nextPlanId = input.planId ?? existing.planId
-    const nextIsBudget = input.isBudget ?? existing.isBudget
-
-    if (!nextIsBudget || nextPlanId !== existing.planId) {
-      await tx
-        .update(bankTransaction)
-        .set({
-          budgetId: null,
-          updatedAt: now,
-        })
-        .where(eq(bankTransaction.budgetId, id))
-    }
-
-    const result = await tx
-      .update(plannedTransaction)
-      .set(updateData)
-      .where(eq(plannedTransaction.id, id))
-      .returning()
-
-    return result[0]
-  })
+  return result[0]
 }
 
 /**
@@ -362,28 +438,34 @@ export async function deleteTransaction(id: string): Promise<boolean> {
   return result.length > 0
 }
 
+function buildTransactionInsertValues(
+  input: CreateTransactionInput,
+  now: Date,
+): typeof plannedTransaction.$inferInsert {
+  return {
+    name: input.name,
+    note: orNull(input.note),
+    type: orDefault(input.type, 'expense'),
+    dueDate: input.dueDate,
+    amount: input.amount,
+    isDone: orDefault(input.isDone, false),
+    isBudget: orDefault(input.isBudget, false),
+    planId: input.planId,
+    categoryId: orNull(input.categoryId),
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 /**
  * Create a new transaction
  */
 export async function createTransaction(
   input: CreateTransactionInput,
 ): Promise<Transaction> {
-  const now = new Date()
   const result = await db
     .insert(plannedTransaction)
-    .values({
-      name: input.name,
-      note: input.note ?? null,
-      type: input.type ?? 'expense',
-      dueDate: input.dueDate,
-      amount: input.amount,
-      isDone: input.isDone ?? false,
-      isBudget: input.isBudget ?? false,
-      planId: input.planId,
-      categoryId: input.categoryId ?? null,
-      createdAt: now,
-      updatedAt: now,
-    })
+    .values(buildTransactionInsertValues(input, new Date()))
     .returning()
 
   return result[0]
@@ -440,6 +522,17 @@ export async function getBudgetsForPlan(planId: string) {
     .orderBy(asc(plannedTransaction.name))
 }
 
+function mergeBudgetSpending(
+  bankRows: { budgetId: string | null; spent: string | null }[],
+  splitSpending: Record<string, number>,
+): Record<string, number> {
+  const spending = buildSpendingRecord(bankRows)
+  for (const [budgetId, amount] of Object.entries(splitSpending)) {
+    spending[budgetId] = (spending[budgetId] ?? 0) + amount
+  }
+  return spending
+}
+
 /**
  * Get budget spending for a plan (sum of absolute bank transaction amounts grouped by budgetId)
  */
@@ -467,18 +560,7 @@ export async function getBudgetSpendingForPlan(
     getBudgetSpendingFromSplitsForPlan(planId),
   ])
 
-  const spending: Record<string, number> = {}
-  for (const row of result) {
-    if (row.budgetId) {
-      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
-    }
-  }
-
-  for (const [budgetId, amount] of Object.entries(splitSpending)) {
-    spending[budgetId] = (spending[budgetId] ?? 0) + amount
-  }
-
-  return spending
+  return mergeBudgetSpending(result, splitSpending)
 }
 
 /**
@@ -502,18 +584,7 @@ export async function getBudgetSpendingForBudgets(
     getBudgetSpendingFromSplits(budgetIds),
   ])
 
-  const spending: Record<string, number> = {}
-  for (const row of result) {
-    if (row.budgetId) {
-      spending[row.budgetId] = Math.abs(Number(row.spent) || 0)
-    }
-  }
-
-  for (const [budgetId, amount] of Object.entries(splitSpending)) {
-    spending[budgetId] = (spending[budgetId] ?? 0) + amount
-  }
-
-  return spending
+  return mergeBudgetSpending(result, splitSpending)
 }
 
 /**

@@ -1,6 +1,0 @@
-export { default as PlanManager } from './PlanManager.vue'
-export { default as PlanTable } from './PlanTable.vue'
-export { default as PlanCreateDialog } from './PlanCreateDialog.vue'
-export { default as PlanDetailManager } from './PlanDetailManager.vue'
-export { default as PlanTransactionTable } from './PlanTransactionTable.vue'
-export { default as PlanTransactionFilters } from './PlanTransactionFilters.vue'

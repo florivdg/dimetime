@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
+import { buildDedupeKey, hashFileSha256 } from './dedupe-key'
 import {
-  buildDedupeKey,
   buildSemanticKey,
   dedupeByStatusUpgrade,
   dedupeRowsInFile,
@@ -71,6 +71,30 @@ describe('buildDedupeKey', () => {
   })
 })
 
+describe('hashFileSha256', () => {
+  it('returns 64-char hex for non-empty bytes', async () => {
+    const hash = await hashFileSha256(new Uint8Array([1, 2, 3, 4]))
+    expect(hash).toBeTypeOf('string')
+    expect(hash.length).toBe(64)
+    expect(hash).toMatch(/^[0-9a-f]+$/)
+  })
+
+  it('returns 64-char hex for empty bytes', async () => {
+    const hash = await hashFileSha256(new Uint8Array([]))
+    expect(hash.length).toBe(64)
+    // SHA-256 of empty input is well-known
+    expect(hash).toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    )
+  })
+
+  it('produces different hashes for different inputs', async () => {
+    const h1 = await hashFileSha256(new Uint8Array([1, 2, 3]))
+    const h2 = await hashFileSha256(new Uint8Array([1, 2, 4]))
+    expect(h1).not.toBe(h2)
+  })
+})
+
 describe('dedupeRowsInFile', () => {
   it('returns all rows when no duplicates exist', async () => {
     const rows = [
@@ -136,33 +160,22 @@ describe('buildSemanticKey', () => {
 })
 
 describe('dedupeByStatusUpgrade', () => {
-  it('returns all rows when only booked rows exist', () => {
-    const rows = [
-      makeRow({ status: 'booked', externalTransactionId: 'B1' }),
-      makeRow({
-        status: 'booked',
-        externalTransactionId: 'B2',
-        amountCents: -500,
-      }),
-    ]
-    const result = dedupeByStatusUpgrade(rows)
-    expect(result.rows).toHaveLength(2)
-    expect(result.pendingDropped).toBe(0)
-  })
-
-  it('returns all rows when only pending rows exist', () => {
-    const rows = [
-      makeRow({ status: 'pending', externalTransactionId: 'P1' }),
-      makeRow({
-        status: 'pending',
-        externalTransactionId: 'P2',
-        amountCents: -500,
-      }),
-    ]
-    const result = dedupeByStatusUpgrade(rows)
-    expect(result.rows).toHaveLength(2)
-    expect(result.pendingDropped).toBe(0)
-  })
+  for (const status of ['booked', 'pending'] as const) {
+    const prefix = status === 'booked' ? 'B' : 'P'
+    it(`returns all rows when only ${status} rows exist`, () => {
+      const rows = [
+        makeRow({ status, externalTransactionId: `${prefix}1` }),
+        makeRow({
+          status,
+          externalTransactionId: `${prefix}2`,
+          amountCents: -500,
+        }),
+      ]
+      const result = dedupeByStatusUpgrade(rows)
+      expect(result.rows).toHaveLength(2)
+      expect(result.pendingDropped).toBe(0)
+    })
+  }
 
   it('removes pending when matching booked exists (single pair)', () => {
     const rows = [

@@ -11,7 +11,7 @@ export interface UserSettings {
 }
 
 // Default values for all settings
-export const DEFAULT_SETTINGS: UserSettings = {
+const DEFAULT_SETTINGS: UserSettings = {
   groupTransactionsByType: false,
   themePreference: 'system',
 }
@@ -61,7 +61,7 @@ export async function getAllSettings(userId: string): Promise<UserSettings> {
 /**
  * Set a single setting value for a user (upsert)
  */
-export async function setSetting<K extends SettingKey>(
+async function setSetting<K extends SettingKey>(
   userId: string,
   key: K,
   value: UserSettings[K],

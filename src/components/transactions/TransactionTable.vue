@@ -3,18 +3,12 @@ import { ref } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
 import { formatAmount, formatDate, getPlanDisplayName } from '@/lib/format'
+import { mutateJson } from '@/lib/http'
 import { useEditInputRefs } from '@/composables/useEditInputRefs'
+import { useDeleteTransactionDialog } from '@/composables/useDeleteTransactionDialog'
+import { getSortIcon as resolveSortIcon } from '@/composables/useSortIcon'
 import { Button } from '@/components/ui/button'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import DeleteTransactionDialog from '@/components/shared/DeleteTransactionDialog.vue'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,9 +39,6 @@ import {
   InputGroupInput,
 } from '@/components/ui/input-group'
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   BookmarkPlus,
   Check,
   Loader2,
@@ -92,14 +83,15 @@ const emit = defineEmits<{
   saveAsPreset: [transaction: TransactionWithCategory]
 }>()
 
-// Delete dialog state
-const deleteDialogOpen = ref(false)
-const transactionToDelete = ref<TransactionWithCategory | null>(null)
-
-function openDeleteDialog(transaction: TransactionWithCategory) {
-  transactionToDelete.value = transaction
-  deleteDialogOpen.value = true
-}
+const {
+  deleteDialogOpen,
+  transactionToDelete,
+  openDeleteDialog,
+  deleteTransaction,
+} = useDeleteTransactionDialog(
+  () => emit('deleted'),
+  (message) => emit('error', message),
+)
 
 // Edit input refs
 const { setEditInputRef, focusEditInputAsync } = useEditInputRefs()
@@ -144,62 +136,28 @@ function toggleType() {
 }
 
 async function updateTransaction(id: string) {
-  const payload = {
-    name: editName.value.trim(),
-    dueDate: editDueDate.value,
-    amount: Math.round(editAmount.value * 100), // Convert euros to cents
-    type: editType.value,
-    categoryId: editCategoryId.value,
-  }
-  try {
-    const response = await fetch(`/api/transactions/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Aktualisieren')
-    }
-
-    cancelEditing()
-    emit('updated')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Transaktion konnte nicht aktualisiert werden.',
-    )
-  }
-}
-
-async function deleteTransaction(id: string) {
-  try {
-    const response = await fetch(`/api/transactions/${id}`, {
-      method: 'DELETE',
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Löschen')
-    }
-
-    emit('deleted')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Transaktion konnte nicht gelöscht werden.',
-    )
-  }
+  await mutateJson({
+    url: `/api/transactions/${id}`,
+    method: 'PUT',
+    body: {
+      name: editName.value.trim(),
+      dueDate: editDueDate.value,
+      amount: Math.round(editAmount.value * 100), // Convert euros to cents
+      type: editType.value,
+      categoryId: editCategoryId.value,
+    },
+    notOkMessage: 'Fehler beim Aktualisieren',
+    fallbackMessage: 'Transaktion konnte nicht aktualisiert werden.',
+    onSuccess: () => {
+      cancelEditing()
+      emit('updated')
+    },
+    onError: (message) => emit('error', message),
+  })
 }
 
 function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
-  if (props.sortBy !== column) return ArrowUpDown
-  return props.sortDir === 'asc' ? ArrowUp : ArrowDown
+  return resolveSortIcon(props.sortBy, props.sortDir, column)
 }
 </script>
 
@@ -491,25 +449,9 @@ function getSortIcon(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
   </TooltipProvider>
 
   <!-- Delete confirmation dialog -->
-  <AlertDialog v-model:open="deleteDialogOpen">
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Transaktion löschen?</AlertDialogTitle>
-        <AlertDialogDescription>
-          Möchten Sie die Transaktion "{{ transactionToDelete?.name }}" wirklich
-          löschen? Diese Aktion kann nicht rückgängig gemacht werden.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-        <AlertDialogAction
-          @click="
-            transactionToDelete && deleteTransaction(transactionToDelete.id)
-          "
-        >
-          Löschen
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
+  <DeleteTransactionDialog
+    v-model:open="deleteDialogOpen"
+    :transaction="transactionToDelete"
+    @confirm="deleteTransaction"
+  />
 </template>

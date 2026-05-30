@@ -1,0 +1,27 @@
+{
+  "entry": [
+    "**/*.test.ts",
+    "**/*.vitest.ts",
+    "test/**",
+    "vitest.config.ts",
+    "src/lib/bank-import/parsers/__fixtures__/generate-easybank-fixture.ts"
+  ],
+  "ignorePatterns": ["src/components/ui/**"],
+  "ignoreDependencies": [
+    "@tanstack/vue-table",
+    "class-variance-authority",
+    "@astrojs/node",
+    "@astrojs/vue",
+    "@tailwindcss/vite",
+    "astro",
+    "reka-ui"
+  ],
+  "health": {
+    "maxCyclomatic": 10,
+    "maxCognitive": 15,
+    "maxCrap": 110
+  },
+  "duplicates": {
+    "ignoreImports": true
+  }
+}

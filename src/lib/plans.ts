@@ -1,6 +1,7 @@
 import { db } from '@/db/database'
 import { plan } from '@/db/schema/plans'
 import { and, desc, eq, like, or } from 'drizzle-orm'
+import { buildSetValues } from '@/lib/db/partial-update'
 
 // Infer types from Drizzle schema
 export type Plan = typeof plan.$inferSelect
@@ -9,6 +10,16 @@ export type NewPlan = typeof plan.$inferInsert
 // Omit auto-managed fields for create/update inputs
 export type CreatePlanInput = Omit<NewPlan, 'id' | 'createdAt' | 'updatedAt'>
 export type UpdatePlanInput = Partial<CreatePlanInput>
+
+function buildPlanConditions(
+  includeArchived: boolean,
+  year: number | undefined,
+) {
+  const conditions = []
+  if (!includeArchived) conditions.push(eq(plan.isArchived, false))
+  if (year !== undefined) conditions.push(like(plan.date, `${year}-%`))
+  return conditions
+}
 
 /**
  * Get all distinct years from plans (sorted descending)
@@ -38,15 +49,7 @@ export async function getAllPlans(
   includeArchived = false,
   year?: number,
 ): Promise<Plan[]> {
-  const conditions = []
-
-  if (!includeArchived) {
-    conditions.push(eq(plan.isArchived, false))
-  }
-
-  if (year !== undefined) {
-    conditions.push(like(plan.date, `${year}-%`))
-  }
+  const conditions = buildPlanConditions(includeArchived, year)
 
   if (conditions.length === 0) {
     return db.query.plan.findMany({
@@ -73,15 +76,8 @@ export async function searchPlans(
 ): Promise<Plan[]> {
   const conditions = [
     or(like(plan.name, `%${query}%`), like(plan.date, `%${query}%`)),
+    ...buildPlanConditions(includeArchived, year),
   ]
-
-  if (!includeArchived) {
-    conditions.push(eq(plan.isArchived, false))
-  }
-
-  if (year !== undefined) {
-    conditions.push(like(plan.date, `${year}-%`))
-  }
 
   return db.query.plan.findMany({
     where: and(...conditions),
@@ -124,20 +120,20 @@ export async function updatePlan(
   id: string,
   input: UpdatePlanInput,
 ): Promise<Plan | undefined> {
-  const updateData: {
-    name?: string | null
-    date?: string
-    notes?: string | null
-    isArchived?: boolean
-    updatedAt: Date
-  } = {
-    updatedAt: new Date(),
-  }
-
-  if (input.name !== undefined) updateData.name = input.name
-  if (input.date !== undefined) updateData.date = input.date
-  if (input.notes !== undefined) updateData.notes = input.notes
-  if (input.isArchived !== undefined) updateData.isArchived = input.isArchived
+  const updateData = buildSetValues<typeof input, NewPlan>(input, {
+    name: (v, s) => {
+      s.name = v
+    },
+    date: (v, s) => {
+      s.date = v
+    },
+    notes: (v, s) => {
+      s.notes = v
+    },
+    isArchived: (v, s) => {
+      s.isArchived = v
+    },
+  })
 
   const result = await db
     .update(plan)
@@ -177,7 +173,7 @@ export async function getCurrentMonthPlan(): Promise<Plan | undefined> {
 /**
  * Get the latest (most recent by date) non-archived plan
  */
-export async function getLatestPlan(): Promise<Plan | undefined> {
+async function getLatestPlan(): Promise<Plan | undefined> {
   return db.query.plan.findFirst({
     where: eq(plan.isArchived, false),
     orderBy: desc(plan.date),

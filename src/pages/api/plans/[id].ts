@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { deletePlan, getPlanById, updatePlan } from '@/lib/plans'
+import { error, json, validateBody } from '@/lib/api/responses'
 
 const updatePlanSchema = z.object({
   name: z.string().max(200, 'Name ist zu lang').nullable().optional(),
@@ -17,70 +18,25 @@ const updatePlanSchema = z.object({
 
 export const PUT: APIRoute = async ({ params, request }) => {
   const { id } = params
-
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Plan-ID ist erforderlich' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!id) return error('Plan-ID ist erforderlich', 400)
 
   const existing = await getPlanById(id)
-  if (!existing) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!existing) return error('Plan nicht gefunden', 404)
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Ungültiges JSON' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const data = await validateBody(request, updatePlanSchema)
+  if (data instanceof Response) return data
 
-  const parsed = updatePlanSchema.safeParse(body)
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: parsed.error.issues[0].message }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  const updated = await updatePlan(id, parsed.data)
-
-  return new Response(JSON.stringify(updated), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  const updated = await updatePlan(id, data)
+  return json(updated)
 }
 
 export const DELETE: APIRoute = async ({ params }) => {
   const { id } = params
-
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Plan-ID ist erforderlich' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!id) return error('Plan-ID ist erforderlich', 400)
 
   const existing = await getPlanById(id)
-  if (!existing) {
-    return new Response(JSON.stringify({ error: 'Plan nicht gefunden' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  if (!existing) return error('Plan nicht gefunden', 404)
 
   await deletePlan(id)
-
-  return new Response(
-    JSON.stringify({ success: true, message: 'Plan wurde gelöscht' }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  return json({ success: true, message: 'Plan wurde gelöscht' })
 }

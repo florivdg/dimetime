@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import type { Category } from '@/lib/categories'
 import type { PresetWithTags } from '@/lib/presets'
+import { mutateJson } from '@/lib/http'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,12 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -28,7 +23,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Minus, Plus } from 'lucide-vue-next'
+import { Loader2 } from 'lucide-vue-next'
+import AmountInputGroup from '@/components/shared/AmountInputGroup.vue'
 
 const props = defineProps<{
   preset: PresetWithTags | null
@@ -76,50 +72,38 @@ watch(
   { immediate: true },
 )
 
-function toggleType() {
-  editType.value = editType.value === 'income' ? 'expense' : 'income'
+function buildPresetEditPayload() {
+  return {
+    name: editName.value.trim(),
+    note: editNote.value.trim() || null,
+    amount: Math.round(editAmount.value * 100),
+    type: editType.value,
+    recurrence: editRecurrence.value,
+    startMonth: editStartMonth.value || null,
+    endDate: editEndDate.value || null,
+    categoryId: editCategoryId.value,
+    dayOfMonth: editDayOfMonth.value,
+    isBudget: editIsBudget.value,
+  }
 }
 
 async function handleSubmit() {
   if (!props.preset || !editName.value.trim()) return
 
   isSaving.value = true
-
-  try {
-    const response = await fetch(`/api/presets/${props.preset.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: editName.value.trim(),
-        note: editNote.value.trim() || null,
-        amount: Math.round(editAmount.value * 100),
-        type: editType.value,
-        recurrence: editRecurrence.value,
-        startMonth: editStartMonth.value || null,
-        endDate: editEndDate.value || null,
-        categoryId: editCategoryId.value,
-        dayOfMonth: editDayOfMonth.value,
-        isBudget: editIsBudget.value,
-      }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Aktualisieren')
-    }
-
-    open.value = false
-    emit('updated')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Vorlage konnte nicht aktualisiert werden.',
-    )
-  } finally {
-    isSaving.value = false
-  }
+  await mutateJson({
+    url: `/api/presets/${props.preset.id}`,
+    method: 'PUT',
+    body: buildPresetEditPayload(),
+    notOkMessage: 'Fehler beim Aktualisieren',
+    fallbackMessage: 'Vorlage konnte nicht aktualisiert werden.',
+    onSuccess: () => {
+      open.value = false
+      emit('updated')
+    },
+    onError: (message) => emit('error', message),
+  })
+  isSaving.value = false
 }
 </script>
 
@@ -155,29 +139,10 @@ async function handleSubmit() {
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
             <Label>Betrag</Label>
-            <InputGroup>
-              <InputGroupAddon>
-                <InputGroupButton
-                  type="button"
-                  :class="
-                    editType === 'income'
-                      ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
-                      : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
-                  "
-                  @click="toggleType"
-                >
-                  <Plus v-if="editType === 'income'" class="size-4" />
-                  <Minus v-else class="size-4" />
-                </InputGroupButton>
-              </InputGroupAddon>
-              <InputGroupInput
-                v-model.number="editAmount"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0,00"
-              />
-            </InputGroup>
+            <AmountInputGroup
+              v-model:amount="editAmount"
+              v-model:type="editType"
+            />
           </div>
 
           <div class="space-y-2">

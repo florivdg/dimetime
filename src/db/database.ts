@@ -3,6 +3,7 @@ import { Database } from 'bun:sqlite'
 import * as authSchema from './schema/auth'
 import * as plansSchema from './schema/plans'
 import * as settingsSchema from './schema/settings'
+import * as userRelationsSchema from './schema/user-relations'
 
 function createDb() {
   const sqlite = new Database(process.env.DB_FILE_NAME!)
@@ -20,7 +21,12 @@ function createDb() {
 
   return drizzle({
     client: sqlite,
-    schema: { ...authSchema, ...plansSchema, ...settingsSchema },
+    schema: {
+      ...authSchema,
+      ...plansSchema,
+      ...settingsSchema,
+      ...userRelationsSchema,
+    },
   })
 }
 

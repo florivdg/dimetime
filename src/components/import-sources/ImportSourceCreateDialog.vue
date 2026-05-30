@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { ImportTypeDescriptor } from '@/lib/bank-import/types'
+import { mutateJson } from '@/lib/http'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -63,41 +64,29 @@ async function handleSubmit() {
   if (!canSubmit.value) return
 
   isCreating.value = true
-
-  try {
-    const response = await fetch('/api/import-sources', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: name.value.trim(),
-        preset: preset.value,
-        sourceKind: sourceKind.value,
-        bankName: bankName.value.trim() || null,
-        accountLabel: accountLabel.value.trim() || null,
-        accountIdentifier: accountIdentifier.value.trim() || null,
-        defaultPlanAssignment: defaultPlanAssignment.value,
-        isActive: isActive.value,
-      }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Erstellen')
-    }
-
-    resetForm()
-    open.value = false
-    emit('created')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Import-Quelle konnte nicht erstellt werden.',
-    )
-  } finally {
-    isCreating.value = false
-  }
+  await mutateJson({
+    url: '/api/import-sources',
+    method: 'POST',
+    body: {
+      name: name.value.trim(),
+      preset: preset.value,
+      sourceKind: sourceKind.value,
+      bankName: bankName.value.trim() || null,
+      accountLabel: accountLabel.value.trim() || null,
+      accountIdentifier: accountIdentifier.value.trim() || null,
+      defaultPlanAssignment: defaultPlanAssignment.value,
+      isActive: isActive.value,
+    },
+    notOkMessage: 'Fehler beim Erstellen',
+    fallbackMessage: 'Import-Quelle konnte nicht erstellt werden.',
+    onSuccess: () => {
+      resetForm()
+      open.value = false
+      emit('created')
+    },
+    onError: (message) => emit('error', message),
+  })
+  isCreating.value = false
 }
 </script>
 

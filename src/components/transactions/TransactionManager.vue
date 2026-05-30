@@ -2,6 +2,8 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import { useUrlState } from '@/composables/useUrlState'
+import { usePresetDialog } from '@/composables/usePresetDialog'
+import { toggleSort } from '@/lib/table-sort'
 import type { Category } from '@/lib/categories'
 import type { Plan } from '@/lib/plans'
 import { getPlanDisplayName } from '@/lib/format'
@@ -20,21 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationFirst,
-  PaginationItem,
-  PaginationLast,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination'
+import PaginationControls from '@/components/shared/PaginationControls.vue'
 import { Button } from '@/components/ui/button'
 import { Receipt, Search, X } from 'lucide-vue-next'
-import { toast } from 'vue-sonner'
 import PresetCreateDialog from '@/components/presets/PresetCreateDialog.vue'
-import type { PresetInitialValues } from '@/components/presets/PresetCreateDialog.vue'
 import TransactionTable from './TransactionTable.vue'
 
 const props = withDefaults(
@@ -98,10 +89,11 @@ function getFiltersFromUrlState() {
   }
 }
 
-// Initialize filters from URL on mount
-onMounted(() => {
-  isSyncingFromUrl = true
+// Copy the current URL state into the local filter refs without triggering the
+// refs → urlState sync watcher.
+function applyUrlFiltersToRefs() {
   const urlFilters = getFiltersFromUrlState()
+  isSyncingFromUrl = true
   searchQuery.value = urlFilters.search
   selectedCategoryId.value = urlFilters.categoryId
   selectedPlanId.value = urlFilters.planId
@@ -109,6 +101,12 @@ onMounted(() => {
   sortDir.value = urlFilters.sortDir
   currentPage.value = urlFilters.page
   isSyncingFromUrl = false
+  return urlFilters
+}
+
+// Initialize filters from URL on mount
+onMounted(() => {
+  const urlFilters = applyUrlFiltersToRefs()
 
   // Load if URL had non-default filters
   if (
@@ -148,17 +146,7 @@ watch(
 watch(
   () => ({ ...urlState }),
   () => {
-    const urlFilters = getFiltersFromUrlState()
-
-    isSyncingFromUrl = true
-    searchQuery.value = urlFilters.search
-    selectedCategoryId.value = urlFilters.categoryId
-    selectedPlanId.value = urlFilters.planId
-    sortBy.value = urlFilters.sortBy
-    sortDir.value = urlFilters.sortDir
-    currentPage.value = urlFilters.page
-    isSyncingFromUrl = false
-
+    applyUrlFiltersToRefs()
     loadTransactions()
   },
   { deep: true },
@@ -172,24 +160,12 @@ const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 
 // Preset dialog state
-const presetDialogOpen = ref(false)
-const presetInitialValues = ref<PresetInitialValues | undefined>(undefined)
-
-function handleSaveAsPreset(transaction: TransactionWithCategory) {
-  presetInitialValues.value = {
-    name: transaction.name,
-    note: transaction.note,
-    amount: transaction.amount,
-    type: transaction.type,
-    categoryId: transaction.categoryId,
-    isBudget: transaction.isBudget,
-  }
-  presetDialogOpen.value = true
-}
-
-function handlePresetCreated() {
-  toast.success('Vorlage erstellt')
-}
+const {
+  presetDialogOpen,
+  presetInitialValues,
+  handleSaveAsPreset,
+  handlePresetCreated,
+} = usePresetDialog()
 
 const hasActiveFilters = computed(
   () =>
@@ -243,12 +219,7 @@ function handleError(message: string) {
 }
 
 function handleSort(column: 'name' | 'dueDate' | 'categoryName' | 'amount') {
-  if (sortBy.value === column) {
-    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    sortBy.value = column
-    sortDir.value = column === 'dueDate' ? 'desc' : 'asc'
-  }
+  toggleSort(sortBy, sortDir, column, (c) => (c === 'dueDate' ? 'desc' : 'asc'))
 }
 
 function handlePageChange(page: number) {
@@ -352,32 +323,12 @@ function resetFilters() {
 
       <!-- Pagination -->
       <div v-if="pagination.totalPages > 1" class="mt-4">
-        <Pagination
+        <PaginationControls
           :total="pagination.total"
-          :sibling-count="1"
           :items-per-page="pagination.limit"
           :page="currentPage"
-          show-edges
           @update:page="handlePageChange"
-        >
-          <PaginationContent v-slot="{ items }">
-            <PaginationFirst />
-            <PaginationPrevious />
-            <template v-for="(item, index) in items">
-              <PaginationItem
-                v-if="item.type === 'page'"
-                :key="index"
-                :value="item.value"
-                :is-active="item.value === currentPage"
-              >
-                {{ item.value }}
-              </PaginationItem>
-              <PaginationEllipsis v-else :key="item.type" :index="index" />
-            </template>
-            <PaginationNext />
-            <PaginationLast />
-          </PaginationContent>
-        </Pagination>
+        />
       </div>
       <!-- Preset Create Dialog (no trigger, controlled via v-model) -->
       <PresetCreateDialog

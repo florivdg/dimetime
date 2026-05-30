@@ -1,27 +1,14 @@
+import { beforeEach, describe, expect, it } from 'bun:test'
 import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-} from 'bun:test'
-import { Database } from 'bun:sqlite'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
-import * as plansSchema from '@/db/schema/plans'
+  seedBankTransaction,
+  seedBankTransactionSplit,
+  seedImportSource,
+  seedPlan,
+  seedPlannedTransaction,
+} from '@/lib/__fixtures__/seeds'
+import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
-const sqlite = new Database(':memory:')
-sqlite.run('PRAGMA foreign_keys = ON;')
-
-const testDb = drizzle({
-  client: sqlite,
-  schema: plansSchema,
-})
-
-void mock.module('@/db/database', () => ({
-  db: testDb,
-}))
+const testDb = setupTestDb()
 
 const { splitBankTransaction, unsplitBankTransaction, getSplitById } =
   await import('./bank-transaction-splits')
@@ -31,184 +18,30 @@ const splitRoute = await import('@/pages/api/bank-transactions/[id]/split.ts')
 const splitPatchRoute =
   await import('@/pages/api/bank-transactions/splits/[splitId].ts')
 
-const now = new Date('2026-03-09T00:00:00.000Z')
 const planAId = '11111111-1111-4111-8111-111111111111'
 const planBId = '22222222-2222-4222-8222-222222222222'
 const budgetAId = '33333333-3333-4333-8333-333333333333'
 const budgetBId = '44444444-4444-4444-8444-444444444444'
 
-function runStatements(sql: string) {
-  for (const statement of sql.split(';')) {
-    const trimmed = statement.trim()
-    if (trimmed) sqlite.run(trimmed)
-  }
-}
-
-beforeAll(() => {
-  runStatements(`
-    CREATE TABLE "user" (
-      "id" text PRIMARY KEY NOT NULL
-    );
-
-    CREATE TABLE "category" (
-      "id" text PRIMARY KEY NOT NULL
-    );
-
-    CREATE TABLE "plan" (
-      "id" text PRIMARY KEY NOT NULL,
-      "name" text,
-      "date" text NOT NULL,
-      "notes" text,
-      "is_archived" integer DEFAULT false NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL
-    );
-
-    CREATE TABLE "planned_transaction" (
-      "id" text PRIMARY KEY NOT NULL,
-      "name" text NOT NULL,
-      "note" text,
-      "type" text DEFAULT 'expense' NOT NULL,
-      "due_date" text NOT NULL,
-      "amount" integer DEFAULT 0 NOT NULL,
-      "is_done" integer DEFAULT false NOT NULL,
-      "completed_at" integer,
-      "is_budget" integer DEFAULT false NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL,
-      "plan_id" text REFERENCES "plan"("id") ON DELETE cascade,
-      "user_id" text REFERENCES "user"("id") ON DELETE set null,
-      "category_id" text REFERENCES "category"("id") ON DELETE set null
-    );
-
-    CREATE TABLE "import_source" (
-      "id" text PRIMARY KEY NOT NULL,
-      "name" text NOT NULL,
-      "preset" text NOT NULL,
-      "source_kind" text NOT NULL,
-      "bank_name" text,
-      "account_label" text,
-      "account_identifier" text,
-      "default_plan_assignment" text DEFAULT 'auto_month' NOT NULL,
-      "is_active" integer DEFAULT true NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL
-    );
-
-    CREATE TABLE "statement_import" (
-      "id" text PRIMARY KEY NOT NULL
-    );
-
-    CREATE TABLE "bank_transaction" (
-      "id" text PRIMARY KEY NOT NULL,
-      "source_id" text NOT NULL REFERENCES "import_source"("id") ON DELETE cascade,
-      "first_seen_import_id" text REFERENCES "statement_import"("id") ON DELETE set null,
-      "last_seen_import_id" text REFERENCES "statement_import"("id") ON DELETE set null,
-      "external_transaction_id" text,
-      "dedupe_key" text NOT NULL,
-      "booking_date" text NOT NULL,
-      "value_date" text,
-      "amount_cents" integer NOT NULL,
-      "currency" text DEFAULT 'EUR' NOT NULL,
-      "original_amount_cents" integer,
-      "original_currency" text,
-      "counterparty" text,
-      "booking_text" text,
-      "description" text,
-      "purpose" text,
-      "status" text DEFAULT 'unknown' NOT NULL,
-      "balance_after_cents" integer,
-      "balance_currency" text,
-      "country" text,
-      "card_last4" text,
-      "merchant" text,
-      "merchant_category" text,
-      "booking_type" text,
-      "reference" text,
-      "customer_reference" text,
-      "mandate_reference" text,
-      "creditor_id" text,
-      "return_reason" text,
-      "cardholder" text,
-      "note" text,
-      "raw_data_json" text NOT NULL,
-      "plan_id" text REFERENCES "plan"("id") ON DELETE set null,
-      "plan_assignment" text DEFAULT 'none' NOT NULL,
-      "budget_id" text REFERENCES "planned_transaction"("id") ON DELETE set null,
-      "pre_split_budget_id" text REFERENCES "planned_transaction"("id") ON DELETE set null,
-      "is_archived" integer DEFAULT false NOT NULL,
-      "is_split" integer DEFAULT false NOT NULL,
-      "import_seen_count" integer DEFAULT 1 NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL
-    );
-
-    CREATE TABLE "bank_transaction_split" (
-      "id" text PRIMARY KEY NOT NULL,
-      "bank_transaction_id" text NOT NULL REFERENCES "bank_transaction"("id") ON DELETE cascade,
-      "amount_cents" integer NOT NULL,
-      "label" text,
-      "budget_id" text REFERENCES "planned_transaction"("id") ON DELETE set null,
-      "plan_id" text REFERENCES "plan"("id") ON DELETE set null,
-      "sort_order" integer DEFAULT 0 NOT NULL,
-      "is_archived" integer DEFAULT false NOT NULL,
-      "created_at" integer NOT NULL,
-      "updated_at" integer NOT NULL
-    );
-  `)
-})
-
 beforeEach(async () => {
-  runStatements(`
-    DELETE FROM "bank_transaction_split";
-    DELETE FROM "bank_transaction";
-    DELETE FROM "planned_transaction";
-    DELETE FROM "plan";
-    DELETE FROM "import_source";
-  `)
-
   await createSource()
 })
 
-afterAll(() => {
-  sqlite.close()
-})
-
 async function createSource(id = 'source-1') {
-  await testDb.insert(plansSchema.importSource).values({
-    id,
-    name: 'Testkonto',
-    preset: 'ing_csv_v1',
-    sourceKind: 'bank_account',
-    defaultPlanAssignment: 'none',
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedImportSource(testDb, { id, name: 'Testkonto' })
 }
 
 async function createPlan(id: string, date: string, isArchived = false) {
-  await testDb.insert(plansSchema.plan).values({
-    id,
-    name: id,
-    date,
-    isArchived,
-    createdAt: now,
-    updatedAt: now,
-  })
+  await seedPlan(testDb, { id, name: id, date, isArchived })
 }
 
 async function createBudget(id: string, planId: string) {
-  await testDb.insert(plansSchema.plannedTransaction).values({
+  await seedPlannedTransaction(testDb, {
     id,
     name: id,
-    type: 'expense',
     dueDate: `${datePrefix(planId)}-05`,
     amount: 0,
-    isDone: false,
     isBudget: true,
-    createdAt: now,
-    updatedAt: now,
     planId,
   })
 }
@@ -232,27 +65,20 @@ async function createBankTransactionRow({
   preSplitBudgetId?: string | null
   isSplit?: boolean
 }) {
-  await testDb.insert(plansSchema.bankTransaction).values({
+  await seedBankTransaction(testDb, {
     id,
     sourceId: 'source-1',
     dedupeKey: `dedupe-${id}`,
     bookingDate: '2026-03-01',
     amountCents,
-    currency: 'EUR',
     counterparty,
     description,
-    status: 'booked',
-    rawDataJson: '{}',
     note: null,
     planId,
     planAssignment: planId ? 'manual' : 'none',
     budgetId,
     preSplitBudgetId,
-    isArchived: false,
     isSplit,
-    importSeenCount: 1,
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
@@ -271,21 +97,49 @@ async function createSplitRow({
   planId?: string | null
   budgetId?: string | null
 }) {
-  await testDb.insert(plansSchema.bankTransactionSplit).values({
+  await seedBankTransactionSplit(testDb, {
     id,
     bankTransactionId: parentId,
     amountCents,
     label,
     planId,
     budgetId,
-    sortOrder: 0,
-    createdAt: now,
-    updatedAt: now,
   })
 }
 
 function datePrefix(planId: string) {
   return planId === planBId ? '2026-04' : '2026-03'
+}
+
+type ExpectedParentFields = Partial<{
+  budgetId: string | null
+  preSplitBudgetId: string | null
+  isSplit: boolean
+}>
+
+async function expectParentState(id: string, expected: ExpectedParentFields) {
+  const parent = await getBankTransactionById(id)
+  expect(parent).toBeDefined()
+  if (!parent) return
+  for (const key of Object.keys(expected) as (keyof ExpectedParentFields)[]) {
+    const value = expected[key] as string | boolean | null
+    expect(parent[key]).toBe(value)
+  }
+}
+
+async function seedSplitParentAndSplit() {
+  await createBankTransactionRow({
+    id: 'parent-1',
+    amountCents: -10000,
+    planId: planAId,
+    isSplit: true,
+  })
+  await createSplitRow({
+    id: 'split-1',
+    parentId: 'parent-1',
+    amountCents: -10000,
+    planId: planAId,
+  })
 }
 
 async function postSplit(id: string, splits: { amountCents: number }[]) {
@@ -404,16 +258,18 @@ describe('bank transaction splits', () => {
       { amountCents: -3000, label: 'Freizeit' },
     ])
 
-    let parent = await getBankTransactionById('parent-1')
-    expect(parent?.budgetId).toBeNull()
-    expect(parent?.preSplitBudgetId).toBe(budgetAId)
+    await expectParentState('parent-1', {
+      budgetId: null,
+      preSplitBudgetId: budgetAId,
+    })
 
     await unsplitBankTransaction('parent-1')
 
-    parent = await getBankTransactionById('parent-1')
-    expect(parent?.isSplit).toBe(false)
-    expect(parent?.budgetId).toBe(budgetAId)
-    expect(parent?.preSplitBudgetId).toBeNull()
+    await expectParentState('parent-1', {
+      isSplit: false,
+      budgetId: budgetAId,
+      preSplitBudgetId: null,
+    })
   })
 
   it('keeps parent budget empty after undo when no pre-split budget existed', async () => {
@@ -440,18 +296,7 @@ describe('bank transaction splits', () => {
     await createPlan(planBId, '2026-04-01')
     await createBudget(budgetAId, planAId)
     await createBudget(budgetBId, planBId)
-    await createBankTransactionRow({
-      id: 'parent-1',
-      amountCents: -10000,
-      planId: planAId,
-      isSplit: true,
-    })
-    await createSplitRow({
-      id: 'split-1',
-      parentId: 'parent-1',
-      amountCents: -10000,
-      planId: planAId,
-    })
+    await seedSplitParentAndSplit()
 
     const response = await patchSplit('split-1', { budgetId: budgetBId })
 
@@ -463,18 +308,7 @@ describe('bank transaction splits', () => {
     await createPlan(planAId, '2026-03-01')
     await createPlan(planBId, '2026-04-01')
     await createBudget(budgetBId, planBId)
-    await createBankTransactionRow({
-      id: 'parent-1',
-      amountCents: -10000,
-      planId: planAId,
-      isSplit: true,
-    })
-    await createSplitRow({
-      id: 'split-1',
-      parentId: 'parent-1',
-      amountCents: -10000,
-      planId: planAId,
-    })
+    await seedSplitParentAndSplit()
 
     const response = await patchSplit('split-1', {
       planId: planBId,

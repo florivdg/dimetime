@@ -20,9 +20,12 @@ import {
   sql,
 } from 'drizzle-orm'
 import { unionAll } from 'drizzle-orm/sqlite-core'
+import { buildSetValues } from '@/lib/db/partial-update'
+import { orDefault, orNull } from '@/lib/defaults'
+import { partitionByPlan } from '@/lib/plan-partition'
 
 export type ImportSource = typeof importSource.$inferSelect
-export type NewImportSource = typeof importSource.$inferInsert
+type NewImportSource = typeof importSource.$inferInsert
 export type BankTransaction = typeof bankTransaction.$inferSelect
 
 export interface CreateImportSourceInput {
@@ -59,13 +62,6 @@ export interface BankTransactionQueryOptions {
   sortDir?: 'asc' | 'desc'
   page?: number
   limit?: number
-}
-
-export type BankTransactionWithRelations = BankTransaction & {
-  sourceName: string | null
-  planDate: string | null
-  planName: string | null
-  budgetName: string | null
 }
 
 export interface BankTransactionRow {
@@ -116,24 +112,30 @@ export async function getImportSourceById(
   })
 }
 
+function buildImportSourceInsertValues(
+  input: CreateImportSourceInput,
+  now: Date,
+): NewImportSource {
+  return {
+    name: input.name,
+    preset: input.preset,
+    sourceKind: input.sourceKind,
+    bankName: orNull(input.bankName),
+    accountLabel: orNull(input.accountLabel),
+    accountIdentifier: orNull(input.accountIdentifier),
+    defaultPlanAssignment: orDefault(input.defaultPlanAssignment, 'auto_month'),
+    isActive: orDefault(input.isActive, true),
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 export async function createImportSource(
   input: CreateImportSourceInput,
 ): Promise<ImportSource> {
-  const now = new Date()
   const [created] = await db
     .insert(importSource)
-    .values({
-      name: input.name,
-      preset: input.preset,
-      sourceKind: input.sourceKind,
-      bankName: input.bankName ?? null,
-      accountLabel: input.accountLabel ?? null,
-      accountIdentifier: input.accountIdentifier ?? null,
-      defaultPlanAssignment: input.defaultPlanAssignment ?? 'auto_month',
-      isActive: input.isActive ?? true,
-      createdAt: now,
-      updatedAt: now,
-    })
+    .values(buildImportSourceInsertValues(input, new Date()))
     .returning()
 
   return created
@@ -143,23 +145,32 @@ export async function updateImportSource(
   id: string,
   input: UpdateImportSourceInput,
 ): Promise<ImportSource | undefined> {
-  const updateData: Partial<NewImportSource> = {
-    updatedAt: new Date(),
-  }
-
-  if (input.name !== undefined) updateData.name = input.name
-  if (input.preset !== undefined) updateData.preset = input.preset
-  if (input.sourceKind !== undefined) updateData.sourceKind = input.sourceKind
-  if (input.bankName !== undefined) updateData.bankName = input.bankName
-  if (input.accountLabel !== undefined)
-    updateData.accountLabel = input.accountLabel
-  if (input.accountIdentifier !== undefined) {
-    updateData.accountIdentifier = input.accountIdentifier
-  }
-  if (input.defaultPlanAssignment !== undefined) {
-    updateData.defaultPlanAssignment = input.defaultPlanAssignment
-  }
-  if (input.isActive !== undefined) updateData.isActive = input.isActive
+  const updateData = buildSetValues<typeof input, NewImportSource>(input, {
+    name: (v, s) => {
+      s.name = v
+    },
+    preset: (v, s) => {
+      s.preset = v
+    },
+    sourceKind: (v, s) => {
+      s.sourceKind = v
+    },
+    bankName: (v, s) => {
+      s.bankName = v
+    },
+    accountLabel: (v, s) => {
+      s.accountLabel = v
+    },
+    accountIdentifier: (v, s) => {
+      s.accountIdentifier = v
+    },
+    defaultPlanAssignment: (v, s) => {
+      s.defaultPlanAssignment = v
+    },
+    isActive: (v, s) => {
+      s.isActive = v
+    },
+  })
 
   const [updated] = await db
     .update(importSource)
@@ -201,40 +212,45 @@ export async function deleteBankTransaction(id: string): Promise<boolean> {
   return result.length > 0
 }
 
-export async function getBankTransactions(
-  options: BankTransactionQueryOptions = {},
-): Promise<PaginatedBankTransactions> {
-  const {
-    sourceId,
-    planId,
-    status,
-    search,
-    dateFrom,
-    dateTo,
-    sortBy = 'bookingDate',
-    sortDir = 'desc',
-    page = 1,
-    limit = 20,
-  } = options
-
-  // Base conditions applied to the parent bankTransaction in both branches
+// fallow-ignore-next-line complexity
+function buildBankTxParentConditions(options: BankTransactionQueryOptions) {
+  const { sourceId, status, dateFrom, dateTo, showArchived } = options
   const parentConditions = []
   if (sourceId) parentConditions.push(eq(bankTransaction.sourceId, sourceId))
   if (status) parentConditions.push(eq(bankTransaction.status, status))
   if (dateFrom)
     parentConditions.push(gte(bankTransaction.bookingDate, dateFrom))
   if (dateTo) parentConditions.push(lte(bankTransaction.bookingDate, dateTo))
-  if (!options.showArchived) {
+  if (!showArchived)
     parentConditions.push(eq(bankTransaction.isArchived, false))
-  }
-  const parentSearchCondition = search
-    ? or(
-        like(bankTransaction.description, `%${search}%`),
-        like(bankTransaction.counterparty, `%${search}%`),
-        like(bankTransaction.purpose, `%${search}%`),
-        like(bankTransaction.bookingText, `%${search}%`),
-      )
-    : undefined
+  return parentConditions
+}
+
+function buildBankTxSearchCondition(search: string | undefined) {
+  if (!search) return undefined
+  return or(
+    like(bankTransaction.description, `%${search}%`),
+    like(bankTransaction.counterparty, `%${search}%`),
+    like(bankTransaction.purpose, `%${search}%`),
+    like(bankTransaction.bookingText, `%${search}%`),
+  )
+}
+
+// fallow-ignore-next-line complexity
+export async function getBankTransactions(
+  options: BankTransactionQueryOptions = {},
+): Promise<PaginatedBankTransactions> {
+  const {
+    planId,
+    search,
+    sortBy = 'bookingDate',
+    sortDir = 'desc',
+    page = 1,
+    limit = 20,
+  } = options
+
+  const parentConditions = buildBankTxParentConditions(options)
+  const parentSearchCondition = buildBankTxSearchCondition(search)
 
   // Branch 1: regular (non-split) transactions
   const txConditions = [...parentConditions, eq(bankTransaction.isSplit, false)]
@@ -263,7 +279,7 @@ export async function getBankTransactions(
       note: bankTransaction.note,
       purpose: bankTransaction.purpose,
       isSplit: bankTransaction.isSplit,
-      createdAt: bankTransaction.createdAt,
+      createdAt: sql<Date>`${bankTransaction.createdAt}`.as('created_at'),
       sortOrder: sql<number>`0`.as('sort_order'),
       sortGroup: sql`${bankTransaction.id}`.as('sort_group'),
     })
@@ -317,7 +333,7 @@ export async function getBankTransactions(
       note: bankTransactionSplit.note,
       purpose: bankTransaction.purpose,
       isSplit: sql<boolean>`0`.as('is_split'),
-      createdAt: bankTransactionSplit.createdAt,
+      createdAt: sql<Date>`${bankTransactionSplit.createdAt}`.as('created_at'),
       sortOrder: bankTransactionSplit.sortOrder,
       sortGroup: sql`${bankTransactionSplit.bankTransactionId}`.as(
         'sort_group',
@@ -388,37 +404,55 @@ export async function getBankTransactionById(
   })
 }
 
-export async function updateBankTransactionPlan(
-  id: string,
-  planId: string | null,
-): Promise<BankTransaction | undefined> {
-  const [updated] = await db
-    .update(bankTransaction)
-    .set({
-      planId,
-      planAssignment: planId ? 'manual' : 'none',
-      updatedAt: new Date(),
-    })
-    .where(eq(bankTransaction.id, id))
-    .returning()
-
-  return updated
+export interface BankTransactionPatchFields {
+  planId?: string | null
+  note?: string | null
+  budgetId?: string | null
 }
 
-export async function updateBankTransactionNote(
-  id: string,
-  note: string | null,
-): Promise<BankTransaction | undefined> {
-  const [updated] = await db
-    .update(bankTransaction)
-    .set({
-      note,
-      updatedAt: new Date(),
-    })
-    .where(eq(bankTransaction.id, id))
-    .returning()
+/**
+ * Validates a partial bank-transaction update against plan/budget rules.
+ * Returns null on success or an error tuple to forward as a JSON response.
+ */
+// fallow-ignore-next-line complexity
+export async function validateBankTransactionPatch(
+  fields: BankTransactionPatchFields,
+  existing: { planId: string | null },
+  loadPlan: (id: string) => Promise<{ isArchived: boolean } | undefined | null>,
+  loadBudget: (
+    id: string,
+  ) => Promise<{ isBudget: boolean; planId: string | null } | undefined | null>,
+): Promise<{ message: string; status: number } | null> {
+  if (fields.planId !== undefined && fields.planId) {
+    const targetPlan = await loadPlan(fields.planId)
+    if (!targetPlan) return { message: 'Zielplan nicht gefunden', status: 404 }
+    if (targetPlan.isArchived) {
+      return {
+        message:
+          'Banktransaktionen können nicht einem archivierten Plan zugeordnet werden.',
+        status: 400,
+      }
+    }
+  }
 
-  return updated
+  if (fields.budgetId !== undefined && fields.budgetId !== null) {
+    const budget = await loadBudget(fields.budgetId)
+    if (!budget) return { message: 'Budget nicht gefunden', status: 404 }
+    if (!budget.isBudget) {
+      return { message: 'Transaktion ist kein Budget', status: 400 }
+    }
+
+    const effectivePlanId =
+      fields.planId !== undefined ? fields.planId : existing.planId
+    if (budget.planId !== effectivePlanId) {
+      return {
+        message: 'Budget gehört nicht zum zugewiesenen Plan',
+        status: 400,
+      }
+    }
+  }
+
+  return null
 }
 
 export async function updateBankTransactionFields(
@@ -429,24 +463,24 @@ export async function updateBankTransactionFields(
     budgetId?: string | null
   },
 ): Promise<BankTransaction | undefined> {
-  const setValues: Partial<typeof bankTransaction.$inferInsert> = {
-    updatedAt: new Date(),
-  }
-
-  if (fields.planId !== undefined) {
-    setValues.planId = fields.planId
-    setValues.planAssignment = fields.planId ? 'manual' : 'none'
-    // Clear budget when plan changes (budget is plan-specific)
-    setValues.budgetId = null
-  }
-
-  if (fields.budgetId !== undefined) {
-    setValues.budgetId = fields.budgetId
-  }
-
-  if (fields.note !== undefined) {
-    setValues.note = fields.note
-  }
+  const setValues = buildSetValues<
+    typeof fields,
+    typeof bankTransaction.$inferInsert
+  >(fields, {
+    planId: (v, s) => {
+      // fallow-ignore-next-line code-duplication
+      s.planId = v
+      s.planAssignment = v ? 'manual' : 'none'
+      // Clear budget when plan changes (budget is plan-specific)
+      s.budgetId = null
+    },
+    budgetId: (v, s) => {
+      s.budgetId = v
+    },
+    note: (v, s) => {
+      s.note = v
+    },
+  })
 
   const [updated] = await db
     .update(bankTransaction)
@@ -470,12 +504,25 @@ export async function bulkArchiveBankTransactions(
   return result.length
 }
 
+async function updateBankTxPlanGroup(
+  txOrDb: DbOrTransaction,
+  ids: string[],
+  values: Partial<typeof bankTransaction.$inferInsert>,
+) {
+  if (ids.length === 0) return
+  await txOrDb
+    .update(bankTransaction)
+    .set(values)
+    .where(inArray(bankTransaction.id, ids))
+}
+
 export async function bulkAssignPlanToTransactions(
   ids: string[],
   planId: string | null,
   txOrDb: DbOrTransaction = db,
 ): Promise<number> {
   const now = new Date()
+  const planAssignment: 'manual' | 'none' = planId ? 'manual' : 'none'
 
   const targetTransactions = await txOrDb
     .select({
@@ -485,39 +532,24 @@ export async function bulkAssignPlanToTransactions(
     .from(bankTransaction)
     .where(inArray(bankTransaction.id, ids))
 
-  if (targetTransactions.length === 0) {
-    return 0
-  }
+  if (targetTransactions.length === 0) return 0
 
-  const idsToClearBudget = targetTransactions
-    .filter((transaction) => planId === null || transaction.planId !== planId)
-    .map((transaction) => transaction.id)
-  const idsToKeepBudget = targetTransactions
-    .filter((transaction) => planId !== null && transaction.planId === planId)
-    .map((transaction) => transaction.id)
+  const { idsToClearBudget, idsToKeepBudget } = partitionByPlan(
+    targetTransactions,
+    planId,
+  )
 
-  if (idsToClearBudget.length > 0) {
-    await txOrDb
-      .update(bankTransaction)
-      .set({
-        planId,
-        planAssignment: planId ? 'manual' : 'none',
-        budgetId: null,
-        updatedAt: now,
-      })
-      .where(inArray(bankTransaction.id, idsToClearBudget))
-  }
-
-  if (idsToKeepBudget.length > 0) {
-    await txOrDb
-      .update(bankTransaction)
-      .set({
-        planId,
-        planAssignment: planId ? 'manual' : 'none',
-        updatedAt: now,
-      })
-      .where(inArray(bankTransaction.id, idsToKeepBudget))
-  }
+  await updateBankTxPlanGroup(txOrDb, idsToClearBudget, {
+    planId,
+    planAssignment,
+    budgetId: null,
+    updatedAt: now,
+  })
+  await updateBankTxPlanGroup(txOrDb, idsToKeepBudget, {
+    planId,
+    planAssignment,
+    updatedAt: now,
+  })
 
   return targetTransactions.length
 }

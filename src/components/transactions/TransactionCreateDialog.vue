@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Category } from '@/lib/categories'
+import { mutateJson } from '@/lib/http'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,12 +13,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -27,7 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Minus, Plus } from 'lucide-vue-next'
+import { Loader2, Plus } from 'lucide-vue-next'
+import AmountInputGroup from '@/components/shared/AmountInputGroup.vue'
 
 const props = defineProps<{
   planId: string
@@ -62,50 +58,34 @@ function resetForm() {
   newIsBudget.value = false
 }
 
-function toggleType() {
-  newType.value = newType.value === 'income' ? 'expense' : 'income'
-}
-
 async function handleSubmit() {
   if (!newName.value.trim() || !newDueDate.value) return
 
   isCreating.value = true
-
-  try {
-    const response = await fetch('/api/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: newName.value.trim(),
-        note: newNote.value.trim() || null,
-        dueDate: newDueDate.value,
-        amount: Math.round(newAmount.value * 100),
-        type: newType.value,
-        planId: props.planId,
-        categoryId: newCategoryId.value,
-        isDone: newIsDone.value,
-        isBudget: newIsBudget.value,
-      }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Fehler beim Erstellen')
-    }
-
-    resetForm()
-    open.value = false
-    emit('created')
-  } catch (error) {
-    emit(
-      'error',
-      error instanceof Error
-        ? error.message
-        : 'Transaktion konnte nicht erstellt werden.',
-    )
-  } finally {
-    isCreating.value = false
-  }
+  await mutateJson({
+    url: '/api/transactions',
+    method: 'POST',
+    body: {
+      name: newName.value.trim(),
+      note: newNote.value.trim() || null,
+      dueDate: newDueDate.value,
+      amount: Math.round(newAmount.value * 100),
+      type: newType.value,
+      planId: props.planId,
+      categoryId: newCategoryId.value,
+      isDone: newIsDone.value,
+      isBudget: newIsBudget.value,
+    },
+    notOkMessage: 'Fehler beim Erstellen',
+    fallbackMessage: 'Transaktion konnte nicht erstellt werden.',
+    onSuccess: () => {
+      resetForm()
+      open.value = false
+      emit('created')
+    },
+    onError: (message) => emit('error', message),
+  })
+  isCreating.value = false
 }
 </script>
 
@@ -152,29 +132,7 @@ async function handleSubmit() {
 
         <div class="space-y-2">
           <Label>Betrag</Label>
-          <InputGroup>
-            <InputGroupAddon>
-              <InputGroupButton
-                type="button"
-                :class="
-                  newType === 'income'
-                    ? 'text-lime-600 hover:bg-lime-50 hover:text-lime-700 dark:hover:bg-lime-950'
-                    : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950'
-                "
-                @click="toggleType"
-              >
-                <Plus v-if="newType === 'income'" class="size-4" />
-                <Minus v-else class="size-4" />
-              </InputGroupButton>
-            </InputGroupAddon>
-            <InputGroupInput
-              v-model.number="newAmount"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0,00"
-            />
-          </InputGroup>
+          <AmountInputGroup v-model:amount="newAmount" v-model:type="newType" />
           <p class="text-muted-foreground text-xs">
             {{ newType === 'income' ? 'Einnahme' : 'Ausgabe' }} - Klicken Sie
             auf das Symbol, um zu wechseln.
