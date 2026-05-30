@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Loader2 } from 'lucide-vue-next'
+import { Loader2, Plus } from 'lucide-vue-next'
 import AmountInputGroup from '@/components/shared/AmountInputGroup.vue'
 
 const props = defineProps<{
