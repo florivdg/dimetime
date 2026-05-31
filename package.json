@@ -63,7 +63,8 @@
     "vitest": "^4.1.7"
   },
   "overrides": {
-    "vite": "^7"
+    "vite": "^7",
+    "kysely": "^0.28.17"
   },
   "trustedDependencies": [
     "maplibre-gl"
