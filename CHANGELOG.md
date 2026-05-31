@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.11.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.10.0...v0.11.0)
+
+### 🩹 Fixes
+
+- **auth:** Add verified field to twoFactor schema ([129567e](https://github.com/florivdg/dimetime/commit/129567e))
+- **bank-transactions:** Alias createdAt in UNION ALL so sortBy works ([ef98dbe](https://github.com/florivdg/dimetime/commit/ef98dbe))
+- **transactions:** Import missing Plus icon in TransactionCreateDialog ([bb3164c](https://github.com/florivdg/dimetime/commit/bb3164c))
+
+### 💅 Refactors
+
+- **api:** Extract shared response, schema, validation, and handler helpers and adopt them across routes ([82dea0b](https://github.com/florivdg/dimetime/commit/82dea0b), [b70bd15](https://github.com/florivdg/dimetime/commit/b70bd15), [ede4e7c](https://github.com/florivdg/dimetime/commit/ede4e7c))
+- **db:** Break schema cycles and extract timestamps, buildSetValues, and shared column helpers ([b0c1960](https://github.com/florivdg/dimetime/commit/b0c1960), [33e3064](https://github.com/florivdg/dimetime/commit/33e3064))
+- **composables:** Extract shared dialog/sort/url-state and auth/2fa composables ([9020331](https://github.com/florivdg/dimetime/commit/9020331), [8b3002f](https://github.com/florivdg/dimetime/commit/8b3002f))
+- **bank-import:** Split easybank-xlsx parser and import service into smaller helpers ([ec4d63a](https://github.com/florivdg/dimetime/commit/ec4d63a), [4977c9d](https://github.com/florivdg/dimetime/commit/4977c9d))
+- **presets:** Extract preset-matching module and simplify condition builders ([70759c8](https://github.com/florivdg/dimetime/commit/70759c8), [9866f80](https://github.com/florivdg/dimetime/commit/9866f80))
+- Eliminate fallow duplication (77 → 3 clone groups) and reduce complexity hotspots ([77a0199](https://github.com/florivdg/dimetime/commit/77a0199), [2c14829](https://github.com/florivdg/dimetime/commit/2c14829))
+
+### 📖 Documentation
+
+- **redirect:** Explain SSR same-origin shortcut ([c5c04db](https://github.com/florivdg/dimetime/commit/c5c04db))
+
+### 🏡 Chore
+
+- **lint:** Add fallow audit and Claude Code commit-time gate ([6cd0a42](https://github.com/florivdg/dimetime/commit/6cd0a42))
+- **fallow:** Clean up dead code and configure test entry patterns ([2b88023](https://github.com/florivdg/dimetime/commit/2b88023))
+- **.gitignore:** Update to include CLAUDE.local.md ([a4252a9](https://github.com/florivdg/dimetime/commit/a4252a9))
+- **fallow:** Suppress accepted code-duplication clones ([9fc22fd](https://github.com/florivdg/dimetime/commit/9fc22fd))
+- **fallow:** Calibrate audit thresholds and ignore framework deps ([e872e75](https://github.com/florivdg/dimetime/commit/e872e75))
+- **test:** Add Vitest stack for Vue component and composable tests ([948fab5](https://github.com/florivdg/dimetime/commit/948fab5))
+- **test:** Extract shared test-db fixture, switch Vitest to .vitest.ts ([f9c8719](https://github.com/florivdg/dimetime/commit/f9c8719))
+- **ui:** Restore shadcn-vue components to upstream formatting + prettier-ignore ([71b8953](https://github.com/florivdg/dimetime/commit/71b8953))
+- **package:** Add vite version override in package.json ([cc93918](https://github.com/florivdg/dimetime/commit/cc93918))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.10.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.9.3...v0.10.0)
