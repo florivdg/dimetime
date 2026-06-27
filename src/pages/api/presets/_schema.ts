@@ -4,7 +4,13 @@ const presetCommon = {
   note: z.string().max(2000).nullable().optional(),
   type: z.enum(['income', 'expense']).optional(),
   recurrence: z
-    .enum(['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'])
+    .enum([
+      'einmalig',
+      'monatlich',
+      'vierteljährlich',
+      'halbjährlich',
+      'jährlich',
+    ])
     .optional(),
   startMonth: z
     .string()

@@ -116,6 +116,7 @@ export function formatRecurrence(recurrence: string): string {
     einmalig: 'Einmalig',
     monatlich: 'Monatlich',
     vierteljährlich: 'Vierteljährlich',
+    halbjährlich: 'Halbjährlich',
     jährlich: 'Jährlich',
   }
   return map[recurrence] || recurrence

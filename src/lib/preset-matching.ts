@@ -2,15 +2,20 @@ import { transactionPreset } from '@/db/schema/plans'
 
 type TransactionPreset = typeof transactionPreset.$inferSelect
 
-function matchesQuarterlyRecurrence(
-  startMonth: string,
-  planMonth: string,
-): boolean {
-  const [startYear, startMonthNum] = startMonth.split('-').map(Number)
-  const [planYear, planMonthNum] = planMonth.split('-').map(Number)
-  const monthsDiff =
-    (planYear - startYear) * 12 + (planMonthNum - startMonthNum)
-  return monthsDiff >= 0 && monthsDiff % 3 === 0
+/**
+ * Build a matcher for recurrences that repeat every `intervalMonths` months
+ * from the start month (e.g. 3 for quarterly, 6 for half-yearly).
+ */
+function matchesEveryNMonths(
+  intervalMonths: number,
+): (startMonth: string, planMonth: string) => boolean {
+  return (startMonth, planMonth) => {
+    const [startYear, startMonthNum] = startMonth.split('-').map(Number)
+    const [planYear, planMonthNum] = planMonth.split('-').map(Number)
+    const monthsDiff =
+      (planYear - startYear) * 12 + (planMonthNum - startMonthNum)
+    return monthsDiff >= 0 && monthsDiff % intervalMonths === 0
+  }
 }
 
 function matchesYearlyRecurrence(
@@ -28,7 +33,8 @@ const recurrenceMatchers: Record<
 > = {
   einmalig: (start, plan) => plan === start,
   monatlich: (start, plan) => plan >= start,
-  vierteljährlich: matchesQuarterlyRecurrence,
+  vierteljährlich: matchesEveryNMonths(3),
+  halbjährlich: matchesEveryNMonths(6),
   jährlich: matchesYearlyRecurrence,
 }
 

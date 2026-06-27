@@ -228,6 +228,7 @@ function showError(message: string) {
           <SelectItem value="einmalig">Einmalig</SelectItem>
           <SelectItem value="monatlich">Monatlich</SelectItem>
           <SelectItem value="vierteljährlich">Vierteljährlich</SelectItem>
+          <SelectItem value="halbjährlich">Halbjährlich</SelectItem>
           <SelectItem value="jährlich">Jährlich</SelectItem>
         </SelectContent>
       </Select>

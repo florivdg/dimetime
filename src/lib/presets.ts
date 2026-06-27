@@ -44,7 +44,12 @@ export interface PresetQueryOptions {
   search?: string
   type?: 'income' | 'expense'
   categoryId?: string
-  recurrence?: 'einmalig' | 'monatlich' | 'vierteljährlich' | 'jährlich'
+  recurrence?:
+    | 'einmalig'
+    | 'monatlich'
+    | 'vierteljährlich'
+    | 'halbjährlich'
+    | 'jährlich'
   includeExpired?: boolean
   sortBy?: 'name' | 'createdAt' | 'lastUsedAt' | 'amount'
   sortDir?: 'asc' | 'desc'
@@ -58,7 +63,12 @@ export interface CreatePresetInput {
   note?: string | null
   type?: 'income' | 'expense'
   amount: number
-  recurrence?: 'einmalig' | 'monatlich' | 'vierteljährlich' | 'jährlich'
+  recurrence?:
+    | 'einmalig'
+    | 'monatlich'
+    | 'vierteljährlich'
+    | 'halbjährlich'
+    | 'jährlich'
   startMonth?: string | null // YYYY-MM format
   endDate?: string | null
   categoryId?: string | null
@@ -72,7 +82,12 @@ export interface UpdatePresetInput {
   note?: string | null
   type?: 'income' | 'expense'
   amount?: number
-  recurrence?: 'einmalig' | 'monatlich' | 'vierteljährlich' | 'jährlich'
+  recurrence?:
+    | 'einmalig'
+    | 'monatlich'
+    | 'vierteljährlich'
+    | 'halbjährlich'
+    | 'jährlich'
   startMonth?: string | null // YYYY-MM format
   endDate?: string | null
   categoryId?: string | null

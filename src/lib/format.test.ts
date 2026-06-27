@@ -150,6 +150,7 @@ describe('formatRecurrence', () => {
     expect(formatRecurrence('einmalig')).toBe('Einmalig')
     expect(formatRecurrence('monatlich')).toBe('Monatlich')
     expect(formatRecurrence('vierteljährlich')).toBe('Vierteljährlich')
+    expect(formatRecurrence('halbjährlich')).toBe('Halbjährlich')
     expect(formatRecurrence('jährlich')).toBe('Jährlich')
   })
 

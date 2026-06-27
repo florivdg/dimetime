@@ -60,6 +60,19 @@ describe('presetMatchesPlanMonth', () => {
     expect(presetMatchesPlanMonth(preset, '2024-03')).toBe(false)
   })
 
+  it('halbjährlich matches every 6 months from start', () => {
+    const preset = makePreset({
+      recurrence: 'halbjährlich',
+      startMonth: '2024-01',
+    })
+    expect(presetMatchesPlanMonth(preset, '2024-01')).toBe(true)
+    expect(presetMatchesPlanMonth(preset, '2024-07')).toBe(true)
+    expect(presetMatchesPlanMonth(preset, '2025-01')).toBe(true)
+    expect(presetMatchesPlanMonth(preset, '2025-07')).toBe(true)
+    expect(presetMatchesPlanMonth(preset, '2024-04')).toBe(false)
+    expect(presetMatchesPlanMonth(preset, '2024-06')).toBe(false)
+  })
+
   it('jährlich matches same month each year', () => {
     const preset = makePreset({
       recurrence: 'jährlich',

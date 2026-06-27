@@ -143,6 +143,7 @@ function getRecurrenceBadgeVariant(
       return 'default'
     case 'vierteljährlich':
       return 'secondary'
+    case 'halbjährlich':
     case 'jährlich':
       return 'outline'
     default:
