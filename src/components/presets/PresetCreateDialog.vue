@@ -45,7 +45,7 @@ const newNote = ref('')
 const newAmount = ref(0)
 const newType = ref<'income' | 'expense'>('expense')
 const newRecurrence = ref<
-  'einmalig' | 'monatlich' | 'vierteljährlich' | 'jährlich'
+  'einmalig' | 'monatlich' | 'vierteljährlich' | 'halbjährlich' | 'jährlich'
 >('monatlich')
 const newStartMonth = ref(getCurrentMonth())
 const newEndDate = ref('')
@@ -197,6 +197,7 @@ async function handleSubmit() {
                 <SelectItem value="einmalig">Einmalig</SelectItem>
                 <SelectItem value="monatlich">Monatlich</SelectItem>
                 <SelectItem value="vierteljährlich">Vierteljährlich</SelectItem>
+                <SelectItem value="halbjährlich">Halbjährlich</SelectItem>
                 <SelectItem value="jährlich">Jährlich</SelectItem>
               </SelectContent>
             </Select>

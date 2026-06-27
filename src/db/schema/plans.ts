@@ -280,7 +280,13 @@ export const transactionPreset = sqliteTable(
   {
     ...transactionCoreColumns(),
     recurrence: text('recurrence', {
-      enum: ['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'],
+      enum: [
+        'einmalig',
+        'monatlich',
+        'vierteljährlich',
+        'halbjährlich',
+        'jährlich',
+      ],
     })
       .notNull()
       .default('einmalig'),

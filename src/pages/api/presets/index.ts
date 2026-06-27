@@ -29,7 +29,13 @@ const querySchema = z.object({
   type: z.enum(['income', 'expense']).optional(),
   categoryId: z.uuid().optional(),
   recurrence: z
-    .enum(['einmalig', 'monatlich', 'vierteljährlich', 'jährlich'])
+    .enum([
+      'einmalig',
+      'monatlich',
+      'vierteljährlich',
+      'halbjährlich',
+      'jährlich',
+    ])
     .optional(),
   includeExpired: z
     .string()
