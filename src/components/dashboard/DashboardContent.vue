@@ -31,11 +31,23 @@ defineProps<{
 
     <!-- Dashboard with data -->
     <template v-else>
+      <!-- Upcoming plan notice -->
+      <div
+        v-if="stats.currentPlan.isUpcoming"
+        class="bg-muted/50 rounded-xl p-3 text-sm"
+      >
+        <p class="text-muted-foreground">
+          Kein Plan für den aktuellen Monat vorhanden. Hier ist dein nächster
+          anstehender Plan.
+        </p>
+      </div>
+
       <!-- Three stat cards -->
       <div class="grid gap-4 md:grid-cols-3">
         <DashboardBalanceCard
           :plan-name="stats.currentPlan.name"
           :plan-date="stats.currentPlan.date"
+          :is-upcoming="stats.currentPlan.isUpcoming"
           :income="stats.currentPlan.income"
           :expense="stats.currentPlan.expense"
           :net="stats.currentPlan.net"

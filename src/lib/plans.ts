@@ -1,6 +1,6 @@
 import { db } from '@/db/database'
 import { plan } from '@/db/schema/plans'
-import { and, desc, eq, like, or } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, like, or } from 'drizzle-orm'
 import { buildSetValues } from '@/lib/db/partial-update'
 
 // Infer types from Drizzle schema
@@ -156,11 +156,17 @@ export async function deletePlan(id: string): Promise<boolean> {
 }
 
 /**
+ * Format a date as a `YYYY-MM` month key.
+ */
+export function formatYearMonth(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+/**
  * Get the plan for the current month (if it exists)
  */
 export async function getCurrentMonthPlan(): Promise<Plan | undefined> {
-  const now = new Date()
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const currentMonth = formatYearMonth(new Date())
 
   return db.query.plan.findFirst({
     where: and(
@@ -168,6 +174,38 @@ export async function getCurrentMonthPlan(): Promise<Plan | undefined> {
       eq(plan.isArchived, false),
     ),
   })
+}
+
+/**
+ * Get the nearest non-archived plan whose date falls in a future month
+ * (strictly after the current calendar month). Used as a dashboard
+ * fallback when no plan exists for the current month.
+ */
+export async function getNextUpcomingPlan(): Promise<Plan | undefined> {
+  const now = new Date()
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const cutoff = `${formatYearMonth(nextMonthStart)}-01`
+
+  return db.query.plan.findFirst({
+    where: and(gte(plan.date, cutoff), eq(plan.isArchived, false)),
+    orderBy: asc(plan.date),
+  })
+}
+
+/**
+ * Get the plan to treat as "active": the current month's plan if one
+ * exists, otherwise the nearest upcoming plan.
+ */
+export async function getActivePlan(): Promise<
+  { plan: Plan; isUpcoming: boolean } | undefined
+> {
+  const currentPlan = await getCurrentMonthPlan()
+  if (currentPlan) return { plan: currentPlan, isUpcoming: false }
+
+  const upcomingPlan = await getNextUpcomingPlan()
+  if (upcomingPlan) return { plan: upcomingPlan, isUpcoming: true }
+
+  return undefined
 }
 
 /**

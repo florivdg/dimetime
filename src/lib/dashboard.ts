@@ -1,7 +1,7 @@
 import { db } from '@/db/database'
 import { plannedTransaction, category } from '@/db/schema/plans'
 import { and, asc, count, desc, eq, gte, sql, sum } from 'drizzle-orm'
-import { getCurrentMonthPlan } from '@/lib/plans'
+import { getActivePlan, type Plan } from '@/lib/plans'
 import { getPlanBalance } from '@/lib/transactions'
 
 // Dashboard stats types
@@ -9,6 +9,7 @@ export interface CurrentPlanStats {
   id: string
   name: string | null
   date: string
+  isUpcoming: boolean
   income: number
   expense: number
   net: number
@@ -150,12 +151,39 @@ async function getTopCategories(planId: string): Promise<TopCategory[]> {
 }
 
 /**
- * Get all dashboard stats for the current calendar month
+ * Build full dashboard stats for a specific plan.
+ */
+async function buildDashboardStatsForPlan(
+  targetPlan: Plan,
+  isUpcoming: boolean,
+): Promise<DashboardStats> {
+  const [balance, pending, categories] = await Promise.all([
+    getPlanBalance(targetPlan.id),
+    getPendingTransactionsStats(targetPlan.id),
+    getTopCategories(targetPlan.id),
+  ])
+
+  return {
+    currentPlan: {
+      id: targetPlan.id,
+      name: targetPlan.name,
+      date: targetPlan.date,
+      isUpcoming,
+      ...balance,
+    },
+    pendingTransactions: pending,
+    topCategories: categories,
+  }
+}
+
+/**
+ * Get all dashboard stats for the current calendar month, falling back to
+ * the nearest upcoming plan when no plan exists for the current month.
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const currentPlan = await getCurrentMonthPlan()
+  const active = await getActivePlan()
 
-  if (!currentPlan) {
+  if (!active) {
     return {
       currentPlan: null,
       pendingTransactions: {
@@ -167,22 +195,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     }
   }
 
-  const [balance, pending, categories] = await Promise.all([
-    getPlanBalance(currentPlan.id),
-    getPendingTransactionsStats(currentPlan.id),
-    getTopCategories(currentPlan.id),
-  ])
-
-  return {
-    currentPlan: {
-      id: currentPlan.id,
-      name: currentPlan.name,
-      date: currentPlan.date,
-      ...balance,
-    },
-    pendingTransactions: pending,
-    topCategories: categories,
-  }
+  return buildDashboardStatsForPlan(active.plan, active.isUpcoming)
 }
 
 function chartStartDate(range: ChartRange, now: Date): string {
