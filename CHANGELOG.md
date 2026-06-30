@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.11.1
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.11.0...v0.11.1)
+
+### 🚀 Enhancements
+
+- **presets:** Add half-yearly (halbjährlich) recurrence option ([b2880d7](https://github.com/florivdg/dimetime/commit/b2880d7))
+- **dashboard:** Fall back to nearest upcoming plan when none active ([0ca9b9d](https://github.com/florivdg/dimetime/commit/0ca9b9d))
+
+### 🩹 Fixes
+
+- **deps:** Pin kysely to 0.28.x for better-auth compatibility ([9ef84c5](https://github.com/florivdg/dimetime/commit/9ef84c5))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.11.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.10.0...v0.11.0)
