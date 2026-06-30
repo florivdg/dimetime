@@ -9,10 +9,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 
 const props = defineProps<{
   planName: string | null
   planDate: string
+  isUpcoming: boolean
   income: number
   expense: number
   net: number
@@ -21,13 +23,19 @@ const props = defineProps<{
 const displayName = computed(() =>
   getPlanDisplayName(props.planName, props.planDate),
 )
+const cardTitle = computed(() =>
+  props.isUpcoming ? 'Nächster Saldo' : 'Aktueller Saldo',
+)
 </script>
 
 <template>
   <Card>
     <CardHeader class="pb-2">
-      <CardDescription>{{ displayName }}</CardDescription>
-      <CardTitle class="text-2xl">Aktueller Saldo</CardTitle>
+      <div class="flex items-center gap-2">
+        <CardDescription>{{ displayName }}</CardDescription>
+        <Badge v-if="isUpcoming" variant="secondary">Bevorstehend</Badge>
+      </div>
+      <CardTitle class="text-2xl">{{ cardTitle }}</CardTitle>
     </CardHeader>
     <CardContent class="space-y-3">
       <div class="flex items-center gap-2">

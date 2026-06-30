@@ -9,12 +9,17 @@ import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 const testDb = setupTestDb()
 
 const { getDashboardStats, getMonthlyChartData } = await import('./dashboard')
+const { formatYearMonth } = await import('./plans')
 
-async function insertPlanForCurrentMonth(id = 'plan-current') {
+async function insertPlanForFutureMonth(id = 'plan-future', offsetMonths = 2) {
   const today = new Date()
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-  await seedPlan(testDb, { id, name: 'Current', date: `${currentMonth}-01` })
+  const d = new Date(today.getFullYear(), today.getMonth() + offsetMonths, 1)
+  await seedPlan(testDb, { id, name: 'Plan', date: `${formatYearMonth(d)}-01` })
   return id
+}
+
+function insertPlanForCurrentMonth(id = 'plan-current') {
+  return insertPlanForFutureMonth(id, 0)
 }
 
 async function insertCategory(
@@ -55,7 +60,7 @@ async function insertTransaction({
 }
 
 describe('getDashboardStats', () => {
-  it('returns empty stats when there is no current-month plan', async () => {
+  it('returns null currentPlan when there is no plan at all (current or future)', async () => {
     const stats = await getDashboardStats()
     expect(stats.currentPlan).toBeNull()
     expect(stats.pendingTransactions).toEqual({
@@ -64,6 +69,45 @@ describe('getDashboardStats', () => {
       expenseTotal: 0,
     })
     expect(stats.topCategories).toEqual([])
+  })
+
+  it('falls back to the nearest upcoming plan when there is no current-month plan', async () => {
+    const planId = await insertPlanForFutureMonth()
+    await insertCategory('cat-a', 'Miete')
+    await insertTransaction({
+      id: 't-income',
+      planId,
+      amount: 250000,
+      type: 'income',
+      dueDate: '2026-08-01',
+    })
+    await insertTransaction({
+      id: 't-rent',
+      planId,
+      amount: 90000,
+      type: 'expense',
+      dueDate: '2026-08-01',
+      categoryId: 'cat-a',
+    })
+
+    const stats = await getDashboardStats()
+    expect(stats.currentPlan?.id).toBe(planId)
+    expect(stats.currentPlan?.isUpcoming).toBe(true)
+    expect(stats.currentPlan?.income).toBe(250000)
+    expect(stats.currentPlan?.expense).toBe(90000)
+    expect(stats.currentPlan?.net).toBe(160000)
+    expect(stats.pendingTransactions.count).toBe(2)
+    expect(stats.topCategories).toHaveLength(1)
+    expect(stats.topCategories[0]?.name).toBe('Miete')
+  })
+
+  it('prefers the current-month plan over a future plan when both exist', async () => {
+    const currentId = await insertPlanForCurrentMonth()
+    await insertPlanForFutureMonth()
+
+    const stats = await getDashboardStats()
+    expect(stats.currentPlan?.id).toBe(currentId)
+    expect(stats.currentPlan?.isUpcoming).toBe(false)
   })
 
   it('aggregates balance, pending totals, and top categories for the current plan', async () => {
@@ -120,6 +164,7 @@ describe('getDashboardStats', () => {
 
     const stats = await getDashboardStats()
     expect(stats.currentPlan?.id).toBe(planId)
+    expect(stats.currentPlan?.isUpcoming).toBe(false)
     expect(stats.currentPlan?.income).toBe(200000)
     expect(stats.currentPlan?.expense).toBe(155000)
     expect(stats.currentPlan?.net).toBe(45000)
