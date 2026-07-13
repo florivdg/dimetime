@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { IMPORT_PRESETS } from '@/lib/bank-import/types'
 
 const importSourceCommon = {
   bankName: z.string().max(200).nullable().optional(),
@@ -10,14 +11,14 @@ const importSourceCommon = {
 
 export const createSourceSchema = z.object({
   name: z.string().min(1).max(200),
-  preset: z.enum(['ing_csv_v1', 'easybank_xlsx_v1']),
+  preset: z.enum(IMPORT_PRESETS),
   sourceKind: z.enum(['bank_account', 'credit_card', 'other']),
   ...importSourceCommon,
 })
 
 export const updateSourceSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  preset: z.enum(['ing_csv_v1', 'easybank_xlsx_v1']).optional(),
+  preset: z.enum(IMPORT_PRESETS).optional(),
   sourceKind: z.enum(['bank_account', 'credit_card', 'other']).optional(),
   ...importSourceCommon,
 })

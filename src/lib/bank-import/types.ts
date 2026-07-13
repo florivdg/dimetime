@@ -1,8 +1,14 @@
-export type ImportPreset = 'ing_csv_v1' | 'easybank_xlsx_v1'
+export const IMPORT_PRESETS = [
+  'ing_csv_v1',
+  'easybank_xlsx_v1',
+  'amazon_visa_xls_v1',
+] as const
+
+export type ImportPreset = (typeof IMPORT_PRESETS)[number]
 
 export type DefaultPlanAssignment = 'auto_month' | 'none'
 
-export type ImportFileType = 'csv' | 'xlsx'
+export type ImportFileType = 'csv' | 'xlsx' | 'xls'
 
 export type BankTransactionStatus = 'booked' | 'pending' | 'unknown'
 

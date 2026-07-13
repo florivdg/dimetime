@@ -8,6 +8,7 @@ import {
 } from 'drizzle-orm/sqlite-core'
 import { user } from './auth'
 import { timestamps, transactionCoreColumns } from './_columns'
+import { IMPORT_PRESETS } from '../../lib/bank-import/types'
 
 export const category = sqliteTable(
   'category',
@@ -103,9 +104,7 @@ export const importSource = sqliteTable(
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
     name: text('name').notNull(),
-    preset: text('preset', {
-      enum: ['ing_csv_v1', 'easybank_xlsx_v1'],
-    }).notNull(),
+    preset: text('preset', { enum: IMPORT_PRESETS }).notNull(),
     sourceKind: text('source_kind', {
       enum: ['bank_account', 'credit_card', 'other'],
     }).notNull(),
@@ -142,7 +141,7 @@ export const statementImport = sqliteTable(
     ...importSourceLinkColumns(),
     fileName: text('file_name').notNull(),
     fileSha256: text('file_sha256').notNull(),
-    fileType: text('file_type', { enum: ['csv', 'xlsx'] }).notNull(),
+    fileType: text('file_type', { enum: ['csv', 'xlsx', 'xls'] }).notNull(),
     phase: text('phase', { enum: ['preview', 'commit'] }).notNull(),
     status: text('status', { enum: ['success', 'failed'] }).notNull(),
     previewCount: integer('preview_count').notNull().default(0),
