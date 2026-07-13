@@ -8,7 +8,7 @@ import {
 } from 'drizzle-orm/sqlite-core'
 import { user } from './auth'
 import { timestamps, transactionCoreColumns } from './_columns'
-import { IMPORT_PRESETS } from '@/lib/bank-import/types'
+import { IMPORT_PRESETS } from '../../lib/bank-import/types'
 
 export const category = sqliteTable(
   'category',
