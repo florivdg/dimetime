@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.12.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.11.1...v0.12.0)
+
+### 🚀 Enhancements
+
+- **bank-import:** Add Amazon Visa (XLS) import preset ([f677570](https://github.com/florivdg/dimetime/commit/f677570))
+
+### 🩹 Fixes
+
+- **db:** Use relative import in drizzle schema for drizzle-kit compatibility ([dcedb79](https://github.com/florivdg/dimetime/commit/dcedb79))
+- **deps:** Keep TypeScript 6 API alongside native TS7 after upgrade ([4f12b86](https://github.com/florivdg/dimetime/commit/4f12b86))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.11.1
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.11.0...v0.11.1)
