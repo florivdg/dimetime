@@ -14,7 +14,8 @@
     "@astrojs/vue",
     "@tailwindcss/vite",
     "astro",
-    "reka-ui"
+    "reka-ui",
+    "@typescript/native"
   ],
   "health": {
     "maxCyclomatic": 10,
