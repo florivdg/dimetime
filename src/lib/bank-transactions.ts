@@ -20,6 +20,7 @@ import {
   sql,
 } from 'drizzle-orm'
 import { unionAll } from 'drizzle-orm/sqlite-core'
+import type { ImportPreset } from '@/lib/bank-import/types'
 import { buildSetValues } from '@/lib/db/partial-update'
 import { orDefault, orNull } from '@/lib/defaults'
 import { partitionByPlan } from '@/lib/plan-partition'
@@ -30,7 +31,7 @@ export type BankTransaction = typeof bankTransaction.$inferSelect
 
 export interface CreateImportSourceInput {
   name: string
-  preset: 'ing_csv_v1' | 'easybank_xlsx_v1'
+  preset: ImportPreset
   sourceKind: 'bank_account' | 'credit_card' | 'other'
   bankName?: string | null
   accountLabel?: string | null
@@ -41,7 +42,7 @@ export interface CreateImportSourceInput {
 
 export interface UpdateImportSourceInput {
   name?: string
-  preset?: 'ing_csv_v1' | 'easybank_xlsx_v1'
+  preset?: ImportPreset
   sourceKind?: 'bank_account' | 'credit_card' | 'other'
   bankName?: string | null
   accountLabel?: string | null

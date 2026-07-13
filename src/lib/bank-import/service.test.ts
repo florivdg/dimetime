@@ -57,6 +57,7 @@ describe('getImportTypes', () => {
   it('returns the available import descriptors', () => {
     const types = getImportTypes()
     expect(types.map((t) => t.preset).sort()).toEqual([
+      'amazon_visa_xls_v1',
       'easybank_xlsx_v1',
       'ing_csv_v1',
     ])

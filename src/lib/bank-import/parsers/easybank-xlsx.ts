@@ -1,11 +1,9 @@
-import * as XLSX from 'xlsx'
 import type {
   BankTransactionStatus,
   ImportTypeDescriptor,
   NormalizedBankTransactionInput,
   ParsedImportFile,
 } from '@/lib/bank-import/types'
-import { ImportApiError, validationError } from '@/lib/bank-import/api-helpers'
 import {
   extractCardLast4,
   normalizeText,
@@ -13,25 +11,30 @@ import {
   parseGermanMoney,
   type ParsedMoney,
 } from '@/lib/bank-import/normalize'
-
-const REQUIRED_COLUMNS = [
-  'Referenznummer',
-  'Buchungsdatum',
-  'Betrag',
-  'Beschreibung',
-  'Typ',
-  'Status',
-]
+import {
+  collectDataRows,
+  findHeaderRow,
+  firstIndex,
+  pickOptional,
+  readSpreadsheetRows,
+  requiredIndex,
+} from './spreadsheet'
 
 export const EASYBANK_XLSX_IMPORT_TYPE: ImportTypeDescriptor = {
   preset: 'easybank_xlsx_v1',
   name: 'easybank (XLSX)',
   extensions: ['.xlsx'],
-  requiredColumns: REQUIRED_COLUMNS,
+  requiredColumns: [
+    'Referenznummer',
+    'Buchungsdatum',
+    'Betrag',
+    'Beschreibung',
+    'Typ',
+    'Status',
+  ],
 }
 
 interface EasybankIndices {
-  headerRowIndex: number
   bookingDateIndex: number
   valueDateIndex: number | undefined
   referenceIndex: number | undefined
@@ -44,38 +47,6 @@ interface EasybankIndices {
   countryIndex: number | undefined
   cardholderIndex: number | undefined
   detailsIndex: number | undefined
-}
-
-function findHeaderRow(rows: unknown[][]): {
-  headerRowIndex: number
-  headerCells: string[]
-} {
-  for (let i = 0; i < rows.length; i += 1) {
-    const headerCells = (rows[i] ?? []).map((cell) => normalizeText(cell) ?? '')
-    const normalized = headerCells.map((value) => value.toLowerCase())
-
-    const hasAllRequired = REQUIRED_COLUMNS.every((column) =>
-      normalized.includes(column.toLowerCase()),
-    )
-    if (!hasAllRequired) continue
-
-    return { headerRowIndex: i, headerCells }
-  }
-
-  throw validationError(
-    'EasyBank-XLSX konnte nicht gelesen werden: Kopfzeile nicht gefunden.',
-  )
-}
-
-function buildHeaderIndex(headerCells: string[]): Record<string, number[]> {
-  const map: Record<string, number[]> = {}
-
-  headerCells.forEach((header, index) => {
-    const key = header.toLowerCase()
-    map[key] = map[key] ? [...map[key], index] : [index]
-  })
-
-  return map
 }
 
 const BOOKED_MARKERS = ['', '-']
@@ -98,84 +69,23 @@ function amountByType(amountCents: number, typeRaw: string | null): number {
   return amountCents
 }
 
-function readEasybankWorkbook(bytes: Uint8Array): XLSX.WorkBook {
-  try {
-    return XLSX.read(bytes, { type: 'array' })
-  } catch (error) {
-    if (error instanceof ImportApiError) throw error
-    throw validationError(
-      'EasyBank-XLSX konnte nicht gelesen werden: Datei ist beschädigt oder hat ein ungültiges Format.',
-    )
-  }
-}
-
-function loadEasybankWorkbook(
-  fileName: string,
-  bytes: Uint8Array,
-): XLSX.WorkBook {
-  if (!fileName.toLowerCase().endsWith('.xlsx')) {
-    throw validationError(
-      'Ungültiger Dateityp für easybank-Import. Erwartet wird eine XLSX-Datei.',
-    )
-  }
-
-  const workbook = readEasybankWorkbook(bytes)
-
-  if (!workbook.SheetNames[0]) {
-    throw validationError('EasyBank-XLSX enthält kein Tabellenblatt.')
-  }
-
-  return workbook
-}
-
-function firstIndex(
+function resolveEasybankIndices(
   headerMap: Record<string, number[]>,
-  key: string,
-): number | undefined {
-  return headerMap[key]?.[0]
-}
-
-function requireIndex(
-  headerMap: Record<string, number[]>,
-  key: string,
-): number {
-  const index = firstIndex(headerMap, key)
-  if (index === undefined) {
-    throw validationError(
-      'EasyBank-XLSX konnte nicht gelesen werden: Pflichtspalten fehlen in der Kopfzeile.',
-    )
-  }
-  return index
-}
-
-function resolveEasybankHeaderIndices(rows: unknown[][]): EasybankIndices {
-  const { headerRowIndex, headerCells } = findHeaderRow(rows)
-  const headerMap = buildHeaderIndex(headerCells)
-
+): EasybankIndices {
   return {
-    headerRowIndex,
-    bookingDateIndex: requireIndex(headerMap, 'buchungsdatum'),
+    bookingDateIndex: requiredIndex(headerMap, 'buchungsdatum'),
     valueDateIndex: headerMap['buchungsdatum']?.[1],
     referenceIndex: firstIndex(headerMap, 'referenznummer'),
-    amountIndex: requireIndex(headerMap, 'betrag'),
-    descriptionIndex: requireIndex(headerMap, 'beschreibung'),
-    typeIndex: requireIndex(headerMap, 'typ'),
-    statusIndex: requireIndex(headerMap, 'status'),
+    amountIndex: requiredIndex(headerMap, 'betrag'),
+    descriptionIndex: requiredIndex(headerMap, 'beschreibung'),
+    typeIndex: requiredIndex(headerMap, 'typ'),
+    statusIndex: requiredIndex(headerMap, 'status'),
     cardNumberIndex: firstIndex(headerMap, 'kartennummer'),
     originalAmountIndex: firstIndex(headerMap, 'originalbetrag'),
     countryIndex: firstIndex(headerMap, 'land'),
     cardholderIndex: firstIndex(headerMap, 'karteninhaber'),
     detailsIndex: firstIndex(headerMap, 'details'),
   }
-}
-
-function pickOptional<T>(
-  stringRow: string[],
-  index: number | undefined,
-  transform: (value: string) => T | null,
-): T | null {
-  if (index === undefined) return null
-  return transform(stringRow[index] ?? '')
 }
 
 interface EasybankFieldTexts {
@@ -287,84 +197,32 @@ function buildEasybankParsedRow(
   }
 }
 
-function normalizeStringRow(row: unknown[]): string[] {
-  return row.map((cell) => normalizeText(cell) ?? '')
-}
-
-function isBlankRow(stringRow: string[]): boolean {
-  return stringRow.every((value) => value.length === 0)
-}
-
-function parseRequiredFields(
+function parseEasybankRow(
   stringRow: string[],
   indices: EasybankIndices,
-): { bookingDate: string; parsedAmount: ParsedMoney } | null {
+): NormalizedBankTransactionInput | null {
   const bookingDate = parseGermanDateToIso(
     stringRow[indices.bookingDateIndex] ?? '',
   )
   const parsedAmount = parseGermanMoney(stringRow[indices.amountIndex], 'EUR')
   if (!bookingDate || !parsedAmount) return null
-  return { bookingDate, parsedAmount }
-}
 
-function parseEasybankRow(
-  row: unknown[],
-  indices: EasybankIndices,
-  lineNumber: number,
-): { row: NormalizedBankTransactionInput | null; warning?: string } {
-  const stringRow = normalizeStringRow(row)
-  if (isBlankRow(stringRow)) return { row: null }
-
-  const required = parseRequiredFields(stringRow, indices)
-  if (!required) {
-    return {
-      row: null,
-      warning: `Zeile ${lineNumber} konnte nicht importiert werden und wurde übersprungen.`,
-    }
-  }
-
-  return {
-    row: buildEasybankParsedRow(
-      stringRow,
-      indices,
-      required.bookingDate,
-      required.parsedAmount,
-    ),
-  }
-}
-
-function readEasybankRows(workbook: XLSX.WorkBook): unknown[][] {
-  const firstSheetName = workbook.SheetNames[0]!
-  const sheet = workbook.Sheets[firstSheetName]
-  return XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw: false,
-    defval: '',
-  }) as unknown[][]
-}
-
-function collectEasybankRows(
-  rows: unknown[][],
-  indices: EasybankIndices,
-): { rows: NormalizedBankTransactionInput[]; warnings: string[] } {
-  const dataRows = rows.slice(indices.headerRowIndex + 1)
-  const results = dataRows.map((row, offset) =>
-    parseEasybankRow(row ?? [], indices, indices.headerRowIndex + offset + 2),
-  )
-  return {
-    rows: results.flatMap((r) => (r.row ? [r.row] : [])),
-    warnings: results.flatMap((r) => (r.warning ? [r.warning] : [])),
-  }
+  return buildEasybankParsedRow(stringRow, indices, bookingDate, parsedAmount)
 }
 
 export async function parseEasybankXlsxFile(
   fileName: string,
   bytes: Uint8Array,
 ): Promise<ParsedImportFile> {
-  const workbook = loadEasybankWorkbook(fileName, bytes)
-  const rows = readEasybankRows(workbook)
-  const indices = resolveEasybankHeaderIndices(rows)
-  const { rows: normalizedRows, warnings } = collectEasybankRows(rows, indices)
+  const rows = readSpreadsheetRows(EASYBANK_XLSX_IMPORT_TYPE, fileName, bytes)
+  const header = findHeaderRow(EASYBANK_XLSX_IMPORT_TYPE, rows)
+  const indices = resolveEasybankIndices(header.headerMap)
+
+  const { rows: normalizedRows, warnings } = collectDataRows(
+    rows,
+    header.headerRowIndex,
+    (stringRow) => parseEasybankRow(stringRow, indices),
+  )
 
   return {
     rows: normalizedRows,

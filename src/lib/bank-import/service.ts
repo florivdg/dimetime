@@ -9,7 +9,9 @@ import {
 import type {
   DefaultPlanAssignment,
   ImportFileType,
+  ImportPreset,
   ImportTypeDescriptor,
+  ParsedImportFile,
 } from '@/lib/bank-import/types'
 import { monthFromIsoDate } from '@/lib/bank-import/normalize'
 import {
@@ -24,11 +26,46 @@ import {
   EASYBANK_XLSX_IMPORT_TYPE,
   parseEasybankXlsxFile,
 } from './parsers/easybank-xlsx'
+import {
+  AMAZON_VISA_XLS_IMPORT_TYPE,
+  parseAmazonVisaXlsFile,
+} from './parsers/amazon-visa-xls'
 
-const IMPORT_TYPE_DESCRIPTORS: ImportTypeDescriptor[] = [
-  ING_CSV_IMPORT_TYPE,
-  EASYBANK_XLSX_IMPORT_TYPE,
-]
+type ParserFn = (
+  fileName: string,
+  bytes: Uint8Array,
+) => Promise<ParsedImportFile>
+
+interface Importer {
+  descriptor: ImportTypeDescriptor
+  parse: ParserFn
+}
+
+// Single registry: the Record over ImportPreset makes a missing entry a
+// compile error, so a new preset needs exactly one wiring point here.
+const IMPORTERS: Record<ImportPreset, Importer> = {
+  ing_csv_v1: { descriptor: ING_CSV_IMPORT_TYPE, parse: parseIngCsvFile },
+  easybank_xlsx_v1: {
+    descriptor: EASYBANK_XLSX_IMPORT_TYPE,
+    parse: parseEasybankXlsxFile,
+  },
+  amazon_visa_xls_v1: {
+    descriptor: AMAZON_VISA_XLS_IMPORT_TYPE,
+    parse: parseAmazonVisaXlsFile,
+  },
+}
+
+const IMPORT_TYPE_DESCRIPTORS = Object.values(IMPORTERS).map(
+  (importer) => importer.descriptor,
+)
+
+const ALLOWED_EXTENSIONS = Array.from(
+  new Set(IMPORT_TYPE_DESCRIPTORS.flatMap((type) => type.extensions)),
+)
+
+const ALLOWED_EXTENSIONS_LABEL = ALLOWED_EXTENSIONS.map((extension) =>
+  extension.slice(1).toUpperCase(),
+).join(', ')
 
 type ImportSourceRow = typeof importSource.$inferSelect
 
@@ -110,8 +147,11 @@ function detectFileType(
   mimeType: string,
 ): ImportFileType | null {
   const lowerName = fileName.toLowerCase()
-  if (lowerName.endsWith('.csv')) return 'csv'
-  if (lowerName.endsWith('.xlsx')) return 'xlsx'
+  // Descriptor extensions map 1:1 to ImportFileType values ('.xls' → 'xls').
+  const matched = ALLOWED_EXTENSIONS.find((extension) =>
+    lowerName.endsWith(extension),
+  )
+  if (matched) return matched.slice(1) as ImportFileType
   if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) {
     return 'xlsx'
   }
@@ -119,29 +159,14 @@ function detectFileType(
   return null
 }
 
-function getImportTypeDescriptorByPreset(preset: string): ImportTypeDescriptor {
-  const descriptor = IMPORT_TYPE_DESCRIPTORS.find(
-    (type) => type.preset === preset,
-  )
-  if (!descriptor) {
+// The runtime check guards against stale presets in the database — SQLite
+// does not enforce the drizzle enum.
+function getImporterByPreset(preset: ImportPreset): Importer {
+  const importer = IMPORTERS[preset]
+  if (!importer) {
     throw validationError(`Import-Typ wird nicht unterstützt: ${preset}`)
   }
-  return descriptor
-}
-
-async function parseWithPreset(
-  preset: string,
-  fileName: string,
-  bytes: Uint8Array,
-) {
-  if (preset === 'ing_csv_v1') {
-    return parseIngCsvFile(fileName, bytes)
-  }
-  if (preset === 'easybank_xlsx_v1') {
-    return parseEasybankXlsxFile(fileName, bytes)
-  }
-
-  throw validationError(`Kein Parser für Import-Typ ${preset} gefunden.`)
+  return importer
 }
 
 function buildPlanLookupWhere(months: string[]) {
@@ -218,7 +243,7 @@ function ensureFileTypeMatchesDescriptor(
   const fileType = detectFileType(fileName, file.type)
   if (!fileType) {
     throw validationError(
-      'Dateityp wird nicht unterstützt. Erlaubt sind CSV oder XLSX.',
+      `Dateityp wird nicht unterstützt. Erlaubt sind: ${ALLOWED_EXTENSIONS_LABEL}.`,
     )
   }
 
@@ -377,13 +402,13 @@ async function prepareImportData(
   file: File,
 ): Promise<PreparedImportData> {
   const source = await getSourceById(sourceId)
-  const descriptor = getImportTypeDescriptorByPreset(source.preset)
+  const { descriptor, parse } = getImporterByPreset(source.preset)
   const fileName = file.name || 'upload'
   const fileType = ensureFileTypeMatchesDescriptor(fileName, file, descriptor)
 
   const bytes = new Uint8Array(await file.arrayBuffer())
   const fileSha256 = await hashFileSha256(bytes)
-  const parsed = await parseWithPreset(source.preset, fileName, bytes)
+  const parsed = await parse(fileName, bytes)
   const { rows: statusDedupedRows, pendingDropped } = dedupeByStatusUpgrade(
     parsed.rows,
   )
