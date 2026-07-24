@@ -14,5 +14,5 @@ export function monthOffsetDate(offsetMonths: number, day = '15'): string {
   const today = new Date()
   const d = new Date(today.getFullYear(), today.getMonth() + offsetMonths, 1)
   const month = String(d.getMonth() + 1).padStart(2, '0')
-  return `${d.getFullYear()}-${month}-${day}`
+  return `${d.getFullYear()}-${month}-${day.padStart(2, '0')}`
 }

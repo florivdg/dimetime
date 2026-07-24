@@ -66,7 +66,7 @@ describe('GET /api/dashboard/chart', () => {
   })
 
   it('includes seeded data points in the response', async () => {
-    await seedTx(monthOffsetDate(0), 50000, 'income')
+    await seedTx(monthOffsetDate(0, '01'), 50000, 'income')
     const res = (await GET(
       buildApiContext({ url: 'http://test/api/dashboard/chart' }) as never,
     )) as Response
