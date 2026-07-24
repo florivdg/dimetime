@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.12.1
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.12.0...v0.12.1)
+
+### 🩹 Fixes
+
+- **dashboard:** Bucket monthly chart by plan month ([1baa9ea](https://github.com/florivdg/dimetime/commit/1baa9ea))
+
+### 🤖 CI
+
+- Bump Docker actions to Node 24 runtime majors ([760ed5f](https://github.com/florivdg/dimetime/commit/760ed5f))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.12.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.11.1...v0.12.0)
