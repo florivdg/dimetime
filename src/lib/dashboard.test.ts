@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
+import { monthOffsetDate } from '@/lib/__fixtures__/dates'
 import {
   seedCategory,
   seedPlan,
@@ -9,17 +10,23 @@ import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 const testDb = setupTestDb()
 
 const { getDashboardStats, getMonthlyChartData } = await import('./dashboard')
-const { formatYearMonth } = await import('./plans')
 
-async function insertPlanForFutureMonth(id = 'plan-future', offsetMonths = 2) {
-  const today = new Date()
-  const d = new Date(today.getFullYear(), today.getMonth() + offsetMonths, 1)
-  await seedPlan(testDb, { id, name: 'Plan', date: `${formatYearMonth(d)}-01` })
+async function insertPlanForMonth(
+  id = 'plan-future',
+  offsetMonths = 2,
+  isArchived = false,
+) {
+  await seedPlan(testDb, {
+    id,
+    name: 'Plan',
+    date: monthOffsetDate(offsetMonths, '01'),
+    isArchived,
+  })
   return id
 }
 
 function insertPlanForCurrentMonth(id = 'plan-current') {
-  return insertPlanForFutureMonth(id, 0)
+  return insertPlanForMonth(id, 0)
 }
 
 async function insertCategory(
@@ -72,7 +79,7 @@ describe('getDashboardStats', () => {
   })
 
   it('falls back to the nearest upcoming plan when there is no current-month plan', async () => {
-    const planId = await insertPlanForFutureMonth()
+    const planId = await insertPlanForMonth()
     await insertCategory('cat-a', 'Miete')
     await insertTransaction({
       id: 't-income',
@@ -103,7 +110,7 @@ describe('getDashboardStats', () => {
 
   it('prefers the current-month plan over a future plan when both exist', async () => {
     const currentId = await insertPlanForCurrentMonth()
-    await insertPlanForFutureMonth()
+    await insertPlanForMonth()
 
     const stats = await getDashboardStats()
     expect(stats.currentPlan?.id).toBe(currentId)
@@ -206,43 +213,78 @@ describe('getMonthlyChartData', () => {
   })
 
   it('aggregates income and expense per month within the range', async () => {
-    const today = new Date()
-    const ym = (offsetMonths: number) => {
-      const d = new Date(
-        today.getFullYear(),
-        today.getMonth() - offsetMonths,
-        1,
-      )
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-15`
-    }
+    await insertPlanForMonth('p-prev', -2)
 
     await insertTransaction({
       id: 'tx-now-income',
       planId: 'p1',
       amount: 100000,
       type: 'income',
-      dueDate: ym(0),
+      dueDate: monthOffsetDate(0),
     })
     await insertTransaction({
       id: 'tx-now-expense',
       planId: 'p1',
       amount: 50000,
       type: 'expense',
-      dueDate: ym(0),
+      dueDate: monthOffsetDate(0),
     })
     await insertTransaction({
       id: 'tx-prev-income',
-      planId: 'p1',
+      planId: 'p-prev',
       amount: 80000,
       type: 'income',
-      dueDate: ym(2),
+      dueDate: monthOffsetDate(-2),
     })
 
     const result = await getMonthlyChartData('6m')
-    expect(result.length).toBeGreaterThan(0)
+    expect(result.length).toBe(2)
+    expect(result.at(0)?.income).toBe(80000)
     const currentBucket = result.at(-1)
     expect(currentBucket?.income).toBe(100000)
     expect(currentBucket?.expense).toBe(50000)
+  })
+
+  it('buckets a transaction by its plan month, not by its due date', async () => {
+    await insertTransaction({
+      id: 'tx-stale-due-date',
+      planId: 'p1',
+      amount: 25000,
+      type: 'expense',
+      dueDate: monthOffsetDate(-2),
+    })
+
+    const result = await getMonthlyChartData('6m')
+    expect(result.length).toBe(1)
+    expect(result.at(0)?.expense).toBe(25000)
+  })
+
+  it('ignores transactions that belong to no plan', async () => {
+    await insertTransaction({
+      id: 'tx-orphan',
+      planId: null,
+      amount: 30000,
+      type: 'expense',
+      dueDate: monthOffsetDate(0),
+    })
+
+    const result = await getMonthlyChartData('6m')
+    expect(result).toEqual([])
+  })
+
+  it('includes transactions from archived plans', async () => {
+    await insertPlanForMonth('p-archived', 0, true)
+    await insertTransaction({
+      id: 'tx-archived',
+      planId: 'p-archived',
+      amount: 10000,
+      type: 'expense',
+      dueDate: monthOffsetDate(0),
+    })
+
+    const result = await getMonthlyChartData('6m')
+    expect(result.length).toBe(1)
+    expect(result.at(0)?.expense).toBe(10000)
   })
 
   it('handles 12m range (lookback 11 months)', async () => {

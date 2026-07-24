@@ -1,5 +1,5 @@
 import { db } from '@/db/database'
-import { plannedTransaction, category } from '@/db/schema/plans'
+import { plannedTransaction, category, plan } from '@/db/schema/plans'
 import { and, asc, count, desc, eq, gte, sql, sum } from 'drizzle-orm'
 import { getActivePlan, type Plan } from '@/lib/plans'
 import { getPlanBalance } from '@/lib/transactions'
@@ -229,26 +229,30 @@ function groupMonthlyRows(rows: MonthRow[]): Map<string, MonthBucket> {
 }
 
 /**
- * Get monthly chart data based on range
+ * Get monthly chart data based on range.
+ *
+ * Buckets by plan membership (the month of the transaction's plan), not by
+ * due date, so a bar always matches the plan balance shown for that month.
+ * Transactions without a plan are not part of any plan view and are ignored;
+ * archived plans still count so past months keep their history.
  */
 export async function getMonthlyChartData(
   range: ChartRange,
 ): Promise<MonthlyChartData[]> {
   const startDate = chartStartDate(range, new Date())
+  const monthExpr = sql<string>`strftime('%Y-%m', ${plan.date})`
 
   const result = await db
     .select({
-      month: sql<string>`strftime('%Y-%m', ${plannedTransaction.dueDate})`,
+      month: monthExpr,
       type: plannedTransaction.type,
       total: sum(plannedTransaction.amount),
     })
     .from(plannedTransaction)
-    .where(gte(plannedTransaction.dueDate, startDate))
-    .groupBy(
-      sql`strftime('%Y-%m', ${plannedTransaction.dueDate})`,
-      plannedTransaction.type,
-    )
-    .orderBy(asc(sql`strftime('%Y-%m', ${plannedTransaction.dueDate})`))
+    .innerJoin(plan, eq(plannedTransaction.planId, plan.id))
+    .where(gte(plan.date, startDate))
+    .groupBy(monthExpr, plannedTransaction.type)
+    .orderBy(asc(monthExpr))
 
   const monthlyMap = groupMonthlyRows(result)
   return Array.from(monthlyMap, ([month, data]) => ({
