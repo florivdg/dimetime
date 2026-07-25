@@ -1,6 +1,7 @@
 ---
 import Layout from '@/layouts/Layout.astro'
 import Dashboard from '@/components/Dashboard.vue'
+import ApiKeyManager from '@/components/ApiKeyManager.vue'
 import PasskeyManager from '@/components/PasskeyManager.vue'
 import PasswordChangeForm from '@/components/PasswordChangeForm.vue'
 import TwoFactorManager from '@/components/TwoFactorManager.vue'
@@ -37,6 +38,7 @@ if (latest && latest.id !== currentMonth?.id) {
       </div>
       <TwoFactorManager client:load />
       <PasskeyManager client:load />
+      <ApiKeyManager client:load />
       <PasswordChangeForm client:load />
     </div>
   </Dashboard>

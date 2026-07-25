@@ -22,6 +22,7 @@
     "@astrojs/check": "0.9.10",
     "@astrojs/node": "11.1.0",
     "@astrojs/vue": "7.0.2",
+    "@better-auth/api-key": "1.6.26",
     "@better-auth/drizzle-adapter": "1.6.26",
     "@better-auth/passkey": "1.6.26",
     "@lowlighter/qrcode": "^3.1.0",
