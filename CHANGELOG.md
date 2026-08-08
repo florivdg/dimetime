@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.12.2
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.12.1...v0.12.2)
+
+### 🏡 Chore
+
+- **deps:** Update dependencies ([2d20d0b](https://github.com/florivdg/dimetime/commit/2d20d0b))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.12.1
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.12.0...v0.12.1)
