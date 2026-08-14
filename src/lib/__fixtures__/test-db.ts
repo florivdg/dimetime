@@ -26,7 +26,46 @@ const DDL = `
     "secret" text NOT NULL,
     "backup_codes" text NOT NULL,
     "verified" integer DEFAULT true NOT NULL,
+    "failed_verification_count" integer DEFAULT 0,
+    "locked_until" integer,
     "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE cascade
+  );
+
+  CREATE TABLE "session" (
+    "id" text PRIMARY KEY NOT NULL,
+    "expires_at" integer NOT NULL,
+    "token" text NOT NULL UNIQUE,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL,
+    "ip_address" text,
+    "user_agent" text,
+    "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE cascade,
+    "impersonated_by" text
+  );
+
+  CREATE TABLE "account" (
+    "id" text PRIMARY KEY NOT NULL,
+    "account_id" text NOT NULL,
+    "provider_id" text NOT NULL,
+    "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE cascade,
+    "access_token" text,
+    "refresh_token" text,
+    "id_token" text,
+    "access_token_expires_at" integer,
+    "refresh_token_expires_at" integer,
+    "scope" text,
+    "password" text,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  );
+
+  CREATE TABLE "verification" (
+    "id" text PRIMARY KEY NOT NULL,
+    "identifier" text NOT NULL,
+    "value" text NOT NULL,
+    "expires_at" integer NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
   );
 
   CREATE TABLE "user_setting" (
@@ -191,6 +230,9 @@ const TRUNCATE_ORDER = [
   'category',
   'user_setting',
   'two_factor',
+  'verification',
+  'account',
+  'session',
   'user',
 ] as const
 

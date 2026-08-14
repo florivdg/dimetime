@@ -104,6 +104,13 @@ export const twoFactor = sqliteTable(
     secret: text('secret').notNull(),
     backupCodes: text('backup_codes').notNull(),
     verified: integer('verified', { mode: 'boolean' }).default(true).notNull(),
+    // Account-lockout bookkeeping. better-auth's two-factor plugin enables
+    // lockout by default (`accountLockout.enabled ?? true`), and every sign-in
+    // verification touches both columns before the TOTP secret is even
+    // decrypted — without them the Drizzle adapter rejects the unknown field
+    // and 2FA login fails outright.
+    failedVerificationCount: integer('failed_verification_count').default(0),
+    lockedUntil: integer('locked_until', { mode: 'timestamp_ms' }),
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
