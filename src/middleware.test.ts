@@ -515,11 +515,14 @@ describe('onRequest middleware — API-Key-Verwaltung', () => {
     expect(res).toBe(nextSentinel)
   })
 
-  it('passes the request through when the session lookup throws', async () => {
-    sessionState.error = new Error('INVALID_API_KEY')
+  it('fails closed with 500 when the session lookup throws', async () => {
+    sessionState.error = new Error('SQLITE_BUSY')
     const ctx = buildContext('/api/auth/api-key/create', '', { method: 'POST' })
     const res = await onRequest(ctx, next)
-    expect(res).toBe(nextSentinel)
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({
+      error: 'Sitzungsprüfung fehlgeschlagen',
+    })
   })
 
   it('does not attach locals for key-management routes', async () => {

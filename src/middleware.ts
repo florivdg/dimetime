@@ -57,18 +57,20 @@ async function attachAuthenticatedLocals(
  * better-auth's own key endpoints only require a session, so without this check
  * a password-authenticated user who has not set up 2FA yet could mint a key and
  * then read financial data through the deliberately 2FA-exempt key path.
- * Unauthenticated requests are passed through so better-auth still answers with
- * its own 401.
+ * Unauthenticated requests (successful lookup, no session) are passed through
+ * so better-auth still answers with its own 401. A *failed* lookup however must
+ * fail closed: treating it as "no session" would let a session slip past this
+ * gate whenever the lookup errors transiently (e.g. SQLite lock).
  */
 async function handleApiKeyManagementRoute(
   context: MiddlewareContext,
   next: MiddlewareNext,
 ) {
-  let session: Session | null = null
+  let session: Session | null
   try {
     session = await auth.api.getSession({ headers: context.request.headers })
   } catch {
-    session = null
+    return jsonAuthError('Sitzungsprüfung fehlgeschlagen', 500)
   }
   if (!session) return next()
 
