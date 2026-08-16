@@ -4,6 +4,7 @@ import type { SidebarProps } from '@/components/ui/sidebar'
 import {
   BookTemplate,
   CalendarDays,
+  HandCoins,
   Home,
   Landmark,
   LifeBuoy,
@@ -64,6 +65,7 @@ const DASHBOARD_OTHER_SECTIONS = [
   '/transactions',
   '/bank-transactions',
   '/presets',
+  '/installments',
 ] as const
 
 function isDashboardActive(): boolean {
@@ -118,6 +120,12 @@ const navMain = computed(() => [
     url: '/presets',
     icon: BookTemplate,
     isActive: isActiveSection('/presets'),
+  },
+  {
+    title: 'Ratenzahlungen',
+    url: '/installments',
+    icon: HandCoins,
+    isActive: isActiveSection('/installments'),
   },
   {
     title: 'Einstellungen',

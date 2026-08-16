@@ -24,6 +24,10 @@ import {
   getBudgetSpendingFromSplits,
   getBudgetSpendingFromSplitsForPlan,
 } from '@/lib/bank-transaction-splits'
+import {
+  loadInstallmentBadges,
+  type InstallmentBadge,
+} from '@/lib/installments'
 import { parseQueryParams } from '@/lib/api/query-params'
 import { error } from '@/lib/api/responses'
 import { buildSetValues } from '@/lib/db/partial-update'
@@ -39,10 +43,18 @@ export type TransactionWithCategory = Transaction & {
   planName: string | null
   planDate: string | null
   planIsArchived: boolean
+  /** Name of the linked installment plan, null for regular transactions */
+  installmentName: string | null
+  /** Position of this row within its installment plan ("Rate x von n") */
+  ratePosition: number | null
+  /** Total number of installments of the linked installment plan */
+  rateTotal: number | null
 }
 
-// Transaction with plan archive status for API validation
+// Transaction with plan date and archive status for API validation
 export type TransactionWithPlanStatus = Transaction & {
+  /** Date of the owning plan, null for rows without a plan */
+  planDate: string | null
   planIsArchived: boolean
 }
 
@@ -163,6 +175,8 @@ function buildTransactionFilters(options: TransactionQueryOptions) {
   return conditions
 }
 
+const NO_BADGES: ReadonlyMap<string, InstallmentBadge> = new Map()
+
 /**
  * Get paginated transactions with optional filtering and sorting
  */
@@ -235,11 +249,23 @@ export async function getTransactions(
       ? await query
       : await query.limit(limit).offset((page - 1) * limit)
 
+  // Only a plan detail page renders the "Rate x von n" badges — the global
+  // transaction list never does, so it skips the lookup entirely
+  const badges = options.planId
+    ? await loadInstallmentBadges(rawResult)
+    : NO_BADGES
+
   // Ensure planIsArchived is always a boolean (not null)
-  const result: TransactionWithCategory[] = rawResult.map((row) => ({
-    ...row,
-    planIsArchived: row.planIsArchived ?? false,
-  }))
+  const result: TransactionWithCategory[] = rawResult.map((row) => {
+    const badge = badges.get(row.id)
+    return {
+      ...row,
+      planIsArchived: row.planIsArchived ?? false,
+      installmentName: badge?.installmentName ?? null,
+      ratePosition: badge?.ratePosition ?? null,
+      rateTotal: badge?.rateTotal ?? null,
+    }
+  })
 
   return {
     transactions: result,
@@ -264,8 +290,9 @@ export async function getTransactionById(
 }
 
 /**
- * Get a transaction by ID with its plan's archived status
- * Used for checking if modifications are allowed
+ * Get a transaction by ID with its plan's date and archived status.
+ * Used for checking if modifications are allowed and to derive the month a
+ * linked installment row occupies.
  */
 async function getTransactionWithPlanStatus(
   id: string,
@@ -273,6 +300,7 @@ async function getTransactionWithPlanStatus(
   const result = await db
     .select({
       ...getTableColumns(plannedTransaction),
+      planDate: plan.date,
       planIsArchived: plan.isArchived,
     })
     .from(plannedTransaction)
@@ -311,16 +339,27 @@ export async function requireUnarchivedTransaction(
 /**
  * Validates a target plan for an in-flight transaction move.
  * Returns null if no move requested, otherwise an error tuple.
+ * @param installmentId - Back-reference of the row; linked rows may not move at
+ *   all (one row per plan and installment, and a move would distort the skip
+ *   semantics of the month it leaves behind)
  */
 // fallow-ignore-next-line complexity
 export async function validateTransactionPlanChange(
   currentPlanId: string | null,
   nextPlanId: string | undefined,
   loadPlan: (id: string) => Promise<{ isArchived: boolean } | undefined | null>,
+  installmentId: string | null,
 ): Promise<{ message: string; status: number } | null> {
   if (!nextPlanId) return null
   if (nextPlanId === currentPlanId) {
     return { message: 'Transaktion ist bereits in diesem Plan', status: 400 }
+  }
+  if (installmentId) {
+    return {
+      message:
+        'Raten-Posten können nicht in einen anderen Plan verschoben werden',
+      status: 409,
+    }
   }
   const targetPlan = await loadPlan(nextPlanId)
   if (!targetPlan) return { message: 'Zielplan nicht gefunden', status: 404 }

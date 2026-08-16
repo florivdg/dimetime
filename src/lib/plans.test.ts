@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
+import { formatYearMonth } from '@/lib/dates'
 import { seedPlan } from '@/lib/__fixtures__/seeds'
 import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
@@ -7,7 +8,6 @@ const testDb = setupTestDb()
 const {
   createPlan,
   deletePlan,
-  formatYearMonth,
   getActivePlan,
   getAllPlans,
   getAvailableYears,

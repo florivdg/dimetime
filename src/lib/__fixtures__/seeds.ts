@@ -13,6 +13,8 @@ type BankTransactionInsert = typeof plansSchema.bankTransaction.$inferInsert
 type PlannedTransactionInsert =
   typeof plansSchema.plannedTransaction.$inferInsert
 type TransactionPresetInsert = typeof plansSchema.transactionPreset.$inferInsert
+type InstallmentPlanInsert = typeof plansSchema.installmentPlan.$inferInsert
+type InstallmentSkipInsert = typeof plansSchema.installmentSkip.$inferInsert
 type BankTransactionSplitInsert =
   typeof plansSchema.bankTransactionSplit.$inferInsert
 
@@ -141,6 +143,42 @@ export async function seedTransactionPreset(
     amount: 1000,
     recurrence: 'monatlich',
     userId: overrides.userId ?? 'u1',
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
+    ...overrides,
+  })
+  return id
+}
+
+export async function seedInstallmentPlan(
+  db: TestDatabase,
+  overrides: Partial<InstallmentPlanInsert> = {},
+): Promise<string> {
+  const id = overrides.id ?? 'ip1'
+  await db.insert(plansSchema.installmentPlan).values({
+    id,
+    name: 'Rate',
+    amount: 5000,
+    totalInstallments: 12,
+    prepaidInstallments: 0,
+    startMonth: '2026-03',
+    userId: overrides.userId ?? 'u1',
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
+    ...overrides,
+  })
+  return id
+}
+
+export async function seedInstallmentSkip(
+  db: TestDatabase,
+  overrides: Partial<InstallmentSkipInsert> = {},
+): Promise<string> {
+  const id = overrides.id ?? 'is1'
+  await db.insert(plansSchema.installmentSkip).values({
+    id,
+    installmentId: overrides.installmentId ?? 'ip1',
+    month: '2026-03',
     createdAt: SEED_NOW,
     updatedAt: SEED_NOW,
     ...overrides,

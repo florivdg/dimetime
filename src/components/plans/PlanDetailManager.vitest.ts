@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 
 vi.mock('vue-sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 const stub = defineComponent({ setup: () => () => h('div') })
 vi.mock('./PlanTransactionFilters.vue', () => ({ default: stub }))

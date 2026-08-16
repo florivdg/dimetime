@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
-import { seedPlan, seedPlannedTransaction } from '@/lib/__fixtures__/seeds'
+import { eq } from 'drizzle-orm'
+import { installmentSkip, plan, plannedTransaction } from '@/db/schema/plans'
+import {
+  seedInstallmentPlan,
+  seedPlan,
+  seedPlannedTransaction,
+  seedUser,
+} from '@/lib/__fixtures__/seeds'
 import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
 import { itGuardsIdRoute } from '@/lib/__fixtures__/route-guards'
@@ -9,11 +16,14 @@ const UNKNOWN_ID = '99999999-9999-4999-8999-999999999999'
 const testDb = setupTestDb()
 
 const { PUT, DELETE } = await import('./[id]')
+const { syncPlansForInstallment } = await import('@/lib/installments')
 
 const planId = '11111111-1111-4111-8111-111111111111'
 const otherPlanId = '22222222-2222-4222-8222-222222222222'
 const archivedPlanId = '33333333-3333-4333-8333-333333333333'
 const txId = '44444444-4444-4444-8444-444444444444'
+const userId = '55555555-5555-4555-8555-555555555555'
+const installmentId = '66666666-6666-4666-8666-666666666666'
 
 async function seedPlans() {
   await seedPlan(testDb, { id: planId, date: '2026-03-01', isArchived: false })
@@ -38,6 +48,29 @@ async function seedTx() {
     amount: 1000,
     planId,
   })
+}
+
+/** Plan ids carrying a row of the installment, oldest plan month first. */
+async function linkedPlanIds() {
+  const rows = await testDb
+    .select({
+      planId: plannedTransaction.planId,
+      planDate: plan.date,
+    })
+    .from(plannedTransaction)
+    .leftJoin(plan, eq(plannedTransaction.planId, plan.id))
+    .where(eq(plannedTransaction.installmentId, installmentId))
+  return rows
+    .sort((a, b) => (a.planDate ?? '').localeCompare(b.planDate ?? ''))
+    .map((row) => row.planId)
+}
+
+async function linkedRowInPlan(targetPlanId: string) {
+  const [row] = await testDb
+    .select()
+    .from(plannedTransaction)
+    .where(eq(plannedTransaction.planId, targetPlanId))
+  return row
 }
 
 beforeEach(async () => {
@@ -107,6 +140,36 @@ describe('PUT /api/transactions/[id]', () => {
     expect(res.status).toBe(403)
   })
 
+  it('rejects moving an installment row to another plan', async () => {
+    await seedUser(testDb, { id: userId, name: 'A', email: 'a@example.com' })
+    await seedInstallmentPlan(testDb, {
+      id: installmentId,
+      startMonth: '2026-03',
+      userId,
+    })
+    await seedPlannedTransaction(testDb, {
+      id: txId,
+      name: 'Rate',
+      type: 'expense',
+      dueDate: '2026-03-15',
+      amount: 5000,
+      planId,
+      installmentId,
+    })
+
+    const res = (await PUT(
+      buildApiContext({
+        method: 'PUT',
+        body: { planId: otherPlanId },
+        params: { id: txId },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe(
+      'Raten-Posten können nicht in einen anderen Plan verschoben werden',
+    )
+  })
+
   it('updates and returns the transaction', async () => {
     await seedTx()
     const res = (await PUT(
@@ -132,5 +195,70 @@ describe('DELETE /api/transactions/[id]', () => {
       }) as never,
     )) as Response
     expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.installmentSkipped).toBe(false)
+  })
+
+  it('shifts the rate into a later plan after the skip', async () => {
+    await seedUser(testDb, { id: userId, name: 'A', email: 'a@example.com' })
+    // 2026-01 … 2026-04 all eligible (the seeded 2026-02 plan is archived)
+    await seedPlan(testDb, { id: 'plan-jan', date: '2026-01-01' })
+    await seedPlan(testDb, { id: 'plan-feb', date: '2026-02-01' })
+    await seedInstallmentPlan(testDb, {
+      id: installmentId,
+      totalInstallments: 3,
+      startMonth: '2026-01',
+      userId,
+    })
+    await syncPlansForInstallment(installmentId)
+
+    const before = await linkedPlanIds()
+    expect(before).toEqual(['plan-jan', 'plan-feb', planId])
+
+    const febRow = await linkedRowInPlan('plan-feb')
+    const res = (await DELETE(
+      buildApiContext({
+        method: 'DELETE',
+        params: { id: febRow.id },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(200)
+
+    // February is tombstoned, the rate moves on to the existing April plan
+    const skips = await testDb.select().from(installmentSkip)
+    expect(skips.map((skip) => skip.month)).toEqual(['2026-02'])
+    expect(await linkedPlanIds()).toEqual(['plan-jan', planId, otherPlanId])
+  })
+
+  it('records a skip when the row belongs to an installment', async () => {
+    await seedUser(testDb, { id: userId, name: 'A', email: 'a@example.com' })
+    await seedInstallmentPlan(testDb, {
+      id: installmentId,
+      startMonth: '2026-03',
+      userId,
+    })
+    await seedPlannedTransaction(testDb, {
+      id: txId,
+      name: 'Rate',
+      type: 'expense',
+      dueDate: '2026-03-15',
+      amount: 5000,
+      planId,
+      installmentId,
+    })
+
+    const res = (await DELETE(
+      buildApiContext({
+        method: 'DELETE',
+        params: { id: txId },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.installmentSkipped).toBe(true)
+
+    const skips = await testDb.select().from(installmentSkip)
+    expect(skips).toHaveLength(1)
+    expect(skips[0].month).toBe('2026-03')
   })
 })

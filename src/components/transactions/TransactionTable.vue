@@ -6,6 +6,7 @@ import { formatAmount, formatDate, getPlanDisplayName } from '@/lib/format'
 import { mutateJson } from '@/lib/http'
 import { useEditInputRefs } from '@/composables/useEditInputRefs'
 import { useDeleteTransactionDialog } from '@/composables/useDeleteTransactionDialog'
+import type { DeleteTransactionResult } from '@/composables/useDeleteTransactionDialog'
 import { getSortIcon as resolveSortIcon } from '@/composables/useSortIcon'
 import { Button } from '@/components/ui/button'
 import DeleteTransactionDialog from '@/components/shared/DeleteTransactionDialog.vue'
@@ -77,7 +78,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   updated: []
-  deleted: []
+  deleted: [result: DeleteTransactionResult]
   error: [message: string]
   sort: [column: 'name' | 'dueDate' | 'categoryName' | 'amount']
   saveAsPreset: [transaction: TransactionWithCategory]
@@ -89,7 +90,7 @@ const {
   openDeleteDialog,
   deleteTransaction,
 } = useDeleteTransactionDialog(
-  () => emit('deleted'),
+  (result) => emit('deleted', result),
   (message) => emit('error', message),
 )
 

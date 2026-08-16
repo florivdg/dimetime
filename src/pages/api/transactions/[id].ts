@@ -7,6 +7,11 @@ import {
   validateTransactionPlanChange,
 } from '@/lib/transactions'
 import { getPlanById } from '@/lib/plans'
+import {
+  recordInstallmentSkip,
+  syncPlansForInstallment,
+} from '@/lib/installments'
+import { monthOfPlanDate } from '@/lib/dates'
 import { error, json, validateBody } from '@/lib/api/responses'
 
 const updateTransactionSchema = z.object({
@@ -42,6 +47,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
     existing.planId,
     data.planId,
     getPlanById,
+    existing.installmentId,
   )
   if (planError) return error(planError.message, planError.status)
 
@@ -53,6 +59,23 @@ export const DELETE: APIRoute = async ({ params }) => {
   const existing = await requireUnarchivedTransaction(params.id, 'gelöscht')
   if (existing instanceof Response) return existing
 
-  await deleteTransaction(existing.id)
-  return json({ success: true, message: 'Transaktion wurde gelöscht' })
+  const deleted = await deleteTransaction(existing.id)
+  // Tombstone the month only once the row is really gone — a skip for a row
+  // that still exists would block the month forever
+  const installmentId = deleted ? existing.installmentId : null
+
+  if (installmentId) {
+    await recordInstallmentSkip(
+      installmentId,
+      monthOfPlanDate(existing.planDate ?? existing.dueDate),
+    )
+    // The remaining count is unchanged, so the rate shifts into a later plan
+    await syncPlansForInstallment(installmentId)
+  }
+
+  return json({
+    success: true,
+    message: 'Transaktion wurde gelöscht',
+    installmentSkipped: installmentId !== null,
+  })
 }

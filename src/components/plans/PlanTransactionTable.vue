@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { formatAmount, formatDate } from '@/lib/format'
 import type { TransactionWithCategory } from '@/lib/transactions'
+import type { DeleteTransactionResult } from '@/composables/useDeleteTransactionDialog'
 import { useDeleteTransactionDialog } from '@/composables/useDeleteTransactionDialog'
 import { getSortIcon as resolveSortIcon } from '@/composables/useSortIcon'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import BudgetUtilizationBadge from './BudgetUtilizationBadge.vue'
+import InstallmentRateBadge from './InstallmentRateBadge.vue'
 import DeleteTransactionDialog from '@/components/shared/DeleteTransactionDialog.vue'
 import {
   DropdownMenu,
@@ -60,7 +62,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   edit: [transaction: TransactionWithCategory]
   move: [transaction: TransactionWithCategory]
-  deleted: []
+  deleted: [result: DeleteTransactionResult]
   error: [message: string]
   sort: [column: 'name' | 'dueDate' | 'categoryName' | 'amount']
   toggleDone: [id: string, isDone: boolean]
@@ -74,7 +76,7 @@ const {
   openDeleteDialog,
   deleteTransaction,
 } = useDeleteTransactionDialog(
-  () => emit('deleted'),
+  (result) => emit('deleted', result),
   (message) => emit('error', message),
 )
 
@@ -217,6 +219,12 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
                   :spent-cents="budgetSpending[transaction.id] ?? 0"
                   :plan-date="planDate"
                 />
+                <InstallmentRateBadge
+                  v-if="transaction.ratePosition !== null"
+                  :installment-name="transaction.installmentName"
+                  :rate-position="transaction.ratePosition"
+                  :rate-total="transaction.rateTotal"
+                />
               </div>
             </TableCell>
 
@@ -286,7 +294,11 @@ function isTransactionReadOnly(transaction: TransactionWithCategory): boolean {
                       <Pencil class="size-4" />
                       Bearbeiten
                     </DropdownMenuItem>
-                    <DropdownMenuItem @click="emit('move', transaction)">
+                    <!-- Raten-Posten sind an ihren Plan gebunden -->
+                    <DropdownMenuItem
+                      v-if="transaction.ratePosition === null"
+                      @click="emit('move', transaction)"
+                    >
                       <ArrowRightLeft class="size-4" />
                       Verschieben
                     </DropdownMenuItem>
