@@ -2,6 +2,8 @@ import { db } from '@/db/database'
 import { plan } from '@/db/schema/plans'
 import { and, asc, desc, eq, gte, like, or } from 'drizzle-orm'
 import { buildSetValues } from '@/lib/db/partial-update'
+import { formatYearMonth } from '@/lib/dates'
+import { syncInstallmentsIntoPlan } from '@/lib/installments'
 
 // Infer types from Drizzle schema
 export type Plan = typeof plan.$inferSelect
@@ -96,6 +98,9 @@ export async function getPlanById(id: string): Promise<Plan | undefined> {
 
 /**
  * Create a new plan
+ *
+ * Pulls every eligible Ratenzahlung into the fresh plan right away, so
+ * installments show up in the balance without a manual step.
  */
 export async function createPlan(input: CreatePlanInput): Promise<Plan> {
   const now = new Date()
@@ -110,7 +115,10 @@ export async function createPlan(input: CreatePlanInput): Promise<Plan> {
       updatedAt: now,
     })
     .returning()
-  return result[0]
+
+  const created = result[0]
+  await syncInstallmentsIntoPlan(created.id)
+  return created
 }
 
 /**
@@ -153,13 +161,6 @@ export async function deletePlan(id: string): Promise<boolean> {
     .where(eq(plan.id, id))
     .returning({ id: plan.id })
   return result.length > 0
-}
-
-/**
- * Format a date as a `YYYY-MM` month key.
- */
-export function formatYearMonth(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
 /**

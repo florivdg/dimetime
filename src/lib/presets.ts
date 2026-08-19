@@ -15,6 +15,7 @@ import {
 import { createTransaction, type CreateTransactionInput } from './transactions'
 import { getPlanById } from './plans'
 import { buildSetValues } from '@/lib/db/partial-update'
+import { currentMonth, resolveDueDate } from '@/lib/dates'
 import { orDefault, orNull } from '@/lib/defaults'
 import { presetMatchesPlanMonth } from './preset-matching'
 
@@ -244,11 +245,6 @@ export async function getPresetsByIds(
     .where(inArray(transactionPreset.id, ids))
 }
 
-function getCurrentMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
 function buildPresetInsertValues(
   userId: string,
   input: CreatePresetInput,
@@ -260,7 +256,7 @@ function buildPresetInsertValues(
     type: orDefault(input.type, 'expense'),
     amount: input.amount,
     recurrence: orDefault(input.recurrence, 'einmalig'),
-    startMonth: orDefault(input.startMonth, getCurrentMonth()),
+    startMonth: orDefault(input.startMonth, currentMonth()),
     endDate: orNull(input.endDate),
     categoryId: orNull(input.categoryId),
     dayOfMonth: orNull(input.dayOfMonth),
@@ -348,19 +344,6 @@ export async function deletePreset(id: string): Promise<boolean> {
   return result.length > 0
 }
 
-function resolvePresetDueDate(
-  planDate: string,
-  presetDayOfMonth: number | null,
-  override?: string,
-): string {
-  if (override) return override
-  if (!presetDayOfMonth) return planDate
-  const [year, month] = planDate.split('-').map(Number)
-  const lastDayOfMonth = new Date(year, month, 0).getDate()
-  const day = Math.min(presetDayOfMonth, lastDayOfMonth)
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
-
 async function loadPresetAndPlan(presetId: string, planId: string) {
   const preset = await getPresetById(presetId)
   if (!preset) throw new Error('Preset nicht gefunden')
@@ -383,7 +366,7 @@ export async function applyPresetToPlan(
     name: preset.name,
     note: preset.note,
     type: preset.type,
-    dueDate: resolvePresetDueDate(plan.date, preset.dayOfMonth, input.dueDate),
+    dueDate: resolveDueDate(plan.date, preset.dayOfMonth, input.dueDate),
     amount: preset.amount,
     isDone: false,
     isBudget: preset.isBudget,

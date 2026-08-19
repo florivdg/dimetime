@@ -4,8 +4,10 @@ import {
   seedBankTransactionSplit,
   seedCategory,
   seedImportSource,
+  seedInstallmentPlan,
   seedPlan,
   seedPlannedTransaction,
+  seedUser,
 } from '@/lib/__fixtures__/seeds'
 import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
@@ -203,6 +205,7 @@ describe('validateTransactionPlanChange', () => {
       planId,
       undefined,
       async () => ({ isArchived: false }),
+      null,
     )
     expect(result).toBeNull()
   })
@@ -211,9 +214,8 @@ describe('validateTransactionPlanChange', () => {
     const result = await validateTransactionPlanChange(
       planId,
       planId,
-      async () => ({
-        isArchived: false,
-      }),
+      async () => ({ isArchived: false }),
+      null,
     )
     expect(result?.status).toBe(400)
   })
@@ -223,6 +225,7 @@ describe('validateTransactionPlanChange', () => {
       planId,
       'missing',
       async () => undefined,
+      null,
     )
     expect(result?.status).toBe(404)
   })
@@ -232,6 +235,7 @@ describe('validateTransactionPlanChange', () => {
       planId,
       'p-other',
       async () => ({ isArchived: true }),
+      null,
     )
     expect(result?.status).toBe(403)
   })
@@ -241,8 +245,23 @@ describe('validateTransactionPlanChange', () => {
       planId,
       'p-other',
       async () => ({ isArchived: false }),
+      null,
     )
     expect(result).toBeNull()
+  })
+
+  it('rejects moving an installment-linked row with 409', async () => {
+    const result = await validateTransactionPlanChange(
+      planId,
+      'p-other',
+      async () => ({ isArchived: false }),
+      'ip1',
+    )
+    expect(result).toEqual({
+      message:
+        'Raten-Posten können nicht in einen anderen Plan verschoben werden',
+      status: 409,
+    })
   })
 })
 
@@ -513,5 +532,67 @@ describe('getBudgetSpendingForPlan', () => {
 
     const spending = await getBudgetSpendingForPlan(planId)
     expect(spending['budget-a']).toBe(1500)
+  })
+})
+
+describe('getTransactions installment badges', () => {
+  beforeEach(async () => {
+    await seedUser(testDb, { id: 'u1' })
+    await seedInstallmentPlan(testDb, {
+      id: 'ip-1',
+      name: 'Laptop',
+      totalInstallments: 12,
+      prepaidInstallments: 3,
+      userId: 'u1',
+    })
+    await insertTx('rate-1', {
+      name: 'Laptop',
+      dueDate: '2026-03-01',
+      installmentId: 'ip-1',
+    })
+    // Second rate lives in another plan: (plan_id, installment_id) is unique
+    await insertPlan('plan-2')
+    await insertTx('rate-2', {
+      name: 'Laptop',
+      dueDate: '2026-04-01',
+      planId: 'plan-2',
+      installmentId: 'ip-1',
+    })
+    await insertTx('plain', { name: 'Miete', dueDate: '2026-03-05' })
+  })
+
+  it('adds the rate position to installment-linked rows of a plan', async () => {
+    const { transactions } = await getTransactions({ planId })
+    const byId = new Map(transactions.map((t) => [t.id, t]))
+
+    expect(byId.get('rate-1')?.installmentName).toBe('Laptop')
+    expect(byId.get('rate-1')?.ratePosition).toBe(4)
+    expect(byId.get('rate-1')?.rateTotal).toBe(12)
+
+    // The rank counts across plans, not just within the queried one
+    const second = await getTransactions({ planId: 'plan-2' })
+    expect(second.transactions[0].ratePosition).toBe(5)
+  })
+
+  it('leaves regular rows of a plan without badge fields', async () => {
+    const { transactions } = await getTransactions({
+      planId,
+      search: 'Miete',
+    })
+    expect(transactions[0].installmentName).toBeNull()
+    expect(transactions[0].ratePosition).toBeNull()
+    expect(transactions[0].rateTotal).toBeNull()
+  })
+
+  it('omits the badges entirely on an unscoped query', async () => {
+    const { transactions } = await getTransactions({
+      sortBy: 'dueDate',
+      sortDir: 'asc',
+    })
+    const byId = new Map(transactions.map((t) => [t.id, t]))
+
+    expect(byId.get('rate-1')?.installmentName).toBeNull()
+    expect(byId.get('rate-1')?.ratePosition).toBeNull()
+    expect(byId.get('rate-1')?.rateTotal).toBeNull()
   })
 })

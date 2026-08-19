@@ -1,0 +1,58 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import Dashboard from '@/components/Dashboard.vue'
+import InstallmentsManager from '@/components/installments/InstallmentsManager.vue'
+import { getInstallmentOverview } from '@/lib/installments'
+import { currentMonth } from '@/lib/dates'
+import { getAllCategories } from '@/lib/categories'
+import { getSidebarPlans } from '@/lib/plans'
+import { getPlanDisplayName } from '@/lib/format'
+
+const userId = Astro.locals.user?.id
+if (!userId) {
+  return Astro.redirect('/login')
+}
+
+// Load all data in parallel
+const [overview, categories, { currentMonth: currentPlan, latest }] =
+  await Promise.all([
+    getInstallmentOverview(currentMonth()),
+    getAllCategories(),
+    getSidebarPlans(),
+  ])
+
+// Sidebar plan items
+const planItems: { title: string; url: string }[] = []
+if (currentPlan) {
+  planItems.push({
+    title: getPlanDisplayName(currentPlan.name, currentPlan.date),
+    url: `/plans/${currentPlan.id}`,
+  })
+}
+if (latest && latest.id !== currentPlan?.id) {
+  planItems.push({
+    title: getPlanDisplayName(latest.name, latest.date),
+    url: `/plans/${latest.id}`,
+  })
+}
+---
+
+<Layout>
+  <Dashboard
+    client:load
+    currentPath={Astro.url.pathname}
+    breadcrumbs={[{ label: 'Ratenzahlungen' }]}
+    planItems={planItems}
+  >
+    <div class="flex flex-1 flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-semibold tracking-tight">Ratenzahlungen</h1>
+      </div>
+      <InstallmentsManager
+        client:load
+        initialOverview={overview}
+        categories={categories}
+      />
+    </div>
+  </Dashboard>
+</Layout>

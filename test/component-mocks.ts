@@ -49,10 +49,17 @@ export const shadcnInput = {
 }
 export const shadcnCard = {
   Card: passthrough('section'),
+  CardAction: passthrough(),
   CardContent: passthrough(),
   CardDescription: passthrough('p'),
   CardHeader: passthrough('header'),
   CardTitle: passthrough('h2'),
+}
+export const shadcnProgress = {
+  Progress: defineComponent({
+    props: ['modelValue'],
+    setup: (props) => () => h('div', { 'data-progress': props.modelValue }),
+  }),
 }
 export const shadcnForm = {
   Form: passthrough(),

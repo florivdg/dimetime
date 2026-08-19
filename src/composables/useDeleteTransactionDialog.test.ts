@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import type { DeleteTransactionResult } from './useDeleteTransactionDialog'
 import { useDeleteTransactionDialog } from './useDeleteTransactionDialog'
 
 const sampleTx = {
@@ -70,6 +71,33 @@ describe('useDeleteTransactionDialog', () => {
     expect(fetchCalls[0].url).toBe('/api/transactions/tx-1')
     expect(fetchCalls[0].init?.method).toBe('DELETE')
     expect(deletedEmitted).toBe(true)
+  })
+
+  it('forwards the installment skip reported by the API', async () => {
+    fetchResponse = new Response(
+      JSON.stringify({ success: true, installmentSkipped: true }),
+      { status: 200 },
+    )
+    const results: DeleteTransactionResult[] = []
+    const { deleteTransaction } = useDeleteTransactionDialog(
+      (value) => results.push(value),
+      () => undefined,
+    )
+    await deleteTransaction('tx-1')
+    expect(results).toEqual([{ installmentSkipped: true }])
+  })
+
+  it('reports no skip for a regular transaction', async () => {
+    fetchResponse = new Response(JSON.stringify({ success: true }), {
+      status: 200,
+    })
+    const results: DeleteTransactionResult[] = []
+    const { deleteTransaction } = useDeleteTransactionDialog(
+      (value) => results.push(value),
+      () => undefined,
+    )
+    await deleteTransaction('tx-1')
+    expect(results).toEqual([{ installmentSkipped: false }])
   })
 
   it('emits error with API message on non-ok response', async () => {

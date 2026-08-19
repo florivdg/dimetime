@@ -5,6 +5,7 @@ import type { Category } from '@/lib/categories'
 import type { Plan } from '@/lib/plans'
 import type { PlanBalance } from '@/lib/transactions'
 import type { FilterState } from './PlanTransactionFilters.vue'
+import type { DeleteTransactionResult } from '@/composables/useDeleteTransactionDialog'
 import { useUrlState } from '@/composables/useUrlState'
 import { usePresetDialog } from '@/composables/usePresetDialog'
 import { toggleSort } from '@/lib/table-sort'
@@ -399,7 +400,10 @@ function handleCreated() {
   reloadPlanData()
 }
 
-function handleDeleted() {
+function handleDeleted(result: DeleteTransactionResult) {
+  if (result.installmentSkipped) {
+    toast.info('Rate wird in diesem Monat ausgesetzt.')
+  }
   reloadPlanData()
 }
 

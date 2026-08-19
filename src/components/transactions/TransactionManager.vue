@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
+import type { DeleteTransactionResult } from '@/composables/useDeleteTransactionDialog'
 import { useUrlState } from '@/composables/useUrlState'
 import { usePresetDialog } from '@/composables/usePresetDialog'
 import { toggleSort } from '@/lib/table-sort'
@@ -27,6 +28,7 @@ import { Button } from '@/components/ui/button'
 import { Receipt, Search, X } from 'lucide-vue-next'
 import PresetCreateDialog from '@/components/presets/PresetCreateDialog.vue'
 import TransactionTable from './TransactionTable.vue'
+import { toast } from 'vue-sonner'
 
 const props = withDefaults(
   defineProps<{
@@ -210,7 +212,10 @@ function handleUpdated() {
   loadTransactions()
 }
 
-function handleDeleted() {
+function handleDeleted(result: DeleteTransactionResult) {
+  if (result.installmentSkipped) {
+    toast.info('Rate wird in diesem Monat ausgesetzt.')
+  }
   loadTransactions()
 }
 

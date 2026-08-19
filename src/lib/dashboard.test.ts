@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { monthOffsetDate } from '@/lib/__fixtures__/dates'
+import { currentMonth } from '@/lib/dates'
 import {
   seedCategory,
+  seedInstallmentPlan,
   seedPlan,
   seedPlannedTransaction,
+  seedUser,
 } from '@/lib/__fixtures__/seeds'
 import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
@@ -295,5 +298,79 @@ describe('getMonthlyChartData', () => {
   it('handles year range (since January)', async () => {
     const result = await getMonthlyChartData('year')
     expect(Array.isArray(result)).toBe(true)
+  })
+})
+
+describe('getDashboardStats installments', () => {
+  const thisMonth = currentMonth()
+
+  beforeEach(async () => {
+    await seedUser(testDb, { id: 'u1' })
+    await insertPlanForCurrentMonth('p-current')
+  })
+
+  it('reports zeros when no installment plan exists', async () => {
+    const stats = await getDashboardStats()
+    expect(stats.installments).toEqual({
+      monthlyLoad: 0,
+      totalRemainingSum: 0,
+      top: [],
+    })
+  })
+
+  it('aggregates a running installment plan', async () => {
+    await seedInstallmentPlan(testDb, {
+      id: 'ip-running',
+      name: 'Sofa',
+      amount: 7990,
+      totalInstallments: 12,
+      prepaidInstallments: 2,
+      startMonth: thisMonth,
+    })
+
+    const stats = await getDashboardStats()
+    expect(stats.installments.monthlyLoad).toBe(7990)
+    expect(stats.installments.totalRemainingSum).toBe(10 * 7990)
+    expect(stats.installments.top).toEqual([
+      {
+        id: 'ip-running',
+        name: 'Sofa',
+        amount: 7990,
+        paidCount: 2,
+        totalInstallments: 12,
+      },
+    ])
+  })
+
+  it('ignores paid-off plans', async () => {
+    await seedInstallmentPlan(testDb, {
+      id: 'ip-completed',
+      name: 'Abgelöst',
+      amount: 5000,
+      startMonth: thisMonth,
+      completedAt: new Date(),
+    })
+
+    const stats = await getDashboardStats()
+    expect(stats.installments.monthlyLoad).toBe(0)
+    expect(stats.installments.totalRemainingSum).toBe(0)
+    expect(stats.installments.top).toEqual([])
+  })
+
+  it('keeps only the three biggest rates, highest first', async () => {
+    const rates = [1000, 4000, 2000, 3000]
+    for (const [index, amount] of rates.entries()) {
+      await seedInstallmentPlan(testDb, {
+        id: `ip-${index}`,
+        name: `Rate ${index}`,
+        amount,
+        startMonth: thisMonth,
+      })
+    }
+
+    const stats = await getDashboardStats()
+    expect(stats.installments.top.map((entry) => entry.amount)).toEqual([
+      4000, 3000, 2000,
+    ])
   })
 })
