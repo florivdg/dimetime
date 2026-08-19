@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.13.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.12.2...v0.13.0)
+
+### 🚀 Enhancements
+
+- **installments:** Ratenzahlungen mit automatischer Monatsplan-Integration und Dashboard-Karte ([82cf42b](https://github.com/florivdg/dimetime/commit/82cf42b))
+
+### 🩹 Fixes
+
+- **auth:** 2FA-Anmeldung reparieren — fehlende Lockout-Spalten ergänzen ([bb454c1](https://github.com/florivdg/dimetime/commit/bb454c1))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.12.2
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.12.1...v0.12.2)
