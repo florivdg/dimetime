@@ -1,13 +1,17 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DashboardStats } from '@/lib/dashboard'
 import DashboardBalanceCard from './DashboardBalanceCard.vue'
 import DashboardPendingCard from './DashboardPendingCard.vue'
 import DashboardCategoriesCard from './DashboardCategoriesCard.vue'
+import DashboardInstallmentsCard from './DashboardInstallmentsCard.vue'
 import DashboardMonthlyChart from './DashboardMonthlyChart.vue'
 
-defineProps<{
+const props = defineProps<{
   stats: DashboardStats
 }>()
+
+const hasInstallments = computed(() => props.stats.installments.top.length > 0)
 </script>
 
 <template>
@@ -42,8 +46,13 @@ defineProps<{
         </p>
       </div>
 
-      <!-- Three stat cards -->
-      <div class="grid gap-4 md:grid-cols-3">
+      <!-- Stat cards; the installments card only joins when rates are running -->
+      <div
+        class="grid gap-4"
+        :class="
+          hasInstallments ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'
+        "
+      >
         <DashboardBalanceCard
           :plan-name="stats.currentPlan.name"
           :plan-date="stats.currentPlan.date"
@@ -58,6 +67,12 @@ defineProps<{
           :expense-total="stats.pendingTransactions.expenseTotal"
         />
         <DashboardCategoriesCard :categories="stats.topCategories" />
+        <DashboardInstallmentsCard
+          v-if="hasInstallments"
+          :monthly-load="stats.installments.monthlyLoad"
+          :total-remaining-sum="stats.installments.totalRemainingSum"
+          :installments="stats.installments.top"
+        />
       </div>
 
       <!-- Full-width chart -->

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { BadgeCheck, Edit2, Trash2 } from 'lucide-vue-next'
-import { formatMonthNumeric } from './installment-format'
+import { formatMonthNumeric, ratePercent } from './installment-format'
 
 const props = defineProps<{
   installment: InstallmentPlanWithStats
@@ -21,13 +21,9 @@ const emit = defineEmits<{
 
 const isCompleted = computed(() => props.installment.completedAt !== null)
 
-/** Share of the installments already paid, clamped to 0–100. */
-const progressPercent = computed(() => {
-  const { paidCount, totalInstallments } = props.installment
-  if (totalInstallments <= 0) return 0
-  const percent = (paidCount / totalInstallments) * 100
-  return Math.min(100, Math.max(0, Math.round(percent)))
-})
+const progressPercent = computed(() =>
+  ratePercent(props.installment.paidCount, props.installment.totalInstallments),
+)
 
 const endMonth = computed(() =>
   props.installment.projectedEndMonth

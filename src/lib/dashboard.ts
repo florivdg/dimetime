@@ -3,6 +3,8 @@ import { plannedTransaction, category, plan } from '@/db/schema/plans'
 import { and, asc, count, desc, eq, gte, sql, sum } from 'drizzle-orm'
 import { getActivePlan, type Plan } from '@/lib/plans'
 import { getPlanBalance } from '@/lib/transactions'
+import { getInstallmentSummary } from '@/lib/installments'
+import { currentMonth } from '@/lib/dates'
 
 // Dashboard stats types
 export interface CurrentPlanStats {
@@ -29,10 +31,26 @@ export interface TopCategory {
   percentage: number
 }
 
+export interface DashboardInstallment {
+  id: string
+  name: string
+  amount: number // Monthly rate in cents
+  paidCount: number
+  totalInstallments: number
+}
+
+export interface InstallmentsStats {
+  monthlyLoad: number // Cents due in the current month
+  totalRemainingSum: number // Cents
+  /** Up to 3 running plans, highest rate first; empty when none run. */
+  top: DashboardInstallment[]
+}
+
 export interface DashboardStats {
   currentPlan: CurrentPlanStats | null
   pendingTransactions: PendingTransactionsStats
   topCategories: TopCategory[]
+  installments: InstallmentsStats
 }
 
 export interface MonthlyChartData {
@@ -151,16 +169,41 @@ async function getTopCategories(planId: string): Promise<TopCategory[]> {
 }
 
 /**
+ * Monthly load, remaining debt and the biggest running installment plans.
+ * Everything comes from the Ratenzahlungen summary, which already ignores
+ * paid-off plans.
+ */
+async function getInstallmentsStats(): Promise<InstallmentsStats> {
+  const { running, aggregates } = await getInstallmentSummary(currentMonth())
+
+  return {
+    monthlyLoad: aggregates.currentMonthlyLoad,
+    totalRemainingSum: aggregates.totalRemainingSum,
+    top: running
+      .toSorted((a, b) => b.amount - a.amount)
+      .slice(0, 3)
+      .map((installment) => ({
+        id: installment.id,
+        name: installment.name,
+        amount: installment.amount,
+        paidCount: installment.paidCount,
+        totalInstallments: installment.totalInstallments,
+      })),
+  }
+}
+
+/**
  * Build full dashboard stats for a specific plan.
  */
 async function buildDashboardStatsForPlan(
   targetPlan: Plan,
   isUpcoming: boolean,
 ): Promise<DashboardStats> {
-  const [balance, pending, categories] = await Promise.all([
+  const [balance, pending, categories, installments] = await Promise.all([
     getPlanBalance(targetPlan.id),
     getPendingTransactionsStats(targetPlan.id),
     getTopCategories(targetPlan.id),
+    getInstallmentsStats(),
   ])
 
   return {
@@ -173,6 +216,7 @@ async function buildDashboardStatsForPlan(
     },
     pendingTransactions: pending,
     topCategories: categories,
+    installments,
   }
 }
 
@@ -192,6 +236,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         expenseTotal: 0,
       },
       topCategories: [],
+      installments: { monthlyLoad: 0, totalRemainingSum: 0, top: [] },
     }
   }
 

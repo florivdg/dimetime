@@ -1,14 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
 import type { InstallmentPlanWithStats } from '@/lib/installments'
-
-vi.mock('@/components/ui/progress', () => ({
-  Progress: defineComponent({
-    props: ['modelValue'],
-    setup: () => () => h('div'),
-  }),
-}))
 
 const InstallmentTable = (await import('./InstallmentTable.vue')).default
 

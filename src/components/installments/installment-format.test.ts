@@ -3,6 +3,7 @@ import {
   formatMonthNumeric,
   formatMonthShort,
   monthToDate,
+  ratePercent,
 } from './installment-format'
 
 describe('monthToDate', () => {
@@ -23,5 +24,19 @@ describe('formatMonthNumeric', () => {
 describe('formatMonthShort', () => {
   it('formats a date as a short German month with a 2-digit year', () => {
     expect(formatMonthShort(new Date(2026, 8, 1))).toContain('26')
+  })
+})
+
+describe('ratePercent', () => {
+  it('rounds the share of paid installments', () => {
+    expect(ratePercent(5, 12)).toBe(42)
+  })
+
+  it('caps prepaid overshoot at 100', () => {
+    expect(ratePercent(14, 12)).toBe(100)
+  })
+
+  it('returns 0 without any installment', () => {
+    expect(ratePercent(0, 0)).toBe(0)
   })
 })

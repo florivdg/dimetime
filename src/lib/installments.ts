@@ -75,13 +75,21 @@ export interface InstallmentTimelineMonth {
   total: number
 }
 
+export interface InstallmentAggregates {
+  /** Sum of the rates due in the `today` month. */
+  currentMonthlyLoad: number
+  totalRemainingSum: number
+}
+
+/** The running installments and their aggregates, without the timeline. */
+export interface InstallmentSummary {
+  running: InstallmentPlanWithStats[]
+  aggregates: InstallmentAggregates
+}
+
 export interface InstallmentOverview {
   installments: InstallmentPlanWithStats[]
-  aggregates: {
-    /** Sum of the rates due in the `today` month. */
-    currentMonthlyLoad: number
-    totalRemainingSum: number
-  }
+  aggregates: InstallmentAggregates
   timeline: InstallmentTimelineMonth[]
 }
 
@@ -920,6 +928,7 @@ export async function loadInstallmentBadges(
   return badges
 }
 
+/** A plan still producing rates: not paid off and with installments left. */
 function isRunning(installment: InstallmentPlanWithStats): boolean {
   return !installment.completedAt && installment.remainingCount > 0
 }
@@ -982,24 +991,30 @@ function buildTimeline(
 }
 
 /**
- * Everything the Ratenzahlungen overview page needs: the installments with
- * their counters, the aggregates and the projected monthly load.
+ * The running installments and what they cost — everything a caller needs that
+ * does not care about the paid-off plans or the month-by-month timeline.
  * @param today - Month (YYYY-MM) the projection starts from
  */
-export async function getInstallmentOverview(
+export async function getInstallmentSummary(
   today: string,
-): Promise<InstallmentOverview> {
-  const { plans, projectedMonths, doneMonths } =
-    await loadInstallmentSnapshot(today)
-  const running = plans.filter(isRunning)
+): Promise<InstallmentSummary> {
+  return summarize(await loadInstallmentSnapshot(today), today)
+}
+
+/** Filter a snapshot down to its running plans and sum what they cost. */
+function summarize(
+  snapshot: InstallmentSnapshot,
+  today: string,
+): InstallmentSummary {
+  const running = snapshot.plans.filter(isRunning)
 
   return {
-    installments: plans,
+    running,
     aggregates: {
       currentMonthlyLoad: sumCurrentMonthlyLoad(
         running,
-        projectedMonths,
-        doneMonths,
+        snapshot.projectedMonths,
+        snapshot.doneMonths,
         today,
       ),
       totalRemainingSum: running.reduce(
@@ -1007,6 +1022,23 @@ export async function getInstallmentOverview(
         0,
       ),
     },
-    timeline: buildTimeline(running, projectedMonths, today),
+  }
+}
+
+/**
+ * Everything the Ratenzahlungen overview page needs: the installments with
+ * their counters, the aggregates and the projected monthly load.
+ * @param today - Month (YYYY-MM) the projection starts from
+ */
+export async function getInstallmentOverview(
+  today: string,
+): Promise<InstallmentOverview> {
+  const snapshot = await loadInstallmentSnapshot(today)
+  const { running, aggregates } = summarize(snapshot, today)
+
+  return {
+    installments: snapshot.plans,
+    aggregates,
+    timeline: buildTimeline(running, snapshot.projectedMonths, today),
   }
 }

@@ -28,3 +28,15 @@ export function formatMonthShort(date: Date): string {
     year: '2-digit',
   }).format(date)
 }
+
+/**
+ * Share of the installments already paid, in percent. Rounded and capped at
+ * 100 — `paidCount` may exceed the total when rates were prepaid.
+ */
+export function ratePercent(
+  paidCount: number,
+  totalInstallments: number,
+): number {
+  if (totalInstallments <= 0) return 0
+  return Math.min(100, Math.round((paidCount / totalInstallments) * 100))
+}
