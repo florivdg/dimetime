@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.14.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.13.0...v0.14.0)
+
+### 🚀 Enhancements
+
+- **sidebar:** Alle aktiven Pläne in der Navigation anzeigen ([a022245](https://github.com/florivdg/dimetime/commit/a022245))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.13.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.12.2...v0.13.0)
