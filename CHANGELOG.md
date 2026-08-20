@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.15.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.14.0...v0.15.0)
+
+### 🚀 Enhancements
+
+- **api:** API-Zugriff über benutzererstellte API-Keys ([68e2b79](https://github.com/florivdg/dimetime/commit/68e2b79))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.14.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.13.0...v0.14.0)

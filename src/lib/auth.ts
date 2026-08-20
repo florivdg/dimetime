@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { admin, twoFactor } from 'better-auth/plugins'
 import { passkey } from '@better-auth/passkey'
+import { apiKey } from '@better-auth/api-key'
 import { db } from '@/db/database'
 import * as schema from '@/db/schema/auth'
 
@@ -56,6 +57,16 @@ export const auth = betterAuth({
     }),
     twoFactor({
       issuer: 'DimeTime',
+    }),
+    apiKey({
+      enableSessionForAPIKeys: true,
+      requireName: true,
+      defaultPrefix: 'dt_',
+      rateLimit: {
+        enabled: true,
+        timeWindow: 60_000,
+        maxRequests: 100,
+      },
     }),
   ],
 })

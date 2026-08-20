@@ -1,5 +1,11 @@
 import { relations } from 'drizzle-orm'
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+import {
+  sqliteTable,
+  text,
+  integer,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 import { timestamps } from './_columns'
 
 export const user = sqliteTable('user', {
@@ -116,6 +122,45 @@ export const twoFactor = sqliteTable(
       .references(() => user.id, { onDelete: 'cascade' }),
   },
   (table) => [index('twoFactor_userId_idx').on(table.userId)],
+)
+
+/**
+ * Mirrors the `apikey` model of the official `@better-auth/api-key` plugin.
+ * Field names/types are derived from the plugin's `apiKeySchema` definition.
+ * `referenceId` intentionally has no foreign key: the plugin supports both user
+ * and organization references and declares no relation itself.
+ */
+export const apikey = sqliteTable(
+  'apikey',
+  {
+    id: text('id').primaryKey(),
+    configId: text('config_id').notNull(),
+    name: text('name'),
+    start: text('start'),
+    prefix: text('prefix'),
+    key: text('key').notNull(),
+    referenceId: text('reference_id').notNull(),
+    refillInterval: integer('refill_interval'),
+    refillAmount: integer('refill_amount'),
+    lastRefillAt: integer('last_refill_at', { mode: 'timestamp_ms' }),
+    enabled: integer('enabled', { mode: 'boolean' }).default(true),
+    rateLimitEnabled: integer('rate_limit_enabled', {
+      mode: 'boolean',
+    }).default(true),
+    rateLimitTimeWindow: integer('rate_limit_time_window'),
+    rateLimitMax: integer('rate_limit_max'),
+    requestCount: integer('request_count'),
+    remaining: integer('remaining'),
+    lastRequest: integer('last_request', { mode: 'timestamp_ms' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    ...timestamps(),
+    permissions: text('permissions'),
+    metadata: text('metadata'),
+  },
+  (table) => [
+    index('apikey_referenceId_idx').on(table.referenceId),
+    uniqueIndex('apikey_key_idx').on(table.key),
+  ],
 )
 
 export const sessionRelations = relations(session, ({ one }) => ({

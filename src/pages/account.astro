@@ -1,5 +1,6 @@
 ---
 import AppShell from '@/layouts/AppShell.astro'
+import ApiKeyManager from '@/components/ApiKeyManager.vue'
 import PasskeyManager from '@/components/PasskeyManager.vue'
 import PasswordChangeForm from '@/components/PasswordChangeForm.vue'
 import TwoFactorManager from '@/components/TwoFactorManager.vue'
@@ -8,5 +9,6 @@ import TwoFactorManager from '@/components/TwoFactorManager.vue'
 <AppShell heading="Konto">
   <TwoFactorManager client:load />
   <PasskeyManager client:load />
+  <ApiKeyManager client:load />
   <PasswordChangeForm client:load />
 </AppShell>
