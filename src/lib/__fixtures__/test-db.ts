@@ -128,6 +128,32 @@ const DDL = `
     "updated_at" integer NOT NULL
   );
 
+  CREATE TABLE "installment_plan" (
+    "id" text PRIMARY KEY NOT NULL,
+    "name" text NOT NULL,
+    "note" text,
+    "amount" integer NOT NULL,
+    "total_installments" integer NOT NULL,
+    "prepaid_installments" integer DEFAULT 0 NOT NULL,
+    "start_month" text NOT NULL,
+    "day_of_month" integer,
+    "category_id" text REFERENCES "category"("id") ON DELETE set null,
+    "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE cascade,
+    "completed_at" integer,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  );
+
+  CREATE TABLE "installment_skip" (
+    "id" text PRIMARY KEY NOT NULL,
+    "installment_id" text NOT NULL REFERENCES "installment_plan"("id") ON DELETE cascade,
+    "month" text NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  );
+
+  CREATE UNIQUE INDEX "installmentSkip_installmentId_month_idx" ON "installment_skip"("installment_id","month");
+
   CREATE TABLE "planned_transaction" (
     "id" text PRIMARY KEY NOT NULL,
     "name" text NOT NULL,
@@ -142,8 +168,13 @@ const DDL = `
     "updated_at" integer NOT NULL,
     "plan_id" text REFERENCES "plan"("id") ON DELETE cascade,
     "user_id" text REFERENCES "user"("id") ON DELETE set null,
-    "category_id" text REFERENCES "category"("id") ON DELETE set null
+    "category_id" text REFERENCES "category"("id") ON DELETE set null,
+    "installment_id" text REFERENCES "installment_plan"("id") ON DELETE set null
   );
+
+  CREATE INDEX "plannedTransaction_installmentId_idx" ON "planned_transaction"("installment_id");
+
+  CREATE UNIQUE INDEX "plannedTransaction_planId_installmentId_idx" ON "planned_transaction"("plan_id","installment_id");
 
   CREATE TABLE "transaction_preset" (
     "id" text PRIMARY KEY NOT NULL,
@@ -254,6 +285,8 @@ const TRUNCATE_ORDER = [
   'import_source',
   'transaction_preset',
   'planned_transaction',
+  'installment_skip',
+  'installment_plan',
   'plan',
   'category',
   'user_setting',

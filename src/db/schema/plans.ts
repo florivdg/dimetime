@@ -44,6 +44,57 @@ export const plan = sqliteTable(
   (table) => [index('plan_date_idx').on(table.date)],
 )
 
+// Ratenzahlungen (installment plans)
+export const installmentPlan = sqliteTable(
+  'installment_plan',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    note: text('note'),
+    amount: integer('amount').notNull(), // Monthly rate in cents
+    totalInstallments: integer('total_installments').notNull(),
+    prepaidInstallments: integer('prepaid_installments').notNull().default(0),
+    startMonth: text('start_month').notNull(), // YYYY-MM format
+    dayOfMonth: integer('day_of_month'), // 1-31, nullable; overrides plan date when materializing
+    categoryId: text('category_id').references(() => category.id, {
+      onDelete: 'set null',
+    }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    completedAt: integer('completed_at', { mode: 'timestamp_ms' }), // When paid off / "abgelöst"
+    ...timestamps(),
+  },
+  (table) => [
+    index('installmentPlan_userId_idx').on(table.userId),
+    index('installmentPlan_startMonth_idx').on(table.startMonth),
+    index('installmentPlan_categoryId_idx').on(table.categoryId),
+  ],
+)
+
+// Months an installment plan is explicitly skipped in (tombstones)
+export const installmentSkip = sqliteTable(
+  'installment_skip',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    installmentId: text('installment_id')
+      .notNull()
+      .references(() => installmentPlan.id, { onDelete: 'cascade' }),
+    month: text('month').notNull(), // YYYY-MM format
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex('installmentSkip_installmentId_month_idx').on(
+      table.installmentId,
+      table.month,
+    ),
+  ],
+)
+
 export const plannedTransaction = sqliteTable(
   'planned_transaction',
   {
@@ -60,6 +111,9 @@ export const plannedTransaction = sqliteTable(
     categoryId: text('category_id').references(() => category.id, {
       onDelete: 'set null',
     }),
+    installmentId: text('installment_id').references(() => installmentPlan.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => [
     index('plannedTransaction_planId_idx').on(table.planId),
@@ -67,6 +121,12 @@ export const plannedTransaction = sqliteTable(
     index('plannedTransaction_dueDate_idx').on(table.dueDate),
     index('plannedTransaction_categoryId_idx').on(table.categoryId),
     index('plannedTransaction_type_idx').on(table.type),
+    index('plannedTransaction_installmentId_idx').on(table.installmentId),
+    // SQLite treats NULLs as distinct, so rows without an installment are unaffected
+    uniqueIndex('plannedTransaction_planId_installmentId_idx').on(
+      table.planId,
+      table.installmentId,
+    ),
   ],
 )
 
@@ -77,6 +137,32 @@ export const categoryRelations = relations(category, ({ many }) => ({
 export const planRelations = relations(plan, ({ many }) => ({
   transactions: many(plannedTransaction),
 }))
+
+export const installmentPlanRelations = relations(
+  installmentPlan,
+  ({ one, many }) => ({
+    user: one(user, {
+      fields: [installmentPlan.userId],
+      references: [user.id],
+    }),
+    category: one(category, {
+      fields: [installmentPlan.categoryId],
+      references: [category.id],
+    }),
+    transactions: many(plannedTransaction),
+    skips: many(installmentSkip),
+  }),
+)
+
+export const installmentSkipRelations = relations(
+  installmentSkip,
+  ({ one }) => ({
+    installment: one(installmentPlan, {
+      fields: [installmentSkip.installmentId],
+      references: [installmentPlan.id],
+    }),
+  }),
+)
 
 export const plannedTransactionRelations = relations(
   plannedTransaction,
@@ -92,6 +178,10 @@ export const plannedTransactionRelations = relations(
     category: one(category, {
       fields: [plannedTransaction.categoryId],
       references: [category.id],
+    }),
+    installment: one(installmentPlan, {
+      fields: [plannedTransaction.installmentId],
+      references: [installmentPlan.id],
     }),
   }),
 )

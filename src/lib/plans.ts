@@ -2,6 +2,9 @@ import { db } from '@/db/database'
 import { plan } from '@/db/schema/plans'
 import { and, asc, desc, eq, gte, like, or } from 'drizzle-orm'
 import { buildSetValues } from '@/lib/db/partial-update'
+import { formatYearMonth } from '@/lib/dates'
+import { getPlanDisplayName } from '@/lib/format'
+import { syncInstallmentsIntoPlan } from '@/lib/installments'
 
 // Infer types from Drizzle schema
 export type Plan = typeof plan.$inferSelect
@@ -10,6 +13,8 @@ export type NewPlan = typeof plan.$inferInsert
 // Omit auto-managed fields for create/update inputs
 export type CreatePlanInput = Omit<NewPlan, 'id' | 'createdAt' | 'updatedAt'>
 export type UpdatePlanInput = Partial<CreatePlanInput>
+
+export type SidebarPlanItem = { title: string; url: string }
 
 function buildPlanConditions(
   includeArchived: boolean,
@@ -96,6 +101,9 @@ export async function getPlanById(id: string): Promise<Plan | undefined> {
 
 /**
  * Create a new plan
+ *
+ * Pulls every eligible Ratenzahlung into the fresh plan right away, so
+ * installments show up in the balance without a manual step.
  */
 export async function createPlan(input: CreatePlanInput): Promise<Plan> {
   const now = new Date()
@@ -110,7 +118,10 @@ export async function createPlan(input: CreatePlanInput): Promise<Plan> {
       updatedAt: now,
     })
     .returning()
-  return result[0]
+
+  const created = result[0]
+  await syncInstallmentsIntoPlan(created.id)
+  return created
 }
 
 /**
@@ -153,13 +164,6 @@ export async function deletePlan(id: string): Promise<boolean> {
     .where(eq(plan.id, id))
     .returning({ id: plan.id })
   return result.length > 0
-}
-
-/**
- * Format a date as a `YYYY-MM` month key.
- */
-export function formatYearMonth(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
 /**
@@ -209,22 +213,18 @@ export async function getActivePlan(): Promise<
 }
 
 /**
- * Get the latest (most recent by date) non-archived plan
+ * Get the sidebar navigation entries for all active (non-archived) plans,
+ * newest first.
  */
-async function getLatestPlan(): Promise<Plan | undefined> {
-  return db.query.plan.findFirst({
-    where: eq(plan.isArchived, false),
+export async function getSidebarPlanItems(): Promise<SidebarPlanItem[]> {
+  const plans = await db.query.plan.findMany({
+    where: and(...buildPlanConditions(false, undefined)),
+    columns: { id: true, name: true, date: true },
     orderBy: desc(plan.date),
   })
-}
 
-/**
- * Get sidebar plan data (current month + latest plan)
- */
-export async function getSidebarPlans() {
-  const [currentMonth, latest] = await Promise.all([
-    getCurrentMonthPlan(),
-    getLatestPlan(),
-  ])
-  return { currentMonth, latest }
+  return plans.map((p) => ({
+    title: getPlanDisplayName(p.name, p.date),
+    url: `/plans/${p.id}`,
+  }))
 }

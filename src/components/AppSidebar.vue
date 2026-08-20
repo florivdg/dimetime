@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { SidebarProps } from '@/components/ui/sidebar'
+import type { SidebarPlanItem } from '@/lib/plans'
 
 import {
   BookTemplate,
   CalendarDays,
+  HandCoins,
   Home,
   Landmark,
   LifeBuoy,
@@ -33,7 +35,7 @@ const props = withDefaults(
   defineProps<
     SidebarProps & {
       currentPath?: string
-      planItems?: { title: string; url: string }[]
+      planItems?: SidebarPlanItem[]
     }
   >(),
   {
@@ -64,6 +66,7 @@ const DASHBOARD_OTHER_SECTIONS = [
   '/transactions',
   '/bank-transactions',
   '/presets',
+  '/installments',
 ] as const
 
 function isDashboardActive(): boolean {
@@ -94,8 +97,15 @@ const navMain = computed(() => [
     isActive: isActiveSection('/plans') || isActiveSection('/transactions'),
     defaultOpen: true,
     items: [
-      { title: 'Alle Transaktionen', url: '/transactions' },
-      ...(props.planItems ?? []),
+      {
+        title: 'Alle Transaktionen',
+        url: '/transactions',
+        isActive: isActiveSection('/transactions'),
+      },
+      ...(props.planItems ?? []).map((item) => ({
+        ...item,
+        isActive: path.value === item.url,
+      })),
     ],
   },
   {
@@ -118,6 +128,12 @@ const navMain = computed(() => [
     url: '/presets',
     icon: BookTemplate,
     isActive: isActiveSection('/presets'),
+  },
+  {
+    title: 'Ratenzahlungen',
+    url: '/installments',
+    icon: HandCoins,
+    isActive: isActiveSection('/installments'),
   },
   {
     title: 'Einstellungen',

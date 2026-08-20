@@ -1,0 +1,26 @@
+---
+import AppShell from '@/layouts/AppShell.astro'
+import InstallmentsManager from '@/components/installments/InstallmentsManager.vue'
+import { getInstallmentOverview } from '@/lib/installments'
+import { currentMonth } from '@/lib/dates'
+import { getAllCategories } from '@/lib/categories'
+
+const userId = Astro.locals.user?.id
+if (!userId) {
+  return Astro.redirect('/login')
+}
+
+// Load all data in parallel
+const [overview, categories] = await Promise.all([
+  getInstallmentOverview(currentMonth()),
+  getAllCategories(),
+])
+---
+
+<AppShell heading="Ratenzahlungen">
+  <InstallmentsManager
+    client:load
+    initialOverview={overview}
+    categories={categories}
+  />
+</AppShell>

@@ -28,6 +28,7 @@ defineProps<{
     items?: {
       title: string
       url: string
+      isActive?: boolean
     }[]
   }[]
 }>()
@@ -61,9 +62,9 @@ defineProps<{
               <SidebarMenuSub>
                 <SidebarMenuSubItem
                   v-for="subItem in item.items"
-                  :key="subItem.title"
+                  :key="subItem.url"
                 >
-                  <SidebarMenuSubButton as-child>
+                  <SidebarMenuSubButton as-child :is-active="subItem.isActive">
                     <a :href="subItem.url">
                       <span>{{ subItem.title }}</span>
                     </a>

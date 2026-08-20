@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
+import { formatYearMonth } from '@/lib/dates'
 import { seedPlan } from '@/lib/__fixtures__/seeds'
 import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 
@@ -7,14 +8,13 @@ const testDb = setupTestDb()
 const {
   createPlan,
   deletePlan,
-  formatYearMonth,
   getActivePlan,
   getAllPlans,
   getAvailableYears,
   getCurrentMonthPlan,
   getNextUpcomingPlan,
   getPlanById,
-  getSidebarPlans,
+  getSidebarPlanItems,
   searchPlans,
   updatePlan,
 } = await import('./plans')
@@ -255,14 +255,26 @@ describe('getNextUpcomingPlan', () => {
   })
 })
 
-describe('getSidebarPlans', () => {
-  it('returns current month + latest non-archived plan', async () => {
+describe('getSidebarPlanItems', () => {
+  it('returns all non-archived plans as nav items, newest first', async () => {
     await insertPlan('current', `${monthPrefix()}-01`)
-    await insertPlan('future', '2099-12-01')
+    await insertPlan('future', '2099-12-01', { name: 'Urlaub' })
+    await insertPlan('past', '2020-01-01')
     await insertPlan('archived', '2099-12-15', { isArchived: true })
-    const result = await getSidebarPlans()
-    expect(result.currentMonth?.id).toBe('current')
-    expect(result.latest?.id).toBe('future')
+
+    const items = await getSidebarPlanItems()
+
+    expect(items.map((i) => i.url)).toEqual([
+      '/plans/future',
+      `/plans/current`,
+      '/plans/past',
+    ])
+    expect(items[0].title).toBe('Urlaub')
+    expect(items[2].title).toBe('Januar 2020')
+  })
+
+  it('returns an empty list when no plans exist', async () => {
+    expect(await getSidebarPlanItems()).toEqual([])
   })
 })
 

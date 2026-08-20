@@ -1,7 +1,13 @@
 import { ref } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 
-type EmitDeleted = () => void
+/** What the DELETE route reports back about an installment-linked row. */
+export interface DeleteTransactionResult {
+  /** True when the month was tombstoned for the linked installment plan. */
+  installmentSkipped: boolean
+}
+
+type EmitDeleted = (result: DeleteTransactionResult) => void
 type EmitError = (message: string) => void
 
 export function useDeleteTransactionDialog(
@@ -25,7 +31,10 @@ export function useDeleteTransactionDialog(
         const data = await response.json()
         throw new Error(data.error || 'Fehler beim Löschen')
       }
-      emitDeleted()
+      const result = (await response
+        .json()
+        .catch(() => ({}))) as Partial<DeleteTransactionResult>
+      emitDeleted({ installmentSkipped: result.installmentSkipped === true })
     } catch (error) {
       emitError(
         error instanceof Error

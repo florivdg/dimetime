@@ -11,6 +11,7 @@ import {
   shadcnInputGroup,
   shadcnLabel,
   shadcnPinInput,
+  shadcnProgress,
   shadcnSelect,
   shadcnTable,
   shadcnTooltip,
@@ -19,8 +20,8 @@ import {
 // Globally stub the shadcn-vue / reka-ui wrappers that component tests mount.
 // These are pure pass-through stubs, so every `.vitest.ts` file can rely on the
 // same stubs without re-declaring the `vi.mock(...)` block. File-specific UI
-// modules (sidebar, stepper, pagination, switch, separator, progress) stay
-// mocked in their single owning test.
+// modules (sidebar, stepper, pagination, switch, separator) stay mocked in
+// their single owning test.
 vi.mock('@/components/ui/button', () => shadcnButton)
 vi.mock('@/components/ui/input', () => shadcnInput)
 vi.mock('@/components/ui/select', () => shadcnSelect)
@@ -35,6 +36,7 @@ vi.mock('@/components/ui/input-group', () => shadcnInputGroup)
 vi.mock('@/components/ui/pin-input', () => shadcnPinInput)
 vi.mock('@/components/ui/label', () => shadcnLabel)
 vi.mock('@/components/ui/checkbox', () => shadcnCheckbox)
+vi.mock('@/components/ui/progress', () => shadcnProgress)
 
 if (typeof globalThis.fetch === 'undefined') {
   globalThis.fetch = vi.fn(() =>

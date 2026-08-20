@@ -1,0 +1,47 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import Dashboard from '@/components/Dashboard.vue'
+import { getSidebarPlanItems } from '@/lib/plans'
+
+interface Props {
+  /** Überschrift der Seite (<h1>). Ohne Angabe wird keine Kopfzeile gerendert. */
+  heading?: string
+  /**
+   * Brotkrumen unterhalb von "Home". Ohne Angabe wird die Überschrift
+   * als einzelne Brotkrume verwendet.
+   */
+  breadcrumbs?: { label: string; href?: string }[]
+  /** Dokumententitel, falls er von der Überschrift abweicht. */
+  title?: string
+}
+
+const { heading, breadcrumbs, title } = Astro.props
+
+// Auf der Startseite verweist bereits "Home" auf die Seite selbst,
+// eine zweite Brotkrume wäre dort doppelt.
+const isHome = Astro.url.pathname === '/'
+const crumbs = breadcrumbs ?? (heading && !isHome ? [{ label: heading }] : [])
+
+// Alle Seiten mit Sidebar brauchen dieselben Plan-Einträge
+const planItems = await getSidebarPlanItems()
+---
+
+<Layout title={title ?? heading}>
+  <Dashboard
+    client:load
+    currentPath={Astro.url.pathname}
+    breadcrumbs={crumbs}
+    planItems={planItems}
+  >
+    <div class="flex flex-1 flex-col gap-4">
+      {
+        heading && (
+          <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-semibold tracking-tight">{heading}</h1>
+          </div>
+        )
+      }
+      <slot />
+    </div>
+  </Dashboard>
+</Layout>

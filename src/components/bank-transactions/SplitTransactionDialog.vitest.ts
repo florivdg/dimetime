@@ -2,12 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 
-vi.mock('@/components/ui/progress', () => ({
-  Progress: defineComponent({
-    props: ['modelValue'],
-    setup: () => () => h('div'),
-  }),
-}))
 vi.mock('@/components/ui/separator', () => ({
   Separator: defineComponent({ setup: () => () => h('hr') }),
 }))
