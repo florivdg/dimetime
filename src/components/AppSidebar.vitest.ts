@@ -22,7 +22,7 @@ vi.mock('@/components/NavMain.vue', () => ({
     name: 'NavMain',
     props: ['items'],
     template:
-      '<div class="nav-main">{{ items.map(i => i.title + (i.isActive ? "*" : "")).join("|") }}</div>',
+      '<div class="nav-main">{{ items.map(i => i.title + (i.isActive ? "*" : "")).join("|") }}<div class="nav-sub">{{ (items.find(i => i.title === "Pläne")?.items ?? []).map(s => s.title + (s.isActive ? "*" : "")).join("|") }}</div></div>',
   },
 }))
 
@@ -79,6 +79,20 @@ describe('AppSidebar.vue', () => {
       props: { currentPath: '/import-sources' },
     })
     expect(wrapper.find('.nav-main').text()).toContain('Kontoauszüge*')
+  })
+
+  it('lists all plan items below Pläne', () => {
+    const wrapper = mount(AppSidebar, {
+      props: {
+        currentPath: '/plans/abc',
+        planItems: [
+          { title: 'August 2026', url: '/plans/abc' },
+          { title: 'Juli 2026', url: '/plans/def' },
+        ],
+      },
+    })
+    const text = wrapper.find('.nav-sub').text()
+    expect(text).toBe('Alle Transaktionen|August 2026*|Juli 2026')
   })
 
   it('renders user info from session', () => {

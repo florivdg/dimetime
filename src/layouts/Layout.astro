@@ -5,6 +5,13 @@ import 'vue-sonner/style.css'
 import { Toaster } from '@/components/ui/sonner'
 import { apiToLocalTheme } from '@/lib/sync-settings'
 
+interface Props {
+  /** Prefixed to the document title, e.g. "August 2026 · DimeTime". */
+  title?: string
+}
+
+const { title } = Astro.props
+
 const serverTheme = Astro.locals.userSettings?.themePreference ?? null
 const localStorageTheme = serverTheme ? apiToLocalTheme(serverTheme) : null
 ---
@@ -37,7 +44,7 @@ const localStorageTheme = serverTheme ? apiToLocalTheme(serverTheme) : null
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
     <Font cssVariable="--font-inter" preload />
-    <title>DimeTime</title>
+    <title>{title ? `${title} · DimeTime` : 'DimeTime'}</title>
   </head>
   <body
     class="bg-background text-foreground min-h-screen font-sans antialiased"

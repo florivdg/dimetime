@@ -15,68 +15,62 @@ const hasInstallments = computed(() => props.stats.installments.top.length > 0)
 </script>
 
 <template>
-  <div class="flex flex-1 flex-col gap-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+  <!-- No plan state -->
+  <div
+    v-if="!stats.currentPlan"
+    class="bg-muted/50 flex flex-1 items-center justify-center rounded-xl p-6"
+  >
+    <div class="text-center">
+      <p class="text-muted-foreground text-lg">Kein aktiver Plan vorhanden</p>
+      <p class="text-muted-foreground mt-1 text-sm">
+        Erstelle einen neuen Plan, um loszulegen.
+      </p>
     </div>
-
-    <!-- No plan state -->
-    <div
-      v-if="!stats.currentPlan"
-      class="bg-muted/50 flex flex-1 items-center justify-center rounded-xl p-6"
-    >
-      <div class="text-center">
-        <p class="text-muted-foreground text-lg">Kein aktiver Plan vorhanden</p>
-        <p class="text-muted-foreground mt-1 text-sm">
-          Erstelle einen neuen Plan, um loszulegen.
-        </p>
-      </div>
-    </div>
-
-    <!-- Dashboard with data -->
-    <template v-else>
-      <!-- Upcoming plan notice -->
-      <div
-        v-if="stats.currentPlan.isUpcoming"
-        class="bg-muted/50 rounded-xl p-3 text-sm"
-      >
-        <p class="text-muted-foreground">
-          Kein Plan für den aktuellen Monat vorhanden. Hier ist dein nächster
-          anstehender Plan.
-        </p>
-      </div>
-
-      <!-- Stat cards; the installments card only joins when rates are running -->
-      <div
-        class="grid gap-4"
-        :class="
-          hasInstallments ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'
-        "
-      >
-        <DashboardBalanceCard
-          :plan-name="stats.currentPlan.name"
-          :plan-date="stats.currentPlan.date"
-          :is-upcoming="stats.currentPlan.isUpcoming"
-          :income="stats.currentPlan.income"
-          :expense="stats.currentPlan.expense"
-          :net="stats.currentPlan.net"
-        />
-        <DashboardPendingCard
-          :count="stats.pendingTransactions.count"
-          :income-total="stats.pendingTransactions.incomeTotal"
-          :expense-total="stats.pendingTransactions.expenseTotal"
-        />
-        <DashboardCategoriesCard :categories="stats.topCategories" />
-        <DashboardInstallmentsCard
-          v-if="hasInstallments"
-          :monthly-load="stats.installments.monthlyLoad"
-          :total-remaining-sum="stats.installments.totalRemainingSum"
-          :installments="stats.installments.top"
-        />
-      </div>
-
-      <!-- Full-width chart -->
-      <DashboardMonthlyChart />
-    </template>
   </div>
+
+  <!-- Dashboard with data -->
+  <template v-else>
+    <!-- Upcoming plan notice -->
+    <div
+      v-if="stats.currentPlan.isUpcoming"
+      class="bg-muted/50 rounded-xl p-3 text-sm"
+    >
+      <p class="text-muted-foreground">
+        Kein Plan für den aktuellen Monat vorhanden. Hier ist dein nächster
+        anstehender Plan.
+      </p>
+    </div>
+
+    <!-- Stat cards; the installments card only joins when rates are running -->
+    <div
+      class="grid gap-4"
+      :class="
+        hasInstallments ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'
+      "
+    >
+      <DashboardBalanceCard
+        :plan-name="stats.currentPlan.name"
+        :plan-date="stats.currentPlan.date"
+        :is-upcoming="stats.currentPlan.isUpcoming"
+        :income="stats.currentPlan.income"
+        :expense="stats.currentPlan.expense"
+        :net="stats.currentPlan.net"
+      />
+      <DashboardPendingCard
+        :count="stats.pendingTransactions.count"
+        :income-total="stats.pendingTransactions.incomeTotal"
+        :expense-total="stats.pendingTransactions.expenseTotal"
+      />
+      <DashboardCategoriesCard :categories="stats.topCategories" />
+      <DashboardInstallmentsCard
+        v-if="hasInstallments"
+        :monthly-load="stats.installments.monthlyLoad"
+        :total-remaining-sum="stats.installments.totalRemainingSum"
+        :installments="stats.installments.top"
+      />
+    </div>
+
+    <!-- Full-width chart -->
+    <DashboardMonthlyChart />
+  </template>
 </template>

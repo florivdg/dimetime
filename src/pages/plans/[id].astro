@@ -1,8 +1,7 @@
 ---
-import Layout from '@/layouts/Layout.astro'
-import Dashboard from '@/components/Dashboard.vue'
+import AppShell from '@/layouts/AppShell.astro'
 import PlanDetailManager from '@/components/plans/PlanDetailManager.vue'
-import { getPlanById, getSidebarPlans } from '@/lib/plans'
+import { getPlanById } from '@/lib/plans'
 import {
   getTransactions,
   getPlanBalance,
@@ -25,55 +24,32 @@ if (!plan) {
 }
 
 // Load all data in parallel
-const [
-  { transactions },
-  balance,
-  budgetSpending,
-  categories,
-  { currentMonth, latest },
-] = await Promise.all([
-  getTransactions({ planId: id, sortBy: 'dueDate', sortDir: 'asc', limit: -1 }),
-  getPlanBalance(id),
-  getBudgetSpendingForPlan(id),
-  getAllCategories(),
-  getSidebarPlans(),
-])
+const [{ transactions }, balance, budgetSpending, categories] =
+  await Promise.all([
+    getTransactions({
+      planId: id,
+      sortBy: 'dueDate',
+      sortDir: 'asc',
+      limit: -1,
+    }),
+    getPlanBalance(id),
+    getBudgetSpendingForPlan(id),
+    getAllCategories(),
+  ])
 
 const planDisplayName = getPlanDisplayName(plan.name, plan.date)
-const planItems: { title: string; url: string }[] = []
-if (currentMonth) {
-  planItems.push({
-    title: getPlanDisplayName(currentMonth.name, currentMonth.date),
-    url: `/plans/${currentMonth.id}`,
-  })
-}
-if (latest && latest.id !== currentMonth?.id) {
-  planItems.push({
-    title: getPlanDisplayName(latest.name, latest.date),
-    url: `/plans/${latest.id}`,
-  })
-}
 ---
 
-<Layout title={planDisplayName}>
-  <Dashboard
+<AppShell
+  title={planDisplayName}
+  breadcrumbs={[{ label: 'Pläne', href: '/plans' }, { label: planDisplayName }]}
+>
+  <PlanDetailManager
     client:load
-    currentPath={Astro.url.pathname}
-    breadcrumbs={[
-      { label: 'Pläne', href: '/plans' },
-      { label: planDisplayName },
-    ]}
-    planItems={planItems}
-  >
-    <div class="flex flex-1 flex-col gap-4">
-      <PlanDetailManager
-        client:load
-        plan={plan}
-        initialTransactions={transactions}
-        initialBalance={balance}
-        initialBudgetSpending={budgetSpending}
-        categories={categories}
-      />
-    </div>
-  </Dashboard>
-</Layout>
+    plan={plan}
+    initialTransactions={transactions}
+    initialBalance={balance}
+    initialBudgetSpending={budgetSpending}
+    categories={categories}
+  />
+</AppShell>
