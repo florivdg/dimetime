@@ -14,6 +14,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar'
 import AppSidebar from '@/components/AppSidebar.vue'
+import type { SidebarPlanItem } from '@/lib/plans'
 
 defineProps<{
   currentPath: string
@@ -21,10 +22,7 @@ defineProps<{
     label: string
     href?: string
   }[]
-  planItems?: {
-    title: string
-    url: string
-  }[]
+  planItems?: SidebarPlanItem[]
 }>()
 </script>
 

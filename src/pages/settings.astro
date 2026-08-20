@@ -1,29 +1,9 @@
 ---
-import Layout from '@/layouts/Layout.astro'
-import Dashboard from '@/components/Dashboard.vue'
+import AppShell from '@/layouts/AppShell.astro'
 import UserSettings from '@/components/settings/UserSettings.vue'
 import ThemeSettings from '@/components/settings/ThemeSettings.vue'
-import { getSidebarPlans } from '@/lib/plans'
-import { getPlanDisplayName } from '@/lib/format'
 import { getAllSettings } from '@/lib/settings'
 
-// Sidebar plan items
-const { currentMonth, latest } = await getSidebarPlans()
-const planItems: { title: string; url: string }[] = []
-if (currentMonth) {
-  planItems.push({
-    title: getPlanDisplayName(currentMonth.name, currentMonth.date),
-    url: `/plans/${currentMonth.id}`,
-  })
-}
-if (latest && latest.id !== currentMonth?.id) {
-  planItems.push({
-    title: getPlanDisplayName(latest.name, latest.date),
-    url: `/plans/${latest.id}`,
-  })
-}
-
-// Fetch settings once at the top level
 const userId = Astro.locals.user?.id
 if (!userId) {
   return Astro.redirect('/login')
@@ -31,21 +11,9 @@ if (!userId) {
 const initialSettings = await getAllSettings(userId)
 ---
 
-<Layout>
-  <Dashboard
-    client:load
-    currentPath={Astro.url.pathname}
-    breadcrumbs={[{ label: 'Einstellungen' }]}
-    planItems={planItems}
-  >
-    <div class="flex flex-1 flex-col gap-4">
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold tracking-tight">Einstellungen</h1>
-      </div>
-      <div class="flex flex-col gap-6">
-        <ThemeSettings client:load initialSettings={initialSettings} />
-        <UserSettings client:load initialSettings={initialSettings} />
-      </div>
-    </div>
-  </Dashboard>
-</Layout>
+<AppShell heading="Einstellungen">
+  <div class="flex flex-col gap-6">
+    <ThemeSettings client:load initialSettings={initialSettings} />
+    <UserSettings client:load initialSettings={initialSettings} />
+  </div>
+</AppShell>

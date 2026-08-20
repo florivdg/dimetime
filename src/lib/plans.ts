@@ -3,6 +3,7 @@ import { plan } from '@/db/schema/plans'
 import { and, asc, desc, eq, gte, like, or } from 'drizzle-orm'
 import { buildSetValues } from '@/lib/db/partial-update'
 import { formatYearMonth } from '@/lib/dates'
+import { getPlanDisplayName } from '@/lib/format'
 import { syncInstallmentsIntoPlan } from '@/lib/installments'
 
 // Infer types from Drizzle schema
@@ -12,6 +13,8 @@ export type NewPlan = typeof plan.$inferInsert
 // Omit auto-managed fields for create/update inputs
 export type CreatePlanInput = Omit<NewPlan, 'id' | 'createdAt' | 'updatedAt'>
 export type UpdatePlanInput = Partial<CreatePlanInput>
+
+export type SidebarPlanItem = { title: string; url: string }
 
 function buildPlanConditions(
   includeArchived: boolean,
@@ -210,22 +213,18 @@ export async function getActivePlan(): Promise<
 }
 
 /**
- * Get the latest (most recent by date) non-archived plan
+ * Get the sidebar navigation entries for all active (non-archived) plans,
+ * newest first.
  */
-async function getLatestPlan(): Promise<Plan | undefined> {
-  return db.query.plan.findFirst({
-    where: eq(plan.isArchived, false),
+export async function getSidebarPlanItems(): Promise<SidebarPlanItem[]> {
+  const plans = await db.query.plan.findMany({
+    where: and(...buildPlanConditions(false, undefined)),
+    columns: { id: true, name: true, date: true },
     orderBy: desc(plan.date),
   })
-}
 
-/**
- * Get sidebar plan data (current month + latest plan)
- */
-export async function getSidebarPlans() {
-  const [currentMonth, latest] = await Promise.all([
-    getCurrentMonthPlan(),
-    getLatestPlan(),
-  ])
-  return { currentMonth, latest }
+  return plans.map((p) => ({
+    title: getPlanDisplayName(p.name, p.date),
+    url: `/plans/${p.id}`,
+  }))
 }
