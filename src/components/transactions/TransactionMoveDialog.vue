@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2 } from 'lucide-vue-next'
+import WarningNote from '@/components/shared/WarningNote.vue'
+import { useBudgetLinksConfirmation } from '@/composables/useBudgetLinksConfirmation'
 
 const props = defineProps<{
   transaction: TransactionWithCategory | null
@@ -39,11 +41,22 @@ const isLoadingPlans = ref(false)
 const availablePlans = ref<Plan[]>([])
 const selectedPlanId = ref<string | null>(null)
 
+const {
+  needsConfirmation,
+  confirmationWarning,
+  requiresConfirmation,
+  resetConfirmation,
+} = useBudgetLinksConfirmation()
+
 // Filter out current plan and archived plans
 const selectablePlans = computed(() =>
   availablePlans.value.filter(
     (p) => p.id !== props.currentPlanId && !p.isArchived,
   ),
+)
+
+const isMoveDisabled = computed(
+  () => isMoving.value || !selectedPlanId.value || isLoadingPlans.value,
 )
 
 async function loadPlans() {
@@ -64,24 +77,35 @@ async function loadPlans() {
 watch(open, (isOpen) => {
   if (isOpen) {
     selectedPlanId.value = null
+    resetConfirmation()
     loadPlans()
   }
 })
 
+// A different target plan may affect other assignments - ask again
+watch(selectedPlanId, () => resetConfirmation())
+
 async function handleMove() {
   if (!props.transaction || !selectedPlanId.value) return
 
+  const confirmed = needsConfirmation.value
   isMoving.value = true
 
   try {
     const response = await fetch(`/api/transactions/${props.transaction.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planId: selectedPlanId.value }),
+      body: JSON.stringify({
+        planId: selectedPlanId.value,
+        confirmClearBudgetLinks: confirmed,
+      }),
     })
 
     if (!response.ok) {
       const data = await response.json()
+      // Budget assignments would be dropped - show the warning and let the
+      // user retry the very same request as a confirmed move.
+      if (requiresConfirmation(data)) return
       throw new Error(data.error || 'Fehler beim Verschieben')
     }
 
@@ -143,19 +167,19 @@ async function handleMove() {
             Keine anderen aktiven Pläne verfügbar.
           </p>
         </div>
+
+        <WarningNote v-if="needsConfirmation">
+          {{ confirmationWarning }}
+        </WarningNote>
       </div>
 
       <DialogFooter>
         <Button type="button" variant="outline" @click="open = false">
           Abbrechen
         </Button>
-        <Button
-          type="button"
-          :disabled="isMoving || !selectedPlanId || isLoadingPlans"
-          @click="handleMove"
-        >
+        <Button type="button" :disabled="isMoveDisabled" @click="handleMove">
           <Loader2 v-if="isMoving" class="size-4 animate-spin" />
-          Verschieben
+          {{ needsConfirmation ? 'Trotzdem fortfahren' : 'Verschieben' }}
         </Button>
       </DialogFooter>
     </DialogContent>

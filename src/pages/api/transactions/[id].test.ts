@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { installmentSkip, plan, plannedTransaction } from '@/db/schema/plans'
 import {
+  seedBankTransactionSplit,
   seedInstallmentPlan,
   seedPlan,
   seedPlannedTransaction,
+  seedSourceWithBankTransaction,
   seedUser,
 } from '@/lib/__fixtures__/seeds'
 import { setupTestDb } from '@/lib/__fixtures__/test-setup'
@@ -24,6 +26,9 @@ const archivedPlanId = '33333333-3333-4333-8333-333333333333'
 const txId = '44444444-4444-4444-8444-444444444444'
 const userId = '55555555-5555-4555-8555-555555555555'
 const installmentId = '66666666-6666-4666-8666-666666666666'
+const sourceId = '77777777-7777-4777-8777-777777777777'
+const bankTxId = '88888888-8888-4888-8888-888888888888'
+const splitId = '99999999-9999-4999-8999-999999999998'
 
 async function seedPlans() {
   await seedPlan(testDb, { id: planId, date: '2026-03-01', isArchived: false })
@@ -47,6 +52,30 @@ async function seedTx() {
     dueDate: '2026-03-15',
     amount: 1000,
     planId,
+  })
+}
+
+/** Seed a budget transaction with one assigned bank transaction and one split. */
+async function seedBudgetWithLinks() {
+  await seedPlannedTransaction(testDb, {
+    id: txId,
+    name: 'Budget',
+    type: 'expense',
+    dueDate: '2026-03-15',
+    amount: 1000,
+    planId,
+    isBudget: true,
+  })
+  await seedSourceWithBankTransaction(testDb, {
+    sourceId,
+    btId: bankTxId,
+    txOverrides: { planId, budgetId: txId },
+  })
+  await seedBankTransactionSplit(testDb, {
+    id: splitId,
+    bankTransactionId: bankTxId,
+    planId,
+    budgetId: txId,
   })
 }
 
@@ -168,6 +197,38 @@ describe('PUT /api/transactions/[id]', () => {
     expect((await res.json()).error).toBe(
       'Raten-Posten können nicht in einen anderen Plan verschoben werden',
     )
+  })
+
+  it('returns 409 with the affected counts when budget links exist', async () => {
+    await seedBudgetWithLinks()
+    const res = (await PUT(
+      buildApiContext({
+        method: 'PUT',
+        body: { planId: otherPlanId },
+        params: { id: txId },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error:
+        'Bestätigung erforderlich: Diesem Budget sind noch Banktransaktionen oder Splits zugeordnet.',
+      code: 'BUDGET_LINKS_CONFIRMATION_REQUIRED',
+      affectedBankTransactions: 1,
+      affectedSplits: 1,
+    })
+  })
+
+  it('moves the budget once the link removal is confirmed', async () => {
+    await seedBudgetWithLinks()
+    const res = (await PUT(
+      buildApiContext({
+        method: 'PUT',
+        body: { planId: otherPlanId, confirmClearBudgetLinks: true },
+        params: { id: txId },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(200)
+    expect((await res.json()).planId).toBe(otherPlanId)
   })
 
   it('updates and returns the transaction', async () => {

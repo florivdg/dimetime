@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TransactionWithCategory } from '@/lib/transactions'
 import type { Category } from '@/lib/categories'
-import { mutateJson } from '@/lib/http'
+import { useBudgetLinksConfirmation } from '@/composables/useBudgetLinksConfirmation'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -24,6 +24,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Loader2 } from 'lucide-vue-next'
 import AmountInputGroup from '@/components/shared/AmountInputGroup.vue'
+import WarningNote from '@/components/shared/WarningNote.vue'
 
 const props = defineProps<{
   transaction: TransactionWithCategory | null
@@ -38,6 +39,8 @@ const emit = defineEmits<{
 }>()
 
 const isSaving = ref(false)
+// Blocks key-repeat from instantly confirming the destructive retry.
+let warningShownAt = 0
 const editName = ref('')
 const editNote = ref('')
 const editDueDate = ref('')
@@ -46,6 +49,17 @@ const editType = ref<'income' | 'expense'>('expense')
 const editCategoryId = ref<string | null>(null)
 const editIsDone = ref(false)
 const editIsBudget = ref(false)
+
+const {
+  needsConfirmation,
+  confirmationWarning,
+  requiresConfirmation,
+  resetConfirmation,
+} = useBudgetLinksConfirmation()
+
+// Reopening the dialog or flipping the budget switch invalidates a pending
+// confirmation - the next save has to ask again.
+watch([open, editIsBudget], () => resetConfirmation())
 
 watch(
   () => props.transaction,
@@ -74,32 +88,73 @@ watch(
   { immediate: true },
 )
 
+/** Required fields are filled in and no save is in flight. */
+const canSubmit = computed(
+  () =>
+    Boolean(editName.value.trim()) &&
+    Boolean(editDueDate.value) &&
+    !isSaving.value,
+)
+
+function buildUpdatePayload(confirmed: boolean) {
+  return {
+    name: editName.value.trim(),
+    note: editNote.value.trim() || null,
+    dueDate: editDueDate.value,
+    amount: Math.round(editAmount.value * 100),
+    type: editType.value,
+    categoryId: editCategoryId.value,
+    isDone: editIsDone.value,
+    isBudget: editIsBudget.value,
+    confirmClearBudgetLinks: confirmed,
+  }
+}
+
 async function handleSubmit() {
-  if (!props.transaction || !editName.value.trim() || !editDueDate.value) return
+  const transaction = props.transaction
+  if (!transaction || !canSubmit.value) return
+
+  const confirmed = needsConfirmation.value
+  // A held Enter key would re-submit ~35ms after the 409 re-enables the
+  // button and confirm the destructive retry unread - ignore submits in the
+  // first moments after the warning appears.
+  if (confirmed && Date.now() - warningShownAt < 500) return
 
   isSaving.value = true
-  await mutateJson({
-    url: `/api/transactions/${props.transaction.id}`,
-    method: 'PUT',
-    body: {
-      name: editName.value.trim(),
-      note: editNote.value.trim() || null,
-      dueDate: editDueDate.value,
-      amount: Math.round(editAmount.value * 100),
-      type: editType.value,
-      categoryId: editCategoryId.value,
-      isDone: editIsDone.value,
-      isBudget: editIsBudget.value,
-    },
-    notOkMessage: 'Fehler beim Speichern',
-    fallbackMessage: 'Transaktion konnte nicht gespeichert werden.',
-    onSuccess: () => {
-      open.value = false
-      emit('updated')
-    },
-    onError: (message) => emit('error', message),
-  })
-  isSaving.value = false
+
+  // Direct fetch instead of `mutateJson`: unsetting "Budget" can answer 409
+  // with link counts that the confirmation warning needs, and `mutateJson`
+  // only surfaces `data.error`.
+  try {
+    const response = await fetch(`/api/transactions/${transaction.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildUpdatePayload(confirmed)),
+    })
+
+    if (!response.ok) {
+      const data = await response.json()
+      // Budget assignments would be dropped - show the warning and let the
+      // user retry the very same request as a confirmed save.
+      if (requiresConfirmation(data)) {
+        warningShownAt = Date.now()
+        return
+      }
+      throw new Error(data.error || 'Fehler beim Speichern')
+    }
+
+    open.value = false
+    emit('updated')
+  } catch (error) {
+    emit(
+      'error',
+      error instanceof Error
+        ? error.message
+        : 'Transaktion konnte nicht gespeichert werden.',
+    )
+  } finally {
+    isSaving.value = false
+  }
 }
 </script>
 
@@ -180,16 +235,17 @@ async function handleSubmit() {
           </div>
         </div>
 
+        <WarningNote v-if="needsConfirmation">
+          {{ confirmationWarning }}
+        </WarningNote>
+
         <DialogFooter>
           <Button type="button" variant="outline" @click="open = false">
             Abbrechen
           </Button>
-          <Button
-            type="submit"
-            :disabled="isSaving || !editName.trim() || !editDueDate"
-          >
+          <Button type="submit" :disabled="!canSubmit">
             <Loader2 v-if="isSaving" class="size-4 animate-spin" />
-            Speichern
+            {{ needsConfirmation ? 'Trotzdem fortfahren' : 'Speichern' }}
           </Button>
         </DialogFooter>
       </form>

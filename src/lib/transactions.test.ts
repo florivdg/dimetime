@@ -15,6 +15,7 @@ const testDb = setupTestDb()
 
 const {
   adjustDueDateToMonth,
+  BudgetLinksConfirmationRequiredError,
   createTransaction,
   deleteTransaction,
   getBudgetSpendingForBudgets,
@@ -77,12 +78,32 @@ async function insertBudgetBankTx(
   })
 }
 
-/** Read back the `budgetId` of the seeded `bt-1` bank transaction. */
-async function bt1BudgetId(): Promise<string | null | undefined> {
-  const bt = await testDb.query.bankTransaction.findFirst({
+/** Read back the seeded `bt-1` bank transaction. */
+async function bt1() {
+  return testDb.query.bankTransaction.findFirst({
     where: (t, { eq: e }) => e(t.id, 'bt-1'),
   })
-  return bt?.budgetId
+}
+
+/** Seed a split of `bt-1` linked to `budget-tx` via `budgetId` (id `sp-1`). */
+async function insertBudgetSplit(
+  overrides: Parameters<typeof seedBankTransactionSplit>[1] = {},
+) {
+  await seedBankTransactionSplit(testDb, {
+    id: 'sp-1',
+    bankTransactionId: 'bt-1',
+    planId,
+    budgetId: 'budget-tx',
+    ...overrides,
+  })
+}
+
+/** Read back the `budgetId` of the seeded `sp-1` split. */
+async function sp1BudgetId(): Promise<string | null | undefined> {
+  const split = await testDb.query.bankTransactionSplit.findFirst({
+    where: (t, { eq: e }) => e(t.id, 'sp-1'),
+  })
+  return split?.budgetId
 }
 
 beforeEach(async () => {
@@ -277,23 +298,129 @@ describe('updateTransaction', () => {
     expect(updated?.note).toBe('keep')
   })
 
-  it('clears bank-transaction.budgetId when plan is changed', async () => {
+  it('requires confirmation when the plan is changed', async () => {
     await insertPlan('plan-2')
     await insertSource()
     await insertTx('budget-tx', { isBudget: true })
     await insertBudgetBankTx()
 
-    await updateTransaction('budget-tx', { planId: 'plan-2' })
-    expect(await bt1BudgetId()).toBeNull()
+    expect(
+      updateTransaction('budget-tx', { planId: 'plan-2' }),
+    ).rejects.toThrow(BudgetLinksConfirmationRequiredError)
   })
 
-  it('clears bank-transaction.budgetId when isBudget set to false', async () => {
+  it('requires confirmation when isBudget is set to false', async () => {
     await insertSource()
     await insertTx('budget-tx', { isBudget: true })
     await insertBudgetBankTx()
 
-    await updateTransaction('budget-tx', { isBudget: false })
-    expect(await bt1BudgetId()).toBeNull()
+    expect(updateTransaction('budget-tx', { isBudget: false })).rejects.toThrow(
+      BudgetLinksConfirmationRequiredError,
+    )
+  })
+
+  it('reports the affected bank transactions and splits on the error', async () => {
+    await insertPlan('plan-2')
+    await insertSource()
+    await insertTx('budget-tx', { isBudget: true })
+    await insertBudgetBankTx()
+    await insertBudgetSplit()
+    await insertBudgetSplit({ id: 'sp-2', isArchived: true })
+
+    const err = await updateTransaction('budget-tx', {
+      planId: 'plan-2',
+    }).catch((e: unknown) => e)
+
+    expect(err).toBeInstanceOf(BudgetLinksConfirmationRequiredError)
+    const typed = err as InstanceType<
+      typeof BudgetLinksConfirmationRequiredError
+    >
+    expect(typed.bankTransactions).toBe(1)
+    expect(typed.splits).toBe(2)
+  })
+
+  it('leaves everything untouched when confirmation is missing', async () => {
+    await insertPlan('plan-2')
+    await insertSource()
+    await insertTx('budget-tx', { isBudget: true, name: 'Budget' })
+    await insertBudgetBankTx()
+    await insertBudgetSplit()
+
+    await updateTransaction('budget-tx', {
+      planId: 'plan-2',
+      name: 'Verschoben',
+    }).catch(() => undefined)
+
+    const tx = await getTransactionById('budget-tx')
+    expect(tx?.planId).toBe(planId)
+    expect(tx?.name).toBe('Budget')
+    expect((await bt1())?.budgetId).toBe('budget-tx')
+    expect(await sp1BudgetId()).toBe('budget-tx')
+  })
+
+  it('clears bank-transaction and split budgetId once confirmed', async () => {
+    await insertPlan('plan-2')
+    await insertSource()
+    await insertTx('budget-tx', { isBudget: true })
+    await insertBudgetBankTx()
+    await insertBudgetSplit()
+
+    const updated = await updateTransaction('budget-tx', {
+      planId: 'plan-2',
+      confirmClearBudgetLinks: true,
+    })
+
+    expect(updated?.planId).toBe('plan-2')
+    expect((await bt1())?.budgetId).toBeNull()
+    expect(await sp1BudgetId()).toBeNull()
+  })
+
+  it('requires confirmation when only a pre-split reference exists', async () => {
+    await insertPlan('plan-2')
+    await insertSource()
+    await insertTx('budget-tx', { isBudget: true })
+    await insertBudgetBankTx({
+      isSplit: true,
+      budgetId: null,
+      preSplitBudgetId: 'budget-tx',
+    })
+
+    const err = await updateTransaction('budget-tx', {
+      planId: 'plan-2',
+    }).catch((e: unknown) => e)
+
+    expect(err).toBeInstanceOf(BudgetLinksConfirmationRequiredError)
+    const typed = err as InstanceType<
+      typeof BudgetLinksConfirmationRequiredError
+    >
+    expect(typed.bankTransactions).toBe(1)
+  })
+
+  it('clears preSplitBudgetId once confirmed', async () => {
+    await insertPlan('plan-2')
+    await insertSource()
+    await insertTx('budget-tx', { isBudget: true })
+    await insertBudgetBankTx({
+      isSplit: true,
+      budgetId: null,
+      preSplitBudgetId: 'budget-tx',
+    })
+
+    const updated = await updateTransaction('budget-tx', {
+      planId: 'plan-2',
+      confirmClearBudgetLinks: true,
+    })
+
+    expect(updated?.planId).toBe('plan-2')
+    expect((await bt1())?.preSplitBudgetId).toBeNull()
+  })
+
+  it('needs no confirmation when no links exist', async () => {
+    await insertPlan('plan-2')
+    await insertTx('budget-tx', { isBudget: true })
+
+    const updated = await updateTransaction('budget-tx', { planId: 'plan-2' })
+    expect(updated?.planId).toBe('plan-2')
   })
 
   it('does not clear budgetId when plan and isBudget unchanged', async () => {
@@ -302,7 +429,7 @@ describe('updateTransaction', () => {
     await insertBudgetBankTx()
 
     await updateTransaction('budget-tx', { name: 'Renamed' })
-    expect(await bt1BudgetId()).toBe('budget-tx')
+    expect((await bt1())?.budgetId).toBe('budget-tx')
   })
 })
 
