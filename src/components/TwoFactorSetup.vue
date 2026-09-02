@@ -68,14 +68,24 @@ async function enableTwoFactor(password: string) {
     },
   )
 
-  if (data) {
-    totpUri.value = data.totpURI
-    // Better Auth doesn't return the secret separately, so parse it from the URI
-    const uriParams = new URL(data.totpURI).searchParams
-    totpSecret.value = uriParams.get('secret')
-    backupCodes.value = data.backupCodes
-    currentStep.value = 'qrcode'
+  if (!data) return
+
+  // Since better-auth 1.7 the response is a discriminated union: only the
+  // `totp` variant carries `totpURI`/`backupCodes`. This app only ever enables
+  // TOTP, so anything else means the server changed under us — surface it
+  // instead of leaving the user on a dead step.
+  if (data.method !== 'totp') {
+    errorMessage.value =
+      'Die Zwei-Faktor-Einrichtung hat eine unerwartete Antwort geliefert. Bitte versuchen Sie es später erneut.'
+    return
   }
+
+  totpUri.value = data.totpURI
+  // Better Auth doesn't return the secret separately, so parse it from the URI
+  const uriParams = new URL(data.totpURI).searchParams
+  totpSecret.value = uriParams.get('secret')
+  backupCodes.value = data.backupCodes
+  currentStep.value = 'qrcode'
 }
 
 function finishSetup() {

@@ -49,6 +49,12 @@ export const account = sqliteTable(
     id: text('id').primaryKey(),
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
+    // better-auth 1.7 scopes account identity by issuer: (issuer, accountId) is
+    // the unique identity of an account instead of accountId alone. Credential
+    // accounts are written with `local:credential`
+    // (`createLocalAccountIssuer('credential')`). Without the column the Drizzle
+    // adapter rejects the unknown field and sign-up/sign-in fail outright.
+    issuer: text('issuer').notNull(),
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
@@ -65,7 +71,13 @@ export const account = sqliteTable(
     password: text('password'),
     ...timestamps(),
   },
-  (table) => [index('account_userId_idx').on(table.userId)],
+  (table) => [
+    index('account_userId_idx').on(table.userId),
+    uniqueIndex('account_issuer_accountId_idx').on(
+      table.issuer,
+      table.accountId,
+    ),
+  ],
 )
 
 export const verification = sqliteTable(
