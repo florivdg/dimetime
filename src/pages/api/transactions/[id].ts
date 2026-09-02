@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import {
+  BudgetLinksConfirmationRequiredError,
   deleteTransaction,
   requireUnarchivedTransaction,
   updateTransaction,
@@ -34,6 +35,7 @@ const updateTransactionSchema = z.object({
   isBudget: z.boolean().optional(),
   categoryId: z.uuid().nullable().optional(),
   planId: z.uuid().optional(),
+  confirmClearBudgetLinks: z.boolean().optional(),
 })
 
 export const PUT: APIRoute = async ({ params, request }) => {
@@ -51,8 +53,17 @@ export const PUT: APIRoute = async ({ params, request }) => {
   )
   if (planError) return error(planError.message, planError.status)
 
-  const updated = await updateTransaction(existing.id, data)
-  return json(updated)
+  try {
+    const updated = await updateTransaction(existing.id, data)
+    return json(updated)
+  } catch (err) {
+    // Discarding budget assignments needs an explicit opt-in; the payload's
+    // `code` keeps this apart from the installment 409 above
+    if (err instanceof BudgetLinksConfirmationRequiredError) {
+      return json(err.toPayload(), 409)
+    }
+    throw err
+  }
 }
 
 export const DELETE: APIRoute = async ({ params }) => {

@@ -1,6 +1,7 @@
 import { db } from '@/db/database'
 import {
   bankTransaction,
+  bankTransactionSplit,
   plannedTransaction,
   category,
   plan,
@@ -17,6 +18,7 @@ import {
   like,
   lte,
   ne,
+  or,
   sum,
 } from 'drizzle-orm'
 import {
@@ -30,6 +32,10 @@ import {
 } from '@/lib/installments'
 import { parseQueryParams } from '@/lib/api/query-params'
 import { error } from '@/lib/api/responses'
+import {
+  BUDGET_LINKS_CONFIRMATION_CODE,
+  type BudgetLinksConfirmationPayload,
+} from '@/lib/api/budget-links'
 import { buildSetValues } from '@/lib/db/partial-update'
 import { orDefault, orNull } from '@/lib/defaults'
 
@@ -119,6 +125,40 @@ export interface UpdateTransactionInput {
   isBudget?: boolean
   categoryId?: string | null
   planId?: string
+  /**
+   * Opt-in acknowledgement that the pending change discards the budget links of
+   * assigned bank transactions and splits. Not a column — read in
+   * {@link runUpdateTransaction}, never mapped in `buildSetValues`.
+   */
+  confirmClearBudgetLinks?: boolean
+}
+
+/**
+ * Thrown before any write when a budget move (or an `isBudget` reset) would
+ * discard existing bank-transaction/split assignments without confirmation.
+ */
+export class BudgetLinksConfirmationRequiredError extends Error {
+  bankTransactions: number
+  splits: number
+
+  constructor(bankTransactions: number, splits: number) {
+    super(
+      'Bestätigung erforderlich: Diesem Budget sind noch Banktransaktionen oder Splits zugeordnet.',
+    )
+    this.name = 'BudgetLinksConfirmationRequiredError'
+    this.bankTransactions = bankTransactions
+    this.splits = splits
+  }
+
+  /** The 409 body the transaction route answers with. */
+  toPayload(): BudgetLinksConfirmationPayload {
+    return {
+      error: this.message,
+      code: BUDGET_LINKS_CONFIRMATION_CODE,
+      affectedBankTransactions: this.bankTransactions,
+      affectedSplits: this.splits,
+    }
+  }
 }
 
 const TRANSACTION_QUERY_KEYS = [
@@ -414,6 +454,14 @@ export async function updateTransaction(
     },
   })
 
+  // NOTE: with the bun-sqlite driver, drizzle runs BEGIN and COMMIT
+  // synchronously before an async callback's first await - this transaction
+  // provides NO atomicity or rollback. The unconfirmed 409 path is safe only
+  // because BudgetLinksConfirmationRequiredError is thrown before the first
+  // write; keep every write after the confirmation check, and be aware that on
+  // the confirmed path a failure of the final plannedTransaction update leaves
+  // the budget links already cleared. Same pattern codebase-wide (splits,
+  // bank-import, bulk routes).
   return db.transaction(async (tx) =>
     runUpdateTransaction(tx, id, input, updateData),
   )
@@ -428,9 +476,46 @@ function shouldClearBudgetLinks(
   existing: { planId: string | null; isBudget: boolean },
   input: UpdateTransactionInput,
 ): boolean {
+  // Only budgets can carry links, so an ordinary transaction never has any to
+  // discard - saving one must not cost the counts and the clearing updates
+  if (!existing.isBudget) return false
   const nextPlanId = input.planId ?? existing.planId
   const nextIsBudget = input.isBudget ?? existing.isBudget
   return !nextIsBudget || nextPlanId !== existing.planId
+}
+
+/**
+ * Counts the rows whose budget link the pending change would discard.
+ * Uses the same predicate as the clearing updates below — including archived
+ * splits — so the warned numbers match what is actually unlinked. Stashed
+ * pre-split assignments (`preSplitBudgetId`) count too, because unsplitting
+ * would otherwise resurrect them; a row referencing the budget in both columns
+ * is still counted once.
+ */
+async function countBudgetLinks(
+  tx: TxHandle,
+  id: string,
+): Promise<{ bankTransactions: number; splits: number }> {
+  const [[bankRow], [splitRow]] = await Promise.all([
+    tx
+      .select({ count: count() })
+      .from(bankTransaction)
+      .where(
+        or(
+          eq(bankTransaction.budgetId, id),
+          eq(bankTransaction.preSplitBudgetId, id),
+        ),
+      ),
+    tx
+      .select({ count: count() })
+      .from(bankTransactionSplit)
+      .where(eq(bankTransactionSplit.budgetId, id)),
+  ])
+
+  return {
+    bankTransactions: bankRow?.count ?? 0,
+    splits: splitRow?.count ?? 0,
+  }
 }
 
 async function runUpdateTransaction(
@@ -451,10 +536,31 @@ async function runUpdateTransaction(
   if (!existing) return undefined
 
   if (shouldClearBudgetLinks(existing, input)) {
+    // Count and bail out before the first write, so an unconfirmed request
+    // leaves the database untouched. Once confirmed the numbers change nothing,
+    // so the counts are skipped entirely.
+    if (input.confirmClearBudgetLinks !== true) {
+      const links = await countBudgetLinks(tx, id)
+      if (links.bankTransactions + links.splits > 0) {
+        throw new BudgetLinksConfirmationRequiredError(
+          links.bankTransactions,
+          links.splits,
+        )
+      }
+    }
+
     await tx
       .update(bankTransaction)
       .set({ budgetId: null, updatedAt: updateData.updatedAt })
       .where(eq(bankTransaction.budgetId, id))
+    await tx
+      .update(bankTransaction)
+      .set({ preSplitBudgetId: null, updatedAt: updateData.updatedAt })
+      .where(eq(bankTransaction.preSplitBudgetId, id))
+    await tx
+      .update(bankTransactionSplit)
+      .set({ budgetId: null, updatedAt: updateData.updatedAt })
+      .where(eq(bankTransactionSplit.budgetId, id))
   }
 
   const result = await tx
