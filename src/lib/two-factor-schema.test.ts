@@ -132,6 +132,11 @@ describe('two_factor schema vs better-auth two-factor plugin', () => {
       headers,
     })
 
+    // Since better-auth 1.7 the payload is a discriminated union
+    // (`{ method: 'otp' } | { method: 'totp', totpURI, backupCodes }`); assert
+    // the discriminant so a future shape change fails here loudly.
+    expect(enabled.method).toBe('totp')
+    if (enabled.method !== 'totp') throw new Error('expected a TOTP enrollment')
     expect(enabled.totpURI).toContain('otpauth://totp/')
   })
 

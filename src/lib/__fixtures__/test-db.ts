@@ -47,6 +47,7 @@ const DDL = `
     "id" text PRIMARY KEY NOT NULL,
     "account_id" text NOT NULL,
     "provider_id" text NOT NULL,
+    "issuer" text NOT NULL,
     "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE cascade,
     "access_token" text,
     "refresh_token" text,
@@ -58,6 +59,8 @@ const DDL = `
     "created_at" integer NOT NULL,
     "updated_at" integer NOT NULL
   );
+
+  CREATE UNIQUE INDEX "account_issuer_accountId_idx" ON "account"("issuer","account_id");
 
   CREATE TABLE "verification" (
     "id" text PRIMARY KEY NOT NULL,
