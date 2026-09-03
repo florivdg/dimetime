@@ -4,7 +4,9 @@ import {
   formatDate,
   formatDateTime,
   formatRecurrence,
+  getIsoWeek,
   getMonthPacing,
+  getMonthWeekSegments,
   getPlanDisplayName,
   truncateText,
 } from './format'
@@ -142,6 +144,154 @@ describe('getMonthPacing', () => {
     const result = getMonthPacing('2020-06-15', new Date('2026-01-01'))
     expect(result.isCurrent).toBe(false)
     expect(result.daysElapsed).toBe(30)
+  })
+})
+
+describe('getIsoWeek', () => {
+  it('returns week 1 for January 1, 2026 (a Thursday)', () => {
+    expect(getIsoWeek(new Date(2026, 0, 1))).toBe(1)
+  })
+
+  it('returns week 36 for September 1, 2026', () => {
+    expect(getIsoWeek(new Date(2026, 8, 1))).toBe(36)
+  })
+
+  it('returns week 40 for September 28, 2026', () => {
+    expect(getIsoWeek(new Date(2026, 8, 28))).toBe(40)
+  })
+
+  it('returns week 53 for January 3, 2027 (belongs to the previous ISO year)', () => {
+    expect(getIsoWeek(new Date(2027, 0, 3))).toBe(53)
+  })
+})
+
+describe('getMonthWeekSegments', () => {
+  /** A reference date that is guaranteed to fall outside every tested month */
+  const NEVER_CURRENT = new Date(2030, 0, 1)
+
+  /** Compact [startDay, endDay] view of the segments */
+  function ranges(
+    planDate: string,
+    today: Date = NEVER_CURRENT,
+  ): [number, number][] {
+    return getMonthWeekSegments(planDate, today).map((s) => [
+      s.startDay,
+      s.endDay,
+    ])
+  }
+
+  it('splits a month starting mid-week (September 2026, 1st is a Tuesday)', () => {
+    expect(ranges('2026-09-01')).toEqual([
+      [1, 6],
+      [7, 13],
+      [14, 20],
+      [21, 27],
+      [28, 30],
+    ])
+  })
+
+  it('assigns the ISO weeks of September 2026', () => {
+    const segments = getMonthWeekSegments('2026-09-01', NEVER_CURRENT)
+    expect(segments.map((s) => s.isoWeek)).toEqual([36, 37, 38, 39, 40])
+  })
+
+  it('splits a month starting on a Sunday (February 2026)', () => {
+    expect(ranges('2026-02-01')).toEqual([
+      [1, 1],
+      [2, 8],
+      [9, 15],
+      [16, 22],
+      [23, 28],
+    ])
+  })
+
+  it('splits a month starting on a Monday (June 2026)', () => {
+    expect(ranges('2026-06-01')).toEqual([
+      [1, 7],
+      [8, 14],
+      [15, 21],
+      [22, 28],
+      [29, 30],
+    ])
+  })
+
+  it('splits a month starting on a Thursday (January 2026)', () => {
+    expect(ranges('2026-01-01')).toEqual([
+      [1, 4],
+      [5, 11],
+      [12, 18],
+      [19, 25],
+      [26, 31],
+    ])
+  })
+
+  it('uses the month of the plan date, not just the first of the month', () => {
+    expect(ranges('2026-09-17')).toEqual(ranges('2026-09-01'))
+  })
+
+  it('covers every day of the month exactly once', () => {
+    const segments = getMonthWeekSegments('2026-09-01', NEVER_CURRENT)
+    const totalDays = segments.reduce(
+      (sum, s) => sum + (s.endDay - s.startDay + 1),
+      0,
+    )
+    expect(totalDays).toBe(30)
+    segments.forEach((s, i) => {
+      if (i > 0) expect(s.startDay).toBe(segments[i - 1]!.endDay + 1)
+    })
+  })
+
+  it('produces percentages that span the full bar', () => {
+    const segments = getMonthWeekSegments('2026-02-01', NEVER_CURRENT)
+    const totalWidth = segments.reduce((sum, s) => sum + s.widthPercent, 0)
+    expect(totalWidth).toBeCloseTo(100, 10)
+    expect(segments[0]!.startPercent).toBe(0)
+    const last = segments[segments.length - 1]!
+    expect(last.startPercent + last.widthPercent).toBeCloseTo(100, 10)
+    expect(segments[1]!.startPercent).toBeCloseTo((1 / 28) * 100, 10)
+  })
+
+  it('marks exactly one segment as current when today is in the month', () => {
+    const segments = getMonthWeekSegments('2026-09-01', new Date(2026, 8, 17))
+    const current = segments.filter((s) => s.isCurrent)
+    expect(current.length).toBe(1)
+    expect(current[0]!.startDay).toBe(14)
+    expect(current[0]!.endDay).toBe(20)
+  })
+
+  it('marks no segment as current for another month', () => {
+    const segments = getMonthWeekSegments('2026-09-01', new Date(2026, 9, 17))
+    expect(segments.some((s) => s.isCurrent)).toBe(false)
+  })
+
+  it('marks no segment as current for the same month in another year', () => {
+    const segments = getMonthWeekSegments('2026-09-01', new Date(2027, 8, 17))
+    expect(segments.some((s) => s.isCurrent)).toBe(false)
+  })
+
+  it('assigns week 1 to the last days of December 2024', () => {
+    expect(ranges('2024-12-01')).toEqual([
+      [1, 1],
+      [2, 8],
+      [9, 15],
+      [16, 22],
+      [23, 29],
+      [30, 31],
+    ])
+    const segments = getMonthWeekSegments('2024-12-01', NEVER_CURRENT)
+    expect(segments.map((s) => s.isoWeek)).toEqual([48, 49, 50, 51, 52, 1])
+  })
+
+  it('assigns week 53 to the first days of January 2027', () => {
+    expect(ranges('2027-01-01')).toEqual([
+      [1, 3],
+      [4, 10],
+      [11, 17],
+      [18, 24],
+      [25, 31],
+    ])
+    const segments = getMonthWeekSegments('2027-01-01', NEVER_CURRENT)
+    expect(segments.map((s) => s.isoWeek)).toEqual([53, 1, 2, 3, 4])
   })
 })
 
