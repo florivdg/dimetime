@@ -226,7 +226,7 @@ const metrics = computed(() => {
   if (isCurrentMonth.value) {
     return [
       { label: 'Ausgegeben', value: formatAmount(props.spentCents) },
-      { label: 'Soll bisher', value: formatAmount(expectedCents.value) },
+      { label: 'Soll heute', value: formatAmount(expectedCents.value) },
       remaining.value > 0
         ? {
             label: 'Pro Tag noch',

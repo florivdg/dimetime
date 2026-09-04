@@ -12,7 +12,7 @@ const CURRENT_MONTH = '2026-03-01'
 const PAST_MONTH = '2026-01-01'
 const FUTURE_MONTH = '2026-05-01'
 
-/** Soll bisher for a 1.000 € budget on day 12 of 31 */
+/** Soll heute for a 1.000 € budget on day 12 of 31 */
 const BUDGET = 100_000
 const EXPECTED_SO_FAR = Math.round((BUDGET * 12) / 31) // 38710
 
@@ -89,7 +89,7 @@ describe('BudgetUtilizationBadge.vue', () => {
     expect(weekTickCount(wrapper)).toBeGreaterThan(0)
     expect(metricLabels(wrapper)).toEqual([
       'Ausgegeben',
-      'Soll bisher',
+      'Soll heute',
       'Pro Tag noch',
     ])
   })
@@ -108,8 +108,8 @@ describe('BudgetUtilizationBadge.vue', () => {
     expect(barClasses(wrapper)).toContain('bg-amber-400')
     expect(barClasses(wrapper)).toContain('dark:bg-amber-600')
     expect(hasTodayMarker(wrapper)).toBe(true)
-    // Soll bisher gehört zu den Kennzahlen des laufenden Monats
-    expect(wrapper.text()).toContain('Soll bisher')
+    // Soll heute gehört zu den Kennzahlen des laufenden Monats
+    expect(wrapper.text()).toContain('Soll heute')
     expect(wrapper.text()).toContain(formatAmount(EXPECTED_SO_FAR))
   })
 
