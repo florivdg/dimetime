@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.16.0
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.15.0...v0.16.0)
+
+### 🚀 Enhancements
+
+- **budget:** Budget-Tooltip als Zeitachse mit Wochen-Ticks ([cd58d2e](https://github.com/florivdg/dimetime/commit/cd58d2e))
+
+### 🩹 Fixes
+
+- **transactions:** Budget-Zuordnungen beim Planwechsel nicht mehr still verwerfen ([d421d49](https://github.com/florivdg/dimetime/commit/d421d49))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.15.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.14.0...v0.15.0)
