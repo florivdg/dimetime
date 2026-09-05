@@ -35,6 +35,7 @@ export interface CreateInstallmentPlanInput {
   name: string
   note?: string | null
   amount: number // Monthly rate in cents
+  finalAmount?: number | null // Differing last rate in cents
   totalInstallments: number
   prepaidInstallments?: number
   startMonth: string // YYYY-MM format
@@ -51,7 +52,11 @@ export interface InstallmentPlanStats {
   /** Linked rows that are materialized but not checked yet. */
   openLinkedCount: number
   remainingCount: number
-  /** `remainingCount` × current rate, in cents. */
+  /**
+   * What the rates still to be paid add up to, in cents: `remainingCount`
+   * regular rates, the last of them charged as the differing final rate as
+   * long as that one is still open.
+   */
   remainingSum: number
   /** Dynamic projection relative to the `today` month passed in. */
   projectedEndMonth: string | null
@@ -119,6 +124,8 @@ interface LinkedCounts {
  */
 interface OpenLinkedRow {
   id: string
+  /** Chronological rank among *all* linked rows, 1-based. */
+  rank: number
   name: string
   amount: number
   dueDate: string // YYYY-MM-DD format
@@ -129,6 +136,38 @@ interface OpenLinkedRow {
 
 const EMPTY_COUNTS: LinkedCounts = { doneCount: 0, openCount: 0 }
 const EMPTY_MONTHS: ReadonlySet<string> = new Set<string>()
+const EMPTY_RANKS: ReadonlyMap<string, number> = new Map<string, number>()
+
+/**
+ * The order every rank is derived from. The rate a row owes and the "Rate x von
+ * n" the badge shows both hang off it, so all three loaders share it.
+ */
+const LINKED_ROW_ORDER = [
+  asc(plannedTransaction.dueDate),
+  asc(plannedTransaction.id),
+]
+
+/**
+ * Number each installment's rows chronologically, 1-based over *every* linked
+ * row — checked and archived ones included, because they occupy a position all
+ * the same. Rows have to arrive in {@link LINKED_ROW_ORDER}; unlinked ones are
+ * dropped.
+ */
+function rankLinkedRows<T extends { installmentId: string | null }>(
+  rows: T[],
+): { row: T; installmentId: string; rank: number }[] {
+  const ranks = new Map<string, number>()
+  const ranked: { row: T; installmentId: string; rank: number }[] = []
+
+  for (const row of rows) {
+    if (!row.installmentId) continue
+    const rank = (ranks.get(row.installmentId) ?? 0) + 1
+    ranks.set(row.installmentId, rank)
+    ranked.push({ row, installmentId: row.installmentId, rank })
+  }
+
+  return ranked
+}
 
 function groupToSets<T>(
   rows: T[],
@@ -203,68 +242,82 @@ async function loadSkipMonths(
 }
 
 /**
- * Months (`YYYY-MM`) that already carry a checked linked row, per installment.
- * The month comes from the row's plan (its due date is only a fallback for
- * rows without a plan).
+ * Months (`YYYY-MM`) that already carry a checked linked row, per installment,
+ * each mapped to the chronological rank of that row. The month comes from the
+ * row's plan (its due date is only a fallback for rows without a plan).
+ *
+ * Every linked row is loaded so the rank matches the one the badge derives
+ * ({@link loadInstallmentBadges}); the open ones are only dropped afterwards,
+ * keeping the rank of the checked rows intact. That rank is what turns a
+ * checked month into a position — and a position into a rate amount
+ * ({@link rateAmountAt}).
  */
 async function loadDoneMonths(
   installmentIds: string[],
-): Promise<Map<string, Set<string>>> {
+): Promise<Map<string, Map<string, number>>> {
   if (installmentIds.length === 0) return new Map()
 
   const rows = await db
     .select({
       installmentId: plannedTransaction.installmentId,
+      isDone: plannedTransaction.isDone,
       dueDate: plannedTransaction.dueDate,
       planDate: plan.date,
     })
     .from(plannedTransaction)
     .leftJoin(plan, eq(plannedTransaction.planId, plan.id))
-    .where(
-      and(
-        inArray(plannedTransaction.installmentId, installmentIds),
-        eq(plannedTransaction.isDone, true),
-      ),
-    )
+    .where(inArray(plannedTransaction.installmentId, installmentIds))
+    .orderBy(...LINKED_ROW_ORDER)
 
-  return groupToSets(
-    rows,
-    (row) => row.installmentId,
-    (row) => monthOfPlanDate(row.planDate ?? row.dueDate),
-  )
+  const done = new Map<string, Map<string, number>>()
+
+  for (const { row, installmentId, rank } of rankLinkedRows(rows)) {
+    if (!row.isDone) continue
+    const months = done.get(installmentId) ?? new Map<string, number>()
+    months.set(monthOfPlanDate(row.planDate ?? row.dueDate), rank)
+    done.set(installmentId, months)
+  }
+
+  return done
 }
 
 /**
- * Open linked rows of an installment that sit in a non-archived plan. Rows in
+ * Open linked rows per installment that sit in a non-archived plan. Rows in
  * archived plans are immutable history and never show up here.
+ *
+ * Every linked row is loaded so the chronological rank matches the one the
+ * badge derives ({@link loadInstallmentBadges}); checked and archived rows are
+ * only dropped afterwards, keeping the rank of the survivors intact.
  */
 async function loadOpenLinkedRows(
-  installmentId: string,
-): Promise<OpenLinkedRow[]> {
+  installmentIds: string[],
+): Promise<Map<string, OpenLinkedRow[]>> {
+  const open = new Map<string, OpenLinkedRow[]>()
+  if (installmentIds.length === 0) return open
+
   const rows = await db
     .select({
       id: plannedTransaction.id,
+      installmentId: plannedTransaction.installmentId,
       name: plannedTransaction.name,
       amount: plannedTransaction.amount,
       dueDate: plannedTransaction.dueDate,
       categoryId: plannedTransaction.categoryId,
+      isDone: plannedTransaction.isDone,
       planDate: plan.date,
       isArchived: plan.isArchived,
     })
     .from(plannedTransaction)
     .leftJoin(plan, eq(plannedTransaction.planId, plan.id))
-    .where(
-      and(
-        eq(plannedTransaction.installmentId, installmentId),
-        eq(plannedTransaction.isDone, false),
-      ),
-    )
+    .where(inArray(plannedTransaction.installmentId, installmentIds))
+    .orderBy(...LINKED_ROW_ORDER)
 
-  const open: OpenLinkedRow[] = []
-  for (const row of rows) {
-    if (row.isArchived) continue
-    open.push({
+  for (const { row, installmentId, rank } of rankLinkedRows(rows)) {
+    if (row.isDone || row.isArchived) continue
+    const rowsOfInstallment = open.get(installmentId) ?? []
+    rowsOfInstallment.push({
       id: row.id,
+      rank,
       name: row.name,
       amount: row.amount,
       dueDate: row.dueDate,
@@ -272,9 +325,16 @@ async function loadOpenLinkedRows(
       planDate: row.planDate,
       month: monthOfPlanDate(row.planDate ?? row.dueDate),
     })
+    open.set(installmentId, rowsOfInstallment)
   }
 
   return open
+}
+
+/** The open rows of a single installment — see {@link loadOpenLinkedRows}. */
+async function loadOpenRowsOf(installmentId: string): Promise<OpenLinkedRow[]> {
+  const open = await loadOpenLinkedRows([installmentId])
+  return open.get(installmentId) ?? []
 }
 
 /**
@@ -349,6 +409,73 @@ function materializationBudget(
   )
 }
 
+/**
+ * The amount of the rate at `position` (1-based and counting the prepaid ones,
+ * exactly like the "Rate x von n" badge): the last rate uses the differing
+ * final amount whenever one is set. The single source of truth for
+ * "which amount does rate n cost?".
+ */
+export function rateAmountAt(
+  installment: Pick<
+    InstallmentPlan,
+    'amount' | 'finalAmount' | 'totalInstallments'
+  >,
+  position: number,
+): number {
+  if (installment.finalAmount === null) return installment.amount
+  return position >= installment.totalInstallments
+    ? installment.finalAmount
+    : installment.amount
+}
+
+/**
+ * Whether one of the checked rows already sat at the last position — the same
+ * position rule {@link rateAmountAt} prices by, so a row checked out of order
+ * (a later month paid ahead) settles the final rate for good.
+ */
+function isFinalRatePaid(
+  installment: Pick<
+    InstallmentPlan,
+    'prepaidInstallments' | 'totalInstallments'
+  >,
+  doneRanks: ReadonlyMap<string, number>,
+): boolean {
+  for (const rank of doneRanks.values()) {
+    if (installment.prepaidInstallments + rank >= installment.totalInstallments)
+      return true
+  }
+  return false
+}
+
+/**
+ * The rate the last of the still open ones costs: the differing final rate,
+ * unless there is none or it was already checked off — a later month paid
+ * ahead settles it, and what stays open then sits before it.
+ */
+function lastOpenRate(
+  installment: Pick<InstallmentPlan, 'amount' | 'finalAmount'>,
+  finalRatePaid: boolean,
+): number {
+  if (finalRatePaid) return installment.amount
+  return installment.finalAmount ?? installment.amount
+}
+
+/**
+ * What the rates still to be paid add up to: `remainingCount` regular rates,
+ * the last of them charged as {@link lastOpenRate}.
+ */
+function remainingSumOf(
+  installment: Pick<InstallmentPlan, 'amount' | 'finalAmount'>,
+  remainingCount: number,
+  finalRatePaid: boolean,
+): number {
+  if (remainingCount === 0) return 0
+  return (
+    (remainingCount - 1) * installment.amount +
+    lastOpenRate(installment, finalRatePaid)
+  )
+}
+
 function buildInstallmentRow(
   installment: InstallmentPlan,
   slot: PlanSlot,
@@ -358,6 +485,9 @@ function buildInstallmentRow(
     name: installment.name,
     type: 'expense',
     dueDate: resolveDueDate(slot.date, installment.dayOfMonth),
+    // Which rate a row owes follows from its rank, which only settles once the
+    // row set is final — the reprice pass in {@link materializeInstallments}
+    // owns that decision, so a fresh row starts out on the regular rate
     amount: installment.amount,
     isDone: false,
     isBudget: false,
@@ -422,13 +552,35 @@ async function materializeInstallments(
   const rows = installments.flatMap((installment) =>
     collectRowsForInstallment(installment, slots, context),
   )
-  if (rows.length === 0) return 0
 
-  const inserted = await db
-    .insert(plannedTransaction)
-    .values(rows)
-    .onConflictDoNothing()
-    .returning({ id: plannedTransaction.id })
+  const inserted =
+    rows.length === 0
+      ? []
+      : await db
+          .insert(plannedTransaction)
+          .values(rows)
+          .onConflictDoNothing()
+          .returning({ id: plannedTransaction.id })
+
+  // The ranks only settle once the row set is final, so every plan with a
+  // differing final rate is repriced afterwards — regardless of how many rows
+  // were actually inserted, which makes the pass self-healing. Plans without a
+  // final rate charge the same amount at every position and are skipped
+  const finalRatePlans = installments.filter(
+    (installment) => installment.finalAmount !== null,
+  )
+  const openRows = await loadOpenLinkedRows(
+    finalRatePlans.map((installment) => installment.id),
+  )
+  for (const installment of finalRatePlans) {
+    // Repricing an installment against itself: the amount is the only patch
+    // that is not a no-op, and it comes from the rank
+    await applyRowPatches(
+      openRows.get(installment.id) ?? [],
+      installment,
+      installment,
+    )
+  }
 
   return inserted.length
 }
@@ -444,7 +596,7 @@ function projectMonths(
   remainingCount: number,
   today: string,
   skipped: ReadonlySet<string>,
-  doneMonths: ReadonlySet<string>,
+  doneMonths: ReadonlyMap<string, number>,
 ): string[] {
   const months: string[] = []
   let month = today > installment.startMonth ? today : installment.startMonth
@@ -463,8 +615,10 @@ interface InstallmentSnapshot {
   plans: InstallmentPlanWithStats[]
   /** Projected months per installment id, chronologically ordered. */
   projectedMonths: Map<string, string[]>
-  /** Months with a checked linked row per installment id. */
-  doneMonths: Map<string, Set<string>>
+  /** Months with a checked linked row, and its rank, per installment id. */
+  doneMonths: Map<string, Map<string, number>>
+  /** Whether the final rate is already settled, per installment id. */
+  finalRatePaid: Map<string, boolean>
 }
 
 /**
@@ -496,8 +650,12 @@ async function loadInstallmentSnapshot(
   ])
 
   const projectedMonths = new Map<string, string[]>()
+  const finalRatePaid = new Map<string, boolean>()
   const plans = rows.map((row) => {
     const linked = counts.get(row.id) ?? EMPTY_COUNTS
+    const doneRanks = doneMonths.get(row.id) ?? EMPTY_RANKS
+    const settled = isFinalRatePaid(row, doneRanks)
+    finalRatePaid.set(row.id, settled)
     const paidCount = row.prepaidInstallments + linked.doneCount
     const remainingCount = Math.max(0, row.totalInstallments - paidCount)
     const months = row.completedAt
@@ -507,7 +665,7 @@ async function loadInstallmentSnapshot(
           remainingCount,
           today,
           skips.get(row.id) ?? EMPTY_MONTHS,
-          doneMonths.get(row.id) ?? EMPTY_MONTHS,
+          doneRanks,
         )
     projectedMonths.set(row.id, months)
 
@@ -516,12 +674,12 @@ async function loadInstallmentSnapshot(
       paidCount,
       openLinkedCount: linked.openCount,
       remainingCount,
-      remainingSum: remainingCount * row.amount,
+      remainingSum: remainingSumOf(row, remainingCount, settled),
       projectedEndMonth: months.at(-1) ?? null,
     }
   })
 
-  return { plans, projectedMonths, doneMonths }
+  return { plans, projectedMonths, doneMonths, finalRatePaid }
 }
 
 /**
@@ -551,6 +709,7 @@ export async function createInstallmentPlan(
       name: input.name,
       note: orNull(input.note),
       amount: input.amount,
+      finalAmount: orNull(input.finalAmount),
       totalInstallments: input.totalInstallments,
       prepaidInstallments: orDefault(input.prepaidInstallments, 0),
       startMonth: input.startMonth,
@@ -587,6 +746,9 @@ export async function updateInstallmentPlan(
     },
     amount: (v, s) => {
       s.amount = v
+    },
+    finalAmount: (v, s) => {
+      s.finalAmount = v
     },
     totalInstallments: (v, s) => {
       s.totalInstallments = v
@@ -633,7 +795,34 @@ function propagateIfUntouched<K extends keyof NewPlannedTransaction>(
 }
 
 /**
+ * Whether `amount` is one of the rates the plan itself charges — before or
+ * after the update. Anything else was typed in by hand.
+ */
+function isPlanRate(
+  amount: number,
+  previous: Pick<InstallmentPlan, 'amount' | 'finalAmount'>,
+  updated: Pick<InstallmentPlan, 'amount' | 'finalAmount'>,
+): boolean {
+  return (
+    amount === previous.amount ||
+    amount === previous.finalAmount ||
+    amount === updated.amount ||
+    amount === updated.finalAmount
+  )
+}
+
+/**
  * The edits that still have to reach an untouched open row.
+ *
+ * The amount is the one field the installment does not simply hand down: which
+ * rate a row owes follows from its chronological rank, so it is recomputed
+ * instead of compared against a previous installment value. A row is repriced
+ * when it still carries one of the rates the plan itself charges
+ * ({@link isPlanRate}); anything else is a manual edit and stays untouched.
+ *
+ * Accepted trade-off: a manual edit that happens to equal one of the plan's own
+ * two rates is indistinguishable from a stale rate and gets normalized to the
+ * rank-correct one.
  */
 function buildRowPatch(
   row: OpenLinkedRow,
@@ -642,13 +831,10 @@ function buildRowPatch(
 ): Partial<NewPlannedTransaction> | null {
   const patch: Partial<NewPlannedTransaction> = {}
 
-  propagateIfUntouched(
-    patch,
-    'amount',
-    row.amount,
-    previous.amount,
-    updated.amount,
-  )
+  const expected = rateAmountAt(updated, updated.prepaidInstallments + row.rank)
+  if (row.amount !== expected && isPlanRate(row.amount, previous, updated)) {
+    patch.amount = expected
+  }
   propagateIfUntouched(patch, 'name', row.name, previous.name, updated.name)
   propagateIfUntouched(
     patch,
@@ -676,6 +862,10 @@ function buildRowPatch(
  * patch — the common case, since a rate/name/category change hits every
  * untouched row alike — share a single UPDATE. Recomputed due dates differ per
  * plan month and therefore land in their own groups.
+ *
+ * The single entry point for the amount decision: pass the same installment as
+ * `previous` and `updated` to reprice rows without an update behind them (every
+ * other patch is a no-op then).
  */
 async function applyRowPatches(
   rows: OpenLinkedRow[],
@@ -721,9 +911,12 @@ async function deleteRowsById(ids: string[]): Promise<number> {
 }
 
 /**
- * Reconcile the materialized rows with an updated installment: propagate the
- * edits to untouched rows and prune rows the update made obsolete (moved start
- * month, lowered total / raised prepaid count).
+ * Reconcile the materialized rows with an updated installment: prune rows the
+ * update made obsolete (moved start month, lowered total / raised prepaid
+ * count), then propagate the edits to the untouched survivors.
+ *
+ * Pruning renumbers the ranks the rates hang off, so it has to happen before
+ * the patches — a dropped row moves the final rate one position up.
  *
  * Only open rows in non-archived plans are ever touched — checked rows are
  * history and archived plans are immutable, so the invariant may stay violated
@@ -733,15 +926,13 @@ async function reconcileOpenRows(
   previous: InstallmentPlan,
   updated: InstallmentPlan,
 ): Promise<void> {
-  const open = await loadOpenLinkedRows(updated.id)
-  await applyRowPatches(open, previous, updated)
+  const open = await loadOpenRowsOf(updated.id)
 
   // Rows before a start month that moved into the future
   const tooEarly = open.filter((row) => row.month < updated.startMonth)
-  await deleteRowsById(tooEarly.map((row) => row.id))
+  let pruned = await deleteRowsById(tooEarly.map((row) => row.id))
 
   // Rows beyond the materialization budget, newest plan month first
-  const remaining = open.filter((row) => row.month >= updated.startMonth)
   const counts =
     (await loadLinkedCounts([updated.id])).get(updated.id) ?? EMPTY_COUNTS
   const surplus =
@@ -749,15 +940,22 @@ async function reconcileOpenRows(
     counts.doneCount +
     counts.openCount -
     updated.totalInstallments
-  if (surplus <= 0) return
+  if (surplus > 0) {
+    const newestFirst = open
+      .filter((row) => row.month >= updated.startMonth)
+      .sort(
+        (a, b) =>
+          b.month.localeCompare(a.month) ||
+          b.dueDate.localeCompare(a.dueDate) ||
+          b.id.localeCompare(a.id),
+      )
+    const ids = newestFirst.slice(0, surplus).map((row) => row.id)
+    pruned += await deleteRowsById(ids)
+  }
 
-  const newestFirst = remaining.sort(
-    (a, b) =>
-      b.month.localeCompare(a.month) ||
-      b.dueDate.localeCompare(a.dueDate) ||
-      b.id.localeCompare(a.id),
-  )
-  await deleteRowsById(newestFirst.slice(0, surplus).map((row) => row.id))
+  // Only a deletion can have invalidated the ranks loaded above
+  const survivors = pruned > 0 ? await loadOpenRowsOf(updated.id) : open
+  await applyRowPatches(survivors, previous, updated)
 }
 
 /**
@@ -766,7 +964,7 @@ async function reconcileOpenRows(
  * @returns Number of removed rows
  */
 async function deleteOpenLinkedRows(installmentId: string): Promise<number> {
-  const open = await loadOpenLinkedRows(installmentId)
+  const open = await loadOpenRowsOf(installmentId)
   return deleteRowsById(open.map((row) => row.id))
 }
 
@@ -903,7 +1101,7 @@ export async function loadInstallmentBadges(
       })
       .from(plannedTransaction)
       .where(inArray(plannedTransaction.installmentId, ids))
-      .orderBy(asc(plannedTransaction.dueDate), asc(plannedTransaction.id)),
+      .orderBy(...LINKED_ROW_ORDER),
   ])
 
   const byId = new Map(installments.map((entry) => [entry.id, entry]))
@@ -934,22 +1132,49 @@ function isRunning(installment: InstallmentPlanWithStats): boolean {
 }
 
 /**
+ * The rate falling in the `index`-th projected month of an installment. Which
+ * rate that is hangs off the position, not off the length of the projection:
+ * the final rate is the last of the `remainingCount` open ones, so a projection
+ * cut short by {@link MAX_PROJECTION_MONTHS} never reaches it, and a final rate
+ * that is already checked off is never charged a second time.
+ */
+function projectedRateAmount(
+  installment: InstallmentPlanWithStats,
+  index: number,
+  finalRatePaid: boolean,
+): number {
+  return index === installment.remainingCount - 1
+    ? lastOpenRate(installment, finalRatePaid)
+    : installment.amount
+}
+
+/**
  * Sum of the rates due in `today`: an installment contributes when its first
  * projected month is the current one (start month reached, no tombstone) — or
  * when this month's rate is already checked off, because the burden existed
- * either way.
+ * either way. A checked row is priced by its own rank, which is the one case
+ * where the current month can carry the final rate of a plan that is still
+ * running: paying the last rate ahead leaves earlier ones open.
  */
 function sumCurrentMonthlyLoad(
   installments: InstallmentPlanWithStats[],
-  projectedMonths: Map<string, string[]>,
-  doneMonths: Map<string, Set<string>>,
+  snapshot: InstallmentSnapshot,
   today: string,
 ): number {
   return installments.reduce((total, installment) => {
-    const dueNow =
-      projectedMonths.get(installment.id)?.[0] === today ||
-      (doneMonths.get(installment.id)?.has(today) ?? false)
-    return dueNow ? total + installment.amount : total
+    const doneRanks = snapshot.doneMonths.get(installment.id) ?? EMPTY_RANKS
+    const months = snapshot.projectedMonths.get(installment.id) ?? []
+    // The current month is the plan's last one when nothing follows it
+    if (months[0] === today) {
+      const settled = snapshot.finalRatePaid.get(installment.id) ?? false
+      return total + projectedRateAmount(installment, 0, settled)
+    }
+    const paidRank = doneRanks.get(today)
+    if (paidRank === undefined) return total
+    return (
+      total +
+      rateAmountAt(installment, installment.prepaidInstallments + paidRank)
+    )
   }, 0)
 }
 
@@ -959,19 +1184,21 @@ function sumCurrentMonthlyLoad(
  */
 function buildTimeline(
   installments: InstallmentPlanWithStats[],
-  projectedMonths: Map<string, string[]>,
+  snapshot: InstallmentSnapshot,
   today: string,
 ): InstallmentTimelineMonth[] {
   const byMonth = new Map<string, InstallmentTimelineEntry[]>()
   let lastMonth = ''
 
   for (const installment of installments) {
-    for (const month of projectedMonths.get(installment.id) ?? []) {
+    const months = snapshot.projectedMonths.get(installment.id) ?? []
+    const settled = snapshot.finalRatePaid.get(installment.id) ?? false
+    for (const [index, month] of months.entries()) {
       const entries = byMonth.get(month) ?? []
       entries.push({
         installmentId: installment.id,
         name: installment.name,
-        amount: installment.amount,
+        amount: projectedRateAmount(installment, index, settled),
       })
       byMonth.set(month, entries)
       if (month > lastMonth) lastMonth = month
@@ -1011,12 +1238,7 @@ function summarize(
   return {
     running,
     aggregates: {
-      currentMonthlyLoad: sumCurrentMonthlyLoad(
-        running,
-        snapshot.projectedMonths,
-        snapshot.doneMonths,
-        today,
-      ),
+      currentMonthlyLoad: sumCurrentMonthlyLoad(running, snapshot, today),
       totalRemainingSum: running.reduce(
         (total, installment) => total + installment.remainingSum,
         0,
@@ -1039,6 +1261,6 @@ export async function getInstallmentOverview(
   return {
     installments: snapshot.plans,
     aggregates,
-    timeline: buildTimeline(running, snapshot.projectedMonths, today),
+    timeline: buildTimeline(running, snapshot, today),
   }
 }

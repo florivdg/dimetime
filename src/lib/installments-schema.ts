@@ -8,6 +8,9 @@ const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/
 export const PREPAID_MESSAGE =
   'Bereits gezahlte Raten dürfen die Gesamtanzahl nicht überschreiten'
 
+export const FINAL_AMOUNT_MESSAGE =
+  'Eine abweichende Schlussrate ist erst ab zwei Raten möglich'
+
 /**
  * Every field of an installment plan. The create schema adds the cross-field
  * refinement, the update schema is the partial variant of this — both API
@@ -20,6 +23,12 @@ const installmentBaseSchema = z.object({
     .number({ error: 'Betrag muss eine Zahl sein' })
     .int('Betrag muss eine ganze Zahl sein')
     .min(1, 'Betrag muss größer als 0 sein'),
+  finalAmount: z
+    .number({ error: 'Schlussrate muss eine Zahl sein' })
+    .int('Schlussrate muss eine ganze Zahl sein')
+    .min(1, 'Schlussrate muss größer als 0 sein')
+    .nullable()
+    .optional(),
   totalInstallments: z
     .number({ error: 'Anzahl der Raten muss eine Zahl sein' })
     .int('Anzahl der Raten muss eine ganze Zahl sein')
@@ -44,8 +53,9 @@ const installmentBaseSchema = z.object({
 /**
  * `prepaidInstallments` may never exceed `totalInstallments`. Only checkable
  * when both values are present, which the create schema always guarantees.
+ * Exported so the PUT route can run the very same rule over the merged values.
  */
-function prepaidWithinTotal(data: {
+export function prepaidWithinTotal(data: {
   prepaidInstallments?: number
   totalInstallments: number
 }): boolean {
@@ -53,15 +63,33 @@ function prepaidWithinTotal(data: {
   return data.prepaidInstallments <= data.totalInstallments
 }
 
-export const createInstallmentSchema = installmentBaseSchema.refine(
-  prepaidWithinTotal,
-  { message: PREPAID_MESSAGE, path: ['prepaidInstallments'] },
-)
+/**
+ * A `finalAmount` only means something when there is a rate before it —
+ * with a single installment it would silently replace `amount`.
+ * Exported so the PUT route can run the very same rule over the merged values.
+ */
+export function finalAmountNeedsTwoInstallments(data: {
+  finalAmount?: number | null
+  totalInstallments: number
+}): boolean {
+  if (data.finalAmount === undefined || data.finalAmount === null) return true
+  return data.totalInstallments >= 2
+}
+
+export const createInstallmentSchema = installmentBaseSchema
+  .refine(prepaidWithinTotal, {
+    message: PREPAID_MESSAGE,
+    path: ['prepaidInstallments'],
+  })
+  .refine(finalAmountNeedsTwoInstallments, {
+    message: FINAL_AMOUNT_MESSAGE,
+    path: ['finalAmount'],
+  })
 
 /**
- * Partial variant for PUT — deliberately without the prepaid refinement: a
- * partial body may carry only one of the two fields, so the route compares the
- * merged values against the stored row instead (and answers with
- * {@link PREPAID_MESSAGE} itself).
+ * Partial variant for PUT — deliberately without the cross-field refinements: a
+ * partial body may carry only one of the fields involved, so the route compares
+ * the merged values against the stored row instead (and answers with
+ * {@link PREPAID_MESSAGE} / {@link FINAL_AMOUNT_MESSAGE} itself).
  */
 export const updateInstallmentSchema = installmentBaseSchema.partial()

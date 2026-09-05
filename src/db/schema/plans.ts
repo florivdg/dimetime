@@ -54,6 +54,7 @@ export const installmentPlan = sqliteTable(
     name: text('name').notNull(),
     note: text('note'),
     amount: integer('amount').notNull(), // Monthly rate in cents
+    finalAmount: integer('final_amount'), // Differing last rate in cents; NULL = none
     totalInstallments: integer('total_installments').notNull(),
     prepaidInstallments: integer('prepaid_installments').notNull().default(0),
     startMonth: text('start_month').notNull(), // YYYY-MM format

@@ -9,6 +9,7 @@ const running: InstallmentPlanWithStats = {
   name: 'Waschmaschine',
   note: null,
   amount: 5000,
+  finalAmount: null,
   totalInstallments: 12,
   prepaidInstallments: 2,
   startMonth: '2026-03',

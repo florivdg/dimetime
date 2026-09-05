@@ -12,6 +12,9 @@ import {
   validateBody,
 } from '@/lib/api/responses'
 import {
+  finalAmountNeedsTwoInstallments,
+  FINAL_AMOUNT_MESSAGE,
+  prepaidWithinTotal,
   PREPAID_MESSAGE,
   updateInstallmentSchema,
 } from '@/lib/installments-schema'
@@ -34,11 +37,16 @@ export const PUT: APIRoute = async ({ params, request }) => {
   const data = await validateBody(request, updateInstallmentSchema)
   if (data instanceof Response) return data
 
-  // A partial update may carry only one of the two fields, so the merged values
-  // are checked against the stored ones
-  const prepaid = data.prepaidInstallments ?? found.resource.prepaidInstallments
-  const total = data.totalInstallments ?? found.resource.totalInstallments
-  if (prepaid > total) return error(PREPAID_MESSAGE, 400)
+  // A partial update may carry only one field of a cross-field rule, so the
+  // body is merged onto the stored row and checked with the very same
+  // predicates the create schema refines with (the schema itself cannot: its
+  // partial variant may be missing either side). Zod drops absent keys, so the
+  // spread keeps the stored value wherever the body stays silent
+  const merged = { ...found.resource, ...data }
+  if (!prepaidWithinTotal(merged)) return error(PREPAID_MESSAGE, 400)
+  if (!finalAmountNeedsTwoInstallments(merged)) {
+    return error(FINAL_AMOUNT_MESSAGE, 400)
+  }
 
   return handle(
     async () => {

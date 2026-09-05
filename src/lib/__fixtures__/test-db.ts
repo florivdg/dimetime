@@ -136,6 +136,7 @@ const DDL = `
     "name" text NOT NULL,
     "note" text,
     "amount" integer NOT NULL,
+    "final_amount" integer,
     "total_installments" integer NOT NULL,
     "prepaid_installments" integer DEFAULT 0 NOT NULL,
     "start_month" text NOT NULL,
