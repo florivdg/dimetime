@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.16.1
+
+[compare changes](https://github.com/florivdg/dimetime/compare/v0.16.0...v0.16.1)
+
+### 🚀 Enhancements
+
+- **raten:** Abweichende Schlussrate für Ratenzahlungen ([9b49d1a](https://github.com/florivdg/dimetime/commit/9b49d1a))
+
+### ❤️ Contributors
+
+- Florian van der Galiën <hallo@flori.dev>
+
 ## v0.16.0
 
 [compare changes](https://github.com/florivdg/dimetime/compare/v0.15.0...v0.16.0)
