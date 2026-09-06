@@ -1,0 +1,1 @@
+ALTER TABLE `installment_plan` ADD `final_amount` integer;
