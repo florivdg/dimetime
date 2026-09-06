@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import {
   createInstallmentSchema,
+  FINAL_AMOUNT_MESSAGE,
   PREPAID_MESSAGE,
   updateInstallmentSchema,
 } from './installments-schema'
@@ -30,6 +31,7 @@ describe('createInstallmentSchema', () => {
         note: null,
         dayOfMonth: null,
         categoryId: null,
+        finalAmount: null,
       }),
     ).toBeNull()
   })
@@ -71,6 +73,28 @@ describe('createInstallmentSchema', () => {
     }
   })
 
+  it('accepts a differing final rate', () => {
+    expect(firstIssue({ ...validInput, finalAmount: 4735 })).toBeNull()
+  })
+
+  it('rejects a final rate that is not a positive integer', () => {
+    expect(firstIssue({ ...validInput, finalAmount: 0 })).toBe(
+      'Schlussrate muss größer als 0 sein',
+    )
+    expect(firstIssue({ ...validInput, finalAmount: 47.35 })).toBe(
+      'Schlussrate muss eine ganze Zahl sein',
+    )
+  })
+
+  it('rejects a final rate on a single-installment plan', () => {
+    expect(
+      firstIssue({ ...validInput, totalInstallments: 1, finalAmount: 4735 }),
+    ).toBe(FINAL_AMOUNT_MESSAGE)
+    expect(
+      firstIssue({ ...validInput, totalInstallments: 1, finalAmount: null }),
+    ).toBeNull()
+  })
+
   it('rejects more prepaid than total installments', () => {
     expect(firstIssue({ ...validInput, prepaidInstallments: 13 })).toBe(
       PREPAID_MESSAGE,
@@ -98,6 +122,14 @@ describe('updateInstallmentSchema', () => {
     const parsed = updateInstallmentSchema.safeParse({
       totalInstallments: 3,
       prepaidInstallments: 5,
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('leaves the final rate / total comparison to the route', () => {
+    const parsed = updateInstallmentSchema.safeParse({
+      totalInstallments: 1,
+      finalAmount: 4735,
     })
     expect(parsed.success).toBe(true)
   })

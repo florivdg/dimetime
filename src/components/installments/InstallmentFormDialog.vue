@@ -44,6 +44,7 @@ const isSaving = ref(false)
 const formName = ref('')
 const formNote = ref('')
 const formAmount = ref(0)
+const formFinalAmount = ref<number | null>(null)
 const formTotalInstallments = ref(12)
 const formPrepaidInstallments = ref(0)
 const formStartMonth = ref(currentMonth())
@@ -62,6 +63,7 @@ function resetForm() {
   formName.value = ''
   formNote.value = ''
   formAmount.value = 0
+  formFinalAmount.value = null
   formTotalInstallments.value = 12
   formPrepaidInstallments.value = 0
   formStartMonth.value = currentMonth()
@@ -73,6 +75,8 @@ function fillFrom(installment: InstallmentPlanWithStats) {
   formName.value = installment.name
   formNote.value = installment.note ?? ''
   formAmount.value = installment.amount / 100 // Convert cents to euros
+  formFinalAmount.value =
+    installment.finalAmount === null ? null : installment.finalAmount / 100
   formTotalInstallments.value = installment.totalInstallments
   formPrepaidInstallments.value = installment.prepaidInstallments
   formStartMonth.value = installment.startMonth
@@ -91,6 +95,10 @@ function buildPayload() {
     name: formName.value.trim(),
     note: formNote.value.trim() || null,
     amount: Math.round(formAmount.value * 100),
+    finalAmount:
+      formFinalAmount.value === null
+        ? null
+        : Math.round(formFinalAmount.value * 100),
     totalInstallments: formTotalInstallments.value,
     prepaidInstallments: formPrepaidInstallments.value,
     startMonth: formStartMonth.value,
@@ -178,22 +186,21 @@ function toNullableNumber(value: string | number): number | null {
           </div>
 
           <div class="space-y-2">
-            <Label for="installment-category">Kategorie (optional)</Label>
-            <Select v-model="formCategoryId">
-              <SelectTrigger id="installment-category">
-                <SelectValue placeholder="Kategorie wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem :value="null">Keine Kategorie</SelectItem>
-                <SelectItem
-                  v-for="cat in categories"
-                  :key="cat.id"
-                  :value="cat.id"
-                >
-                  {{ cat.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <Label for="installment-final-amount">Schlussrate (optional)</Label>
+            <Input
+              id="installment-final-amount"
+              :model-value="formFinalAmount ?? undefined"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0,00"
+              @update:model-value="
+                (v: string | number) => (formFinalAmount = toNullableNumber(v))
+              "
+            />
+            <p class="text-muted-foreground text-xs">
+              Betrag der letzten Rate, falls abweichend
+            </p>
           </div>
         </div>
 
@@ -247,6 +254,25 @@ function toNullableNumber(value: string | number): number | null {
               "
             />
           </div>
+        </div>
+
+        <div class="space-y-2">
+          <Label for="installment-category">Kategorie (optional)</Label>
+          <Select v-model="formCategoryId">
+            <SelectTrigger id="installment-category" class="w-full">
+              <SelectValue placeholder="Kategorie wählen" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem :value="null">Keine Kategorie</SelectItem>
+              <SelectItem
+                v-for="cat in categories"
+                :key="cat.id"
+                :value="cat.id"
+              >
+                {{ cat.name }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div class="space-y-2">

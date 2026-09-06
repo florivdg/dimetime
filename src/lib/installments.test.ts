@@ -20,13 +20,14 @@ const {
   findInstallmentPlan,
   getInstallmentOverview,
   loadInstallmentBadges,
+  rateAmountAt,
   recordInstallmentSkip,
   syncInstallmentsIntoPlan,
   syncPlansForInstallment,
   updateInstallmentPlan,
 } = await import('./installments')
 
-const { createPlan } = await import('./plans')
+const { createPlan, deletePlan } = await import('./plans')
 
 const userId = 'u1'
 
@@ -955,6 +956,379 @@ describe('getInstallmentOverview', () => {
     const overview = await getInstallmentOverview('2026-03')
     expect(overview.timeline).toEqual([])
     expect(overview.aggregates.totalRemainingSum).toBe(0)
+  })
+})
+
+describe('abweichende Schlussrate', () => {
+  /** Rate amounts of the linked rows, ordered by their plan month. */
+  async function linkedAmounts(installmentId: string) {
+    return (await linkedRows(installmentId)).map((row) => row.amount)
+  }
+
+  describe('rateAmountAt', () => {
+    const rates = { amount: 5000, finalAmount: 4735, totalInstallments: 3 }
+
+    it('charges the final rate for the last installment only', () => {
+      expect(rateAmountAt(rates, 1)).toBe(5000)
+      expect(rateAmountAt(rates, 2)).toBe(5000)
+      expect(rateAmountAt(rates, 3)).toBe(4735)
+    })
+
+    it('falls back to the regular rate without a final one', () => {
+      expect(rateAmountAt({ ...rates, finalAmount: null }, 3)).toBe(5000)
+    })
+  })
+
+  describe('materialization', () => {
+    it('gives the last row the final rate', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03'])
+      await createInstallmentPlan(
+        {
+          name: 'Waschmaschine',
+          amount: 5000,
+          finalAmount: 4735,
+          totalInstallments: 3,
+          startMonth: '2026-01',
+        },
+        userId,
+      )
+      const [created] = await testDb.select().from(installmentPlan)
+
+      expect(created.finalAmount).toBe(4735)
+      expect(await linkedAmounts(created.id)).toEqual([5000, 5000, 4735])
+    })
+
+    it('counts the prepaid installments towards the position', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02'])
+      await seedInstallmentPlan(testDb, {
+        id: 'ip1',
+        amount: 5000,
+        finalAmount: 4735,
+        totalInstallments: 3,
+        prepaidInstallments: 1,
+        startMonth: '2026-01',
+      })
+      await syncPlansForInstallment('ip1')
+
+      expect(await linkedAmounts('ip1')).toEqual([5000, 4735])
+    })
+
+    it('keeps the final rate last when a month is tombstoned', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03'])
+      await seedInstallmentPlan(testDb, {
+        id: 'ip1',
+        amount: 5000,
+        finalAmount: 4735,
+        totalInstallments: 2,
+        startMonth: '2026-01',
+      })
+      await recordInstallmentSkip('ip1', '2026-02')
+      await syncPlansForInstallment('ip1')
+
+      expect(await linkedMonths('ip1')).toEqual(['2026-01', '2026-03'])
+      expect(await linkedAmounts('ip1')).toEqual([5000, 4735])
+    })
+
+    it('continues the positions when a later plan is added', async () => {
+      await seedMonthlyPlans(['2026-01'])
+      await seedInstallmentPlan(testDb, {
+        id: 'ip1',
+        amount: 5000,
+        finalAmount: 4735,
+        totalInstallments: 2,
+        startMonth: '2026-01',
+      })
+      await syncPlansForInstallment('ip1')
+      expect(await linkedAmounts('ip1')).toEqual([5000])
+
+      await createPlan({ date: '2026-02-01' } as never)
+      expect(await linkedAmounts('ip1')).toEqual([5000, 4735])
+    })
+  })
+
+  describe('repricing on update', () => {
+    beforeEach(async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03'])
+      await seedInstallmentPlan(testDb, {
+        id: 'ip1',
+        amount: 5000,
+        finalAmount: 4735,
+        totalInstallments: 3,
+        startMonth: '2026-01',
+      })
+      await syncPlansForInstallment('ip1')
+    })
+
+    it('leaves the final rate alone when the regular rate changes', async () => {
+      await updateInstallmentPlan('ip1', { amount: 6000 })
+      expect(await linkedAmounts('ip1')).toEqual([6000, 6000, 4735])
+    })
+
+    it('reprices only the last row when the final rate changes', async () => {
+      await updateInstallmentPlan('ip1', { finalAmount: 4200 })
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000, 4200])
+    })
+
+    it('flattens the rates again when the final rate is cleared', async () => {
+      await updateInstallmentPlan('ip1', { finalAmount: null })
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000, 5000])
+    })
+
+    it('moves the final rate along when the prepaid count is raised', async () => {
+      // One prepaid rate shifts every position up, so the surplus row is
+      // pruned and the new last row carries the final rate
+      await updateInstallmentPlan('ip1', { prepaidInstallments: 1 })
+      expect(await linkedMonths('ip1')).toEqual(['2026-01', '2026-02'])
+      expect(await linkedAmounts('ip1')).toEqual([5000, 4735])
+    })
+
+    it('moves the final rate along when the total is raised', async () => {
+      await updateInstallmentPlan('ip1', { totalInstallments: 4 })
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000, 5000])
+
+      await createPlan({ date: '2026-04-01' } as never)
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000, 5000, 4735])
+    })
+
+    it('never touches a manually edited row', async () => {
+      await testDb
+        .update(plannedTransaction)
+        .set({ amount: 9900 })
+        .where(eq(plannedTransaction.planId, 'plan-2026-03'))
+
+      await updateInstallmentPlan('ip1', { amount: 6000, finalAmount: 4200 })
+      expect(await linkedAmounts('ip1')).toEqual([6000, 6000, 9900])
+    })
+  })
+
+  describe('rank-based repricing', () => {
+    /** Three rates of 5000 with a differing final one of 4735. */
+    async function seedFinalRatePlan(startMonth = '2026-01') {
+      await seedInstallmentPlan(testDb, {
+        id: 'ip1',
+        amount: 5000,
+        finalAmount: 4735,
+        totalInstallments: 3,
+        startMonth,
+      })
+    }
+
+    it('moves the final rate on when a month is deleted and skipped', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03', '2026-04'])
+      await seedFinalRatePlan()
+      await syncPlansForInstallment('ip1')
+
+      await testDb
+        .delete(plannedTransaction)
+        .where(eq(plannedTransaction.planId, 'plan-2026-02'))
+      await recordInstallmentSkip('ip1', '2026-02')
+      await syncPlansForInstallment('ip1')
+
+      expect(await linkedMonths('ip1')).toEqual([
+        '2026-01',
+        '2026-03',
+        '2026-04',
+      ])
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000, 4735])
+    })
+
+    it('keeps a manual edit while the rates around it move on', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03', '2026-04'])
+      await seedFinalRatePlan()
+      await syncPlansForInstallment('ip1')
+
+      await testDb
+        .update(plannedTransaction)
+        .set({ amount: 9900 })
+        .where(eq(plannedTransaction.planId, 'plan-2026-03'))
+      await testDb
+        .delete(plannedTransaction)
+        .where(eq(plannedTransaction.planId, 'plan-2026-02'))
+      await recordInstallmentSkip('ip1', '2026-02')
+      await syncPlansForInstallment('ip1')
+
+      expect(await linkedAmounts('ip1')).toEqual([5000, 9900, 4735])
+    })
+
+    it('renumbers the rates when an earlier plan is created', async () => {
+      await seedMonthlyPlans(['2026-03', '2026-04'])
+      await seedFinalRatePlan()
+      await syncPlansForInstallment('ip1')
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000])
+
+      await createPlan({ date: '2026-02-01' } as never)
+
+      expect(await linkedMonths('ip1')).toEqual([
+        '2026-02',
+        '2026-03',
+        '2026-04',
+      ])
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000, 4735])
+    })
+
+    it('renumbers the rates after a plan in the middle was deleted', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03'])
+      await seedFinalRatePlan()
+      await syncPlansForInstallment('ip1')
+
+      await deletePlan('plan-2026-02')
+      await createPlan({ date: '2026-04-01' } as never)
+
+      expect(await linkedMonths('ip1')).toEqual([
+        '2026-01',
+        '2026-03',
+        '2026-04',
+      ])
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000, 4735])
+    })
+
+    it('moves the final rate on when the start month moves forward', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03', '2026-04'])
+      await seedFinalRatePlan()
+      await syncPlansForInstallment('ip1')
+
+      await updateInstallmentPlan('ip1', { startMonth: '2026-02' })
+
+      expect(await linkedMonths('ip1')).toEqual([
+        '2026-02',
+        '2026-03',
+        '2026-04',
+      ])
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000, 4735])
+    })
+
+    it('reprices the rows backfilled by a start month moved back', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03', '2026-04'])
+      await seedFinalRatePlan('2026-03')
+      await syncPlansForInstallment('ip1')
+      expect(await linkedAmounts('ip1')).toEqual([5000, 5000])
+
+      await updateInstallmentPlan('ip1', { startMonth: '2026-01' })
+
+      expect(await linkedMonths('ip1')).toEqual([
+        '2026-01',
+        '2026-03',
+        '2026-04',
+      ])
+      const amounts = await linkedAmounts('ip1')
+      expect(amounts).toEqual([5000, 5000, 4735])
+      // The materialized rows add up to exactly what is still owed
+      const [stats] = await statsOf('2026-01')
+      expect(stats.remainingSum).toBe(
+        amounts.reduce((sum, amount) => sum + amount, 0),
+      )
+    })
+
+    it('backfills and reprices in one update', async () => {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03', '2026-04'])
+      await seedFinalRatePlan('2026-03')
+      await syncPlansForInstallment('ip1')
+
+      await updateInstallmentPlan('ip1', {
+        startMonth: '2026-01',
+        amount: 6000,
+      })
+
+      expect(await linkedAmounts('ip1')).toEqual([6000, 6000, 4735])
+    })
+  })
+
+  describe('stats and projection', () => {
+    beforeEach(async () => {
+      await seedInstallmentPlan(testDb, {
+        id: 'ip1',
+        name: 'Laptop',
+        amount: 5000,
+        finalAmount: 4735,
+        totalInstallments: 3,
+        startMonth: '2026-01',
+      })
+    })
+
+    it('discounts the final rate in the remaining sum', async () => {
+      const [stats] = await statsOf('2026-01')
+      expect(stats.remainingCount).toBe(3)
+      expect(stats.remainingSum).toBe(2 * 5000 + 4735)
+    })
+
+    it('shrinks the remaining sum down to the final rate alone', async () => {
+      await updateInstallmentPlan('ip1', { prepaidInstallments: 2 })
+      const [stats] = await statsOf('2026-01')
+      expect(stats.remainingCount).toBe(1)
+      expect(stats.remainingSum).toBe(4735)
+    })
+
+    it('charges the final rate in the last timeline month', async () => {
+      const overview = await getInstallmentOverview('2026-01')
+      expect(overview.timeline.map((month) => month.total)).toEqual([
+        5000, 5000, 4735,
+      ])
+      expect(overview.timeline[2].entries).toEqual([
+        { installmentId: 'ip1', name: 'Laptop', amount: 4735 },
+      ])
+    })
+
+    it('charges the final rate in the current monthly load', async () => {
+      await updateInstallmentPlan('ip1', { prepaidInstallments: 2 })
+      const overview = await getInstallmentOverview('2026-01')
+      expect(overview.aggregates.currentMonthlyLoad).toBe(4735)
+      expect(overview.aggregates.totalRemainingSum).toBe(4735)
+    })
+
+    /** Check the row of one month off, as if it had been paid in advance. */
+    async function checkOffMonth(month: string) {
+      await seedMonthlyPlans(['2026-01', '2026-02', '2026-03'])
+      await syncPlansForInstallment('ip1')
+      await testDb
+        .update(plannedTransaction)
+        .set({ isDone: true })
+        .where(eq(plannedTransaction.planId, `plan-${month}`))
+    }
+
+    it('stops charging the final rate once the last one is paid ahead', async () => {
+      await checkOffMonth('2026-03')
+
+      const overview = await getInstallmentOverview('2026-03')
+      const [stats] = overview.installments
+      expect(stats.remainingCount).toBe(2)
+      // Two regular rates are left — the discounted one is already settled
+      expect(stats.remainingSum).toBe(10000)
+      expect(overview.aggregates.totalRemainingSum).toBe(10000)
+      // The checked row of the current month is the final rate
+      expect(overview.aggregates.currentMonthlyLoad).toBe(4735)
+      expect(overview.timeline.map((month) => month.month)).toEqual([
+        '2026-03',
+        '2026-04',
+        '2026-05',
+      ])
+      expect(overview.timeline.map((month) => month.total)).toEqual([
+        0, 5000, 5000,
+      ])
+    })
+
+    it('keeps the final rate ahead when an early month is paid', async () => {
+      await checkOffMonth('2026-01')
+
+      const overview = await getInstallmentOverview('2026-02')
+      const [stats] = overview.installments
+      expect(stats.remainingCount).toBe(2)
+      expect(stats.remainingSum).toBe(5000 + 4735)
+      expect(overview.timeline.map((month) => month.total)).toEqual([
+        5000, 4735,
+      ])
+    })
+
+    it('never shows the final rate in a projection cut off by the safety net', async () => {
+      await updateInstallmentPlan('ip1', { totalInstallments: 1300 })
+
+      const overview = await getInstallmentOverview('2026-01')
+      // The projection stops after MAX_PROJECTION_MONTHS, well before the end
+      expect(overview.timeline).toHaveLength(1200)
+      expect(overview.timeline.every((month) => month.total === 5000)).toBe(
+        true,
+      )
+      expect(overview.installments[0].projectedEndMonth).toBe('2125-12')
+    })
   })
 })
 

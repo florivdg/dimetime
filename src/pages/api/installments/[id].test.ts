@@ -124,6 +124,64 @@ describe('PUT /api/installments/[id]', () => {
     )
   })
 
+  it('rejects a final rate on a single-installment plan', async () => {
+    await seedInstallment()
+    const res = (await PUT(
+      buildApiContext({
+        method: 'PUT',
+        body: { totalInstallments: 1, finalAmount: 4735 },
+        params: { id: installmentId },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe(
+      'Eine abweichende Schlussrate ist erst ab zwei Raten möglich',
+    )
+  })
+
+  it('rejects lowering the total below two while a final rate is stored', async () => {
+    await seedInstallment()
+    await testDb
+      .update(installmentPlan)
+      .set({ finalAmount: 4735 })
+      .where(eq(installmentPlan.id, installmentId))
+
+    const res = (await PUT(
+      buildApiContext({
+        method: 'PUT',
+        body: { totalInstallments: 1 },
+        params: { id: installmentId },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe(
+      'Eine abweichende Schlussrate ist erst ab zwei Raten möglich',
+    )
+  })
+
+  it('allows clearing the final rate together with a lowered total', async () => {
+    await seedInstallment()
+    await testDb
+      .update(installmentPlan)
+      .set({ finalAmount: 4735 })
+      .where(eq(installmentPlan.id, installmentId))
+
+    const res = (await PUT(
+      buildApiContext({
+        method: 'PUT',
+        body: { totalInstallments: 1, finalAmount: null },
+        params: { id: installmentId },
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(200)
+
+    const [stored] = await testDb
+      .select()
+      .from(installmentPlan)
+      .where(eq(installmentPlan.id, installmentId))
+    expect(stored.finalAmount).toBeNull()
+  })
+
   it('rejects a nonexistent month', async () => {
     await seedInstallment()
     for (const startMonth of ['2026-00', '2026-13']) {
