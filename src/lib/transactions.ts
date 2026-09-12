@@ -472,6 +472,21 @@ type TransactionUpdateData = { updatedAt: Date } & Partial<
   typeof plannedTransaction.$inferInsert
 >
 
+/**
+ * The single `completedAt` rule for every write of `isDone`: an open row has
+ * none, a row that was already done keeps its stored one (legacy rows keep
+ * `null` — a time is never backfilled), and a newly done row is stamped `now`.
+ * @param previous - The stored state on update; omitted on create
+ */
+function resolveCompletedAt(
+  isDone: boolean,
+  now: Date,
+  previous?: { isDone: boolean; completedAt: Date | null },
+): Date | null {
+  if (!isDone) return null
+  return previous?.isDone ? previous.completedAt : now
+}
+
 function shouldClearBudgetLinks(
   existing: { planId: string | null; isBudget: boolean },
   input: UpdateTransactionInput,
@@ -528,6 +543,8 @@ async function runUpdateTransaction(
     .select({
       planId: plannedTransaction.planId,
       isBudget: plannedTransaction.isBudget,
+      isDone: plannedTransaction.isDone,
+      completedAt: plannedTransaction.completedAt,
     })
     .from(plannedTransaction)
     .where(eq(plannedTransaction.id, id))
@@ -563,9 +580,22 @@ async function runUpdateTransaction(
       .where(eq(bankTransactionSplit.budgetId, id))
   }
 
+  // completedAt depends on the stored done state, which the mapper cannot see
+  const values: TransactionUpdateData =
+    updateData.isDone === undefined
+      ? updateData
+      : {
+          ...updateData,
+          completedAt: resolveCompletedAt(
+            updateData.isDone,
+            updateData.updatedAt,
+            existing,
+          ),
+        }
+
   const result = await tx
     .update(plannedTransaction)
-    .set(updateData)
+    .set(values)
     .where(eq(plannedTransaction.id, id))
     .returning()
 
@@ -587,13 +617,15 @@ function buildTransactionInsertValues(
   input: CreateTransactionInput,
   now: Date,
 ): typeof plannedTransaction.$inferInsert {
+  const isDone = orDefault(input.isDone, false)
   return {
     name: input.name,
     note: orNull(input.note),
     type: orDefault(input.type, 'expense'),
     dueDate: input.dueDate,
     amount: input.amount,
-    isDone: orDefault(input.isDone, false),
+    isDone,
+    completedAt: resolveCompletedAt(isDone, now),
     isBudget: orDefault(input.isBudget, false),
     planId: input.planId,
     categoryId: orNull(input.categoryId),

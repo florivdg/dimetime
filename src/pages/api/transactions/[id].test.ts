@@ -55,6 +55,13 @@ async function seedTx() {
   })
 }
 
+/** PUT `body` to the seeded transaction. */
+async function putTx(body: Record<string, unknown>) {
+  return (await PUT(
+    buildApiContext({ method: 'PUT', body, params: { id: txId } }) as never,
+  )) as Response
+}
+
 /** Seed a budget transaction with one assigned bank transaction and one split. */
 async function seedBudgetWithLinks() {
   await seedPlannedTransaction(testDb, {
@@ -233,14 +240,16 @@ describe('PUT /api/transactions/[id]', () => {
 
   it('updates and returns the transaction', async () => {
     await seedTx()
-    const res = (await PUT(
-      buildApiContext({
-        method: 'PUT',
-        body: { name: 'Renamed' },
-        params: { id: txId },
-      }) as never,
-    )) as Response
+    const res = await putTx({ name: 'Renamed' })
     expect(res.status).toBe(200)
+  })
+
+  it('stamps completedAt when the transaction is marked done', async () => {
+    await seedTx()
+    const res = await putTx({ isDone: true })
+    expect(res.status).toBe(200)
+    // The body is the row returned by the UPDATE, serialized as an ISO string
+    expect(typeof (await res.json()).completedAt).toBe('string')
   })
 })
 
