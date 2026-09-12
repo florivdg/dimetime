@@ -144,6 +144,16 @@ describe('adjustDueDateToMonth', () => {
   })
 })
 
+/** A completion time clearly apart from any `now` the tests run at. */
+const DONE_AT = new Date('2026-01-02T03:04:05Z')
+
+/** Assert `value` is a Date stamped no earlier than `before` and not in the future. */
+function expectStampedSince(value: Date | null | undefined, before: number) {
+  expect(value).toBeInstanceOf(Date)
+  expect(value!.getTime()).toBeGreaterThanOrEqual(before)
+  expect(value!.getTime()).toBeLessThanOrEqual(Date.now())
+}
+
 describe('createTransaction', () => {
   it('persists provided fields with defaults', async () => {
     const tx = await createTransaction({
@@ -155,9 +165,22 @@ describe('createTransaction', () => {
     expect(tx.name).toBe('Test')
     expect(tx.type).toBe('expense')
     expect(tx.isDone).toBe(false)
+    expect(tx.completedAt).toBeNull()
     expect(tx.isBudget).toBe(false)
     expect(tx.note).toBeNull()
     expect(tx.categoryId).toBeNull()
+  })
+
+  it('stamps completedAt when created as done', async () => {
+    const before = Date.now()
+    const tx = await createTransaction({
+      name: 'Erledigt',
+      planId,
+      dueDate: '2026-03-10',
+      amount: 5000,
+      isDone: true,
+    })
+    expectStampedSince(tx.completedAt, before)
   })
 
   it('honors explicit type, isDone, isBudget, categoryId, note', async () => {
@@ -431,6 +454,53 @@ describe('updateTransaction', () => {
     await updateTransaction('budget-tx', { name: 'Renamed' })
     expect((await bt1())?.budgetId).toBe('budget-tx')
   })
+
+  it('stamps completedAt when an open row is marked done', async () => {
+    await insertTx('tx-1')
+    const before = Date.now()
+    const updated = await updateTransaction('tx-1', { isDone: true })
+    expectStampedSince(updated?.completedAt, before)
+  })
+
+  const doneRowCases: [
+    title: string,
+    seeded: Date | null,
+    input: Parameters<typeof updateTransaction>[1],
+    expected: Date | null,
+  ][] = [
+    [
+      'keeps completedAt when a done row is marked done again',
+      DONE_AT,
+      { isDone: true },
+      DONE_AT,
+    ],
+    [
+      'keeps completedAt null when a legacy done row is marked done again',
+      null,
+      { isDone: true },
+      null,
+    ],
+    [
+      'clears completedAt when a done row is reopened',
+      DONE_AT,
+      { isDone: false },
+      null,
+    ],
+    [
+      'leaves completedAt untouched when isDone is not updated',
+      DONE_AT,
+      { name: 'Renamed' },
+      DONE_AT,
+    ],
+  ]
+
+  for (const [title, seeded, input, expected] of doneRowCases) {
+    it(title, async () => {
+      await insertTx('tx-1', { isDone: true, completedAt: seeded })
+      const updated = await updateTransaction('tx-1', input)
+      expect(updated?.completedAt).toEqual(expected)
+    })
+  }
 })
 
 describe('deleteTransaction', () => {
