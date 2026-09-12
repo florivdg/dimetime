@@ -243,7 +243,7 @@ describe('updateSplitFields', () => {
 
 describe('bulkAssignPlanToSplits', () => {
   it('returns 0 for empty input', async () => {
-    expect(await bulkAssignPlanToSplits([], planAId)).toBe(0)
+    expect(bulkAssignPlanToSplits([], planAId)).toBe(0)
   })
 
   it('partitions by current plan: same plan keeps budget, different plan clears', async () => {
@@ -258,7 +258,7 @@ describe('bulkAssignPlanToSplits', () => {
       budgetId: 'b-1',
     })
 
-    await bulkAssignPlanToSplits(['split-same', 'split-diff'], planAId)
+    bulkAssignPlanToSplits(['split-same', 'split-diff'], planAId)
 
     const same = await getSplitById('split-same')
     const diff = await getSplitById('split-diff')
@@ -268,40 +268,40 @@ describe('bulkAssignPlanToSplits', () => {
   })
 
   it('returns 0 when no rows match the ids', async () => {
-    expect(await bulkAssignPlanToSplits(['missing'], planAId)).toBe(0)
+    expect(bulkAssignPlanToSplits(['missing'], planAId)).toBe(0)
   })
 })
 
 describe('bulkArchiveSplits', () => {
   it('returns 0 for empty input', async () => {
-    expect(await bulkArchiveSplits([], true)).toBe(0)
+    expect(bulkArchiveSplits([], true)).toBe(0)
   })
 
   it('toggles isArchived', async () => {
     await seedBankTx('bt-1', { isSplit: true })
     await seedSplit('split-1', 'bt-1')
-    expect(await bulkArchiveSplits(['split-1'], true)).toBe(1)
+    expect(bulkArchiveSplits(['split-1'], true)).toBe(1)
     expect((await getSplitById('split-1'))?.isArchived).toBe(true)
   })
 })
 
 describe('bulkAssignBudgetToSplits', () => {
   it('returns 0 for empty input', async () => {
-    expect(await bulkAssignBudgetToSplits([], 'b-1')).toBe(0)
+    expect(bulkAssignBudgetToSplits([], 'b-1')).toBe(0)
   })
 
   it('sets a new budgetId', async () => {
     await seedBudget('b-1', planAId)
     await seedBankTx('bt-1', { isSplit: true })
     await seedSplit('split-1', 'bt-1', { planId: planAId })
-    await bulkAssignBudgetToSplits(['split-1'], 'b-1')
+    bulkAssignBudgetToSplits(['split-1'], 'b-1')
     expect((await getSplitById('split-1'))?.budgetId).toBe('b-1')
   })
 
   it('clears budgetId when given null', async () => {
     await seedBankTx('bt-1', { isSplit: true })
     await seedSplit('split-1', 'bt-1', { budgetId: null })
-    await bulkAssignBudgetToSplits(['split-1'], null)
+    bulkAssignBudgetToSplits(['split-1'], null)
     expect((await getSplitById('split-1'))?.budgetId).toBeNull()
   })
 })

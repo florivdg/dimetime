@@ -1,0 +1,3 @@
+[test]
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["**/__fixtures__/**", "test/**"]

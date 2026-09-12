@@ -384,7 +384,7 @@ describe('bulk operations on bank transactions', () => {
   it('bulkArchiveBankTransactions toggles isArchived', async () => {
     await seedBankTx('bt-1')
     await seedBankTx('bt-2')
-    const count = await bulkArchiveBankTransactions(['bt-1', 'bt-2'], true)
+    const count = bulkArchiveBankTransactions(['bt-1', 'bt-2'], true)
     expect(count).toBe(2)
     const tx = await getBankTransactionById('bt-1')
     expect(tx?.isArchived).toBe(true)
@@ -394,7 +394,7 @@ describe('bulk operations on bank transactions', () => {
     await seedBudget('b-1')
     await seedBankTx('bt-1', { planId, planAssignment: 'manual' })
     await seedBankTx('bt-2', { planId, planAssignment: 'manual' })
-    const count = await bulkAssignBudgetToTransactions(['bt-1', 'bt-2'], 'b-1')
+    const count = bulkAssignBudgetToTransactions(['bt-1', 'bt-2'], 'b-1')
     expect(count).toBe(2)
     const tx = await getBankTransactionById('bt-1')
     expect(tx?.budgetId).toBe('b-1')
@@ -416,17 +416,14 @@ describe('bulk operations on bank transactions', () => {
     })
 
     // First, assign all to plan-1 (same plan as their current planId)
-    const count = await bulkAssignPlanToTransactions(
-      ['bt-same', 'bt-diff'],
-      planId,
-    )
+    const count = bulkAssignPlanToTransactions(['bt-same', 'bt-diff'], planId)
     expect(count).toBe(2)
 
     const same = await getBankTransactionById('bt-same')
     expect(same?.budgetId).toBe('b-1')
 
     // Now move bt-diff to plan-2 — budget should be cleared
-    await bulkAssignPlanToTransactions(['bt-diff'], 'plan-2')
+    bulkAssignPlanToTransactions(['bt-diff'], 'plan-2')
     const diff = await getBankTransactionById('bt-diff')
     expect(diff?.planId).toBe('plan-2')
     expect(diff?.budgetId).toBeNull()
@@ -435,13 +432,13 @@ describe('bulk operations on bank transactions', () => {
 
   it('bulkAssignPlanToTransactions sets planAssignment=none when planId is null', async () => {
     await seedBankTx('bt-1', { planId, planAssignment: 'manual' })
-    await bulkAssignPlanToTransactions(['bt-1'], null)
+    bulkAssignPlanToTransactions(['bt-1'], null)
     const tx = await getBankTransactionById('bt-1')
     expect(tx?.planId).toBeNull()
     expect(tx?.planAssignment).toBe('none')
   })
 
   it('bulkAssignPlanToTransactions returns 0 when no matching rows', async () => {
-    expect(await bulkAssignPlanToTransactions(['missing'], planId)).toBe(0)
+    expect(bulkAssignPlanToTransactions(['missing'], planId)).toBe(0)
   })
 })

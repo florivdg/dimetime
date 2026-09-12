@@ -66,9 +66,8 @@ export async function splitBankTransaction(
 
   const now = new Date()
 
-  return db.transaction(async (tx) => {
-    await tx
-      .update(bankTransaction)
+  return db.transaction((tx) => {
+    tx.update(bankTransaction)
       .set({
         isSplit: true,
         preSplitBudgetId: parent.budgetId,
@@ -76,6 +75,7 @@ export async function splitBankTransaction(
         updatedAt: now,
       })
       .where(eq(bankTransaction.id, id))
+      .run()
 
     const rows = splits.map((s, i) => ({
       bankTransactionId: id,
@@ -87,7 +87,7 @@ export async function splitBankTransaction(
       updatedAt: now,
     }))
 
-    return tx.insert(bankTransactionSplit).values(rows).returning()
+    return tx.insert(bankTransactionSplit).values(rows).returning().all()
   })
 }
 
@@ -101,13 +101,12 @@ export async function unsplitBankTransaction(id: string): Promise<void> {
 
   const now = new Date()
 
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(bankTransactionSplit)
+  db.transaction((tx) => {
+    tx.delete(bankTransactionSplit)
       .where(eq(bankTransactionSplit.bankTransactionId, id))
+      .run()
 
-    await tx
-      .update(bankTransaction)
+    tx.update(bankTransaction)
       .set({
         isSplit: false,
         budgetId: parent.preSplitBudgetId,
@@ -115,6 +114,7 @@ export async function unsplitBankTransaction(id: string): Promise<void> {
         updatedAt: now,
       })
       .where(eq(bankTransaction.id, id))
+      .run()
   })
 }
 
@@ -190,33 +190,35 @@ export async function updateSplitFields(
   return updated
 }
 
-async function updateSplitPlanGroup(
+function updateSplitPlanGroup(
   txOrDb: DbOrTransaction,
   ids: string[],
   values: Partial<typeof bankTransactionSplit.$inferInsert>,
 ) {
   if (ids.length === 0) return
-  await txOrDb
+  txOrDb
     .update(bankTransactionSplit)
     .set(values)
     .where(inArray(bankTransactionSplit.id, ids))
+    .run()
 }
 
-export async function bulkAssignPlanToSplits(
+export function bulkAssignPlanToSplits(
   ids: string[],
   planId: string | null,
   txOrDb: DbOrTransaction = db,
-): Promise<number> {
+): number {
   if (ids.length === 0) return 0
   const now = new Date()
 
-  const targetSplits = await txOrDb
+  const targetSplits = txOrDb
     .select({
       id: bankTransactionSplit.id,
       planId: bankTransactionSplit.planId,
     })
     .from(bankTransactionSplit)
     .where(inArray(bankTransactionSplit.id, ids))
+    .all()
 
   if (targetSplits.length === 0) return 0
 
@@ -225,12 +227,12 @@ export async function bulkAssignPlanToSplits(
     planId,
   )
 
-  await updateSplitPlanGroup(txOrDb, idsToClearBudget, {
+  updateSplitPlanGroup(txOrDb, idsToClearBudget, {
     planId,
     budgetId: null,
     updatedAt: now,
   })
-  await updateSplitPlanGroup(txOrDb, idsToKeepBudget, {
+  updateSplitPlanGroup(txOrDb, idsToKeepBudget, {
     planId,
     updatedAt: now,
   })
@@ -238,31 +240,33 @@ export async function bulkAssignPlanToSplits(
   return targetSplits.length
 }
 
-export async function bulkArchiveSplits(
+export function bulkArchiveSplits(
   ids: string[],
   isArchived: boolean,
   txOrDb: DbOrTransaction = db,
-): Promise<number> {
+): number {
   if (ids.length === 0) return 0
-  const result = await txOrDb
+  const result = txOrDb
     .update(bankTransactionSplit)
     .set({ isArchived, updatedAt: new Date() })
     .where(inArray(bankTransactionSplit.id, ids))
     .returning({ id: bankTransactionSplit.id })
+    .all()
   return result.length
 }
 
-export async function bulkAssignBudgetToSplits(
+export function bulkAssignBudgetToSplits(
   ids: string[],
   budgetId: string | null,
   txOrDb: DbOrTransaction = db,
-): Promise<number> {
+): number {
   if (ids.length === 0) return 0
-  const result = await txOrDb
+  const result = txOrDb
     .update(bankTransactionSplit)
     .set({ budgetId, updatedAt: new Date() })
     .where(inArray(bankTransactionSplit.id, ids))
     .returning({ id: bankTransactionSplit.id })
+    .all()
   return result.length
 }
 

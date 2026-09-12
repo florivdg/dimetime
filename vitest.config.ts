@@ -23,19 +23,19 @@ export default defineConfig({
     globals: false,
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,vue}'],
+      // Bun owns server modules and the two pure composables below. Including
+      // them here reported them as uncovered and tried to transform middleware.
+      include: ['src/components/**/*.vue', 'src/composables/**/*.ts'],
       exclude: [
         'src/**/*.vitest.ts',
         'src/**/*.test.ts',
         'src/**/__fixtures__/**',
         'src/components/ui/**',
-        'src/lib/bank-import/types.ts',
-        'src/db/schema/**',
-        'src/db/database.ts',
-        'src/components/plans/index.ts',
-        'src/.env.d.ts',
+        'src/composables/useSortIcon.ts',
+        'src/composables/useDeleteTransactionDialog.ts',
       ],
-      reporter: ['text', 'json-summary', 'html'],
+      reportsDirectory: 'coverage/vue',
+      reporter: ['text', 'json-summary', 'html', 'lcov'],
     },
   },
 })

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import { useUrlState } from './useUrlState'
@@ -42,7 +42,13 @@ function setupWith(initialUrl: string) {
   return { state: captured as ReturnType<typeof useUrlState<Schema>>, wrapper }
 }
 
+beforeEach(() => {
+  vi.useFakeTimers()
+})
+
 afterEach(() => {
+  vi.clearAllTimers()
+  vi.useRealTimers()
   window.history.replaceState({}, '', '/')
 })
 
@@ -82,7 +88,7 @@ describe('useUrlState', () => {
     await nextTick()
     state.state.page = 5
     state.state.active = true
-    await new Promise((r) => setTimeout(r, 10))
+    await nextTick()
     expect(window.location.search).toContain('page=5')
     expect(window.location.search).toContain('active=true')
   })
@@ -93,6 +99,21 @@ describe('useUrlState', () => {
     state.reset()
     expect(state.state.page).toBe(1)
     expect(state.state.status).toBe('a')
+  })
+
+  it('debounces search updates until typing has stopped for 50ms', async () => {
+    const { state } = setupWith('/')
+    state.state.search = 'first'
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(49)
+    expect(window.location.search).toBe('')
+
+    state.state.search = 'latest'
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(49)
+    expect(window.location.search).toBe('')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(window.location.search).toBe('?q=latest')
   })
 
   it('hasActiveParams reflects whether any field differs from default', async () => {

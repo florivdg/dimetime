@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 
 vi.mock('@/lib/auth-client', () => ({
   authClient: {
@@ -17,6 +17,15 @@ vi.mock('@lowlighter/qrcode', () => ({
 const TwoFactorSetup = (await import('./TwoFactorSetup.vue')).default
 
 describe('TwoFactorSetup.vue', () => {
+  beforeEach(() => vi.useFakeTimers())
+
+  afterEach(async () => {
+    await vi.runAllTimersAsync()
+    await flushPromises()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  })
+
   it('starts on the password step', () => {
     const wrapper = mount(TwoFactorSetup)
     expect(wrapper.text()).toContain('Passwort')

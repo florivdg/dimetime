@@ -145,8 +145,10 @@ describe('GET /api/plans/[id]/matching-presets', () => {
     expect(res.status).toBe(404)
   })
 
-  it('returns presets with match status', async () => {
+  it('returns matching presets created by another authenticated user', async () => {
     await seedPlan()
+    const creatorId = 'user-2'
+    await seedUser(testDb, { id: creatorId, name: 'B', email: 'b@example.com' })
     await seedTransactionPreset(testDb, {
       id: 'preset-1',
       name: 'Rent',
@@ -154,7 +156,7 @@ describe('GET /api/plans/[id]/matching-presets', () => {
       amount: 1000,
       recurrence: 'monatlich',
       startMonth: '2026-01',
-      userId,
+      userId: creatorId,
       isBudget: false,
     })
     const res = (await matchingPresetsRoute.GET(
@@ -165,6 +167,12 @@ describe('GET /api/plans/[id]/matching-presets', () => {
     )) as Response
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.presets[0].isMatching).toBe(true)
+    expect(body.presets).toEqual([
+      expect.objectContaining({
+        id: 'preset-1',
+        userId: creatorId,
+        isMatching: true,
+      }),
+    ])
   })
 })

@@ -42,8 +42,12 @@ export function formatDate(
   date: string | Date,
   style: 'short' | 'medium' | 'long' | 'full' = 'medium',
 ): string {
+  // Date-only values describe a calendar day, not an instant at UTC midnight.
+  const calendarDate =
+    typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
   return new Intl.DateTimeFormat('de-DE', {
     dateStyle: style,
+    ...(calendarDate ? { timeZone: 'UTC' } : {}),
   }).format(new Date(date))
 }
 
@@ -74,7 +78,7 @@ export function getPlanDisplayName(
 ): string {
   if (name) return name
   if (!date) return '-'
-  return monthYearFormatter.format(new Date(date))
+  return formatPlanMonthLabel(date)
 }
 
 /**

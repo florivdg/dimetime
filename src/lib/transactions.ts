@@ -454,17 +454,9 @@ export async function updateTransaction(
     },
   })
 
-  // NOTE: with the bun-sqlite driver, drizzle runs BEGIN and COMMIT
-  // synchronously before an async callback's first await - this transaction
-  // provides NO atomicity or rollback. The unconfirmed 409 path is safe only
-  // because BudgetLinksConfirmationRequiredError is thrown before the first
-  // write; keep every write after the confirmation check, and be aware that on
-  // the confirmed path a failure of the final plannedTransaction update leaves
-  // the budget links already cleared. Same pattern codebase-wide (splits,
-  // bank-import, bulk routes).
-  return db.transaction(async (tx) =>
-    runUpdateTransaction(tx, id, input, updateData),
-  )
+  // bun-sqlite commits when the callback returns, so every query within this
+  // transaction must execute synchronously, including the final update.
+  return db.transaction((tx) => runUpdateTransaction(tx, id, input, updateData))
 }
 
 type TxHandle = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -507,25 +499,25 @@ function shouldClearBudgetLinks(
  * would otherwise resurrect them; a row referencing the budget in both columns
  * is still counted once.
  */
-async function countBudgetLinks(
+function countBudgetLinks(
   tx: TxHandle,
   id: string,
-): Promise<{ bankTransactions: number; splits: number }> {
-  const [[bankRow], [splitRow]] = await Promise.all([
-    tx
-      .select({ count: count() })
-      .from(bankTransaction)
-      .where(
-        or(
-          eq(bankTransaction.budgetId, id),
-          eq(bankTransaction.preSplitBudgetId, id),
-        ),
+): { bankTransactions: number; splits: number } {
+  const [bankRow] = tx
+    .select({ count: count() })
+    .from(bankTransaction)
+    .where(
+      or(
+        eq(bankTransaction.budgetId, id),
+        eq(bankTransaction.preSplitBudgetId, id),
       ),
-    tx
-      .select({ count: count() })
-      .from(bankTransactionSplit)
-      .where(eq(bankTransactionSplit.budgetId, id)),
-  ])
+    )
+    .all()
+  const [splitRow] = tx
+    .select({ count: count() })
+    .from(bankTransactionSplit)
+    .where(eq(bankTransactionSplit.budgetId, id))
+    .all()
 
   return {
     bankTransactions: bankRow?.count ?? 0,
@@ -533,13 +525,13 @@ async function countBudgetLinks(
   }
 }
 
-async function runUpdateTransaction(
+function runUpdateTransaction(
   tx: TxHandle,
   id: string,
   input: UpdateTransactionInput,
   updateData: TransactionUpdateData,
-): Promise<Transaction | undefined> {
-  const [existing] = await tx
+): Transaction | undefined {
+  const [existing] = tx
     .select({
       planId: plannedTransaction.planId,
       isBudget: plannedTransaction.isBudget,
@@ -549,6 +541,7 @@ async function runUpdateTransaction(
     .from(plannedTransaction)
     .where(eq(plannedTransaction.id, id))
     .limit(1)
+    .all()
 
   if (!existing) return undefined
 
@@ -557,7 +550,7 @@ async function runUpdateTransaction(
     // leaves the database untouched. Once confirmed the numbers change nothing,
     // so the counts are skipped entirely.
     if (input.confirmClearBudgetLinks !== true) {
-      const links = await countBudgetLinks(tx, id)
+      const links = countBudgetLinks(tx, id)
       if (links.bankTransactions + links.splits > 0) {
         throw new BudgetLinksConfirmationRequiredError(
           links.bankTransactions,
@@ -566,18 +559,18 @@ async function runUpdateTransaction(
       }
     }
 
-    await tx
-      .update(bankTransaction)
+    tx.update(bankTransaction)
       .set({ budgetId: null, updatedAt: updateData.updatedAt })
       .where(eq(bankTransaction.budgetId, id))
-    await tx
-      .update(bankTransaction)
+      .run()
+    tx.update(bankTransaction)
       .set({ preSplitBudgetId: null, updatedAt: updateData.updatedAt })
       .where(eq(bankTransaction.preSplitBudgetId, id))
-    await tx
-      .update(bankTransactionSplit)
+      .run()
+    tx.update(bankTransactionSplit)
       .set({ budgetId: null, updatedAt: updateData.updatedAt })
       .where(eq(bankTransactionSplit.budgetId, id))
+      .run()
   }
 
   // completedAt depends on the stored done state, which the mapper cannot see
@@ -593,11 +586,12 @@ async function runUpdateTransaction(
           ),
         }
 
-  const result = await tx
+  const result = tx
     .update(plannedTransaction)
     .set(values)
     .where(eq(plannedTransaction.id, id))
     .returning()
+    .all()
 
   return result[0]
 }

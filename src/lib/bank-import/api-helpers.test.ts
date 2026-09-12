@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import { z } from 'zod'
 import {
   ImportApiError,
@@ -121,19 +121,31 @@ describe('runImportFlow', () => {
     expect(await res.json()).toEqual({ error: 'Nicht gefunden' })
   })
 
-  it('maps generic Error to 500 with its message', async () => {
-    const res = await runImportFlow(
-      formDataRequest({
-        sourceId: 'src-1',
-        file: new File(['hi'], 'a.csv'),
-      }),
-      null,
-      async () => {
-        throw new Error('boom')
-      },
-    )
-    expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({ error: 'boom' })
+  it('does not expose a generic Error message in a 500 response', async () => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const thrown = new Error('boom')
+      const res = await runImportFlow(
+        formDataRequest({
+          sourceId: 'src-1',
+          file: new File(['hi'], 'a.csv'),
+        }),
+        null,
+        async () => {
+          throw thrown
+        },
+      )
+      expect(res.status).toBe(500)
+      expect(await res.json()).toEqual({
+        error: 'Unbekannter interner Fehler',
+      })
+      expect(consoleError).toHaveBeenCalledWith(
+        'Bankimport fehlgeschlagen:',
+        thrown,
+      )
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 })
 

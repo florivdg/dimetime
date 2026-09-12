@@ -47,13 +47,17 @@ const availablePlans = computed(() => {
 })
 
 // Load plans when dialog opens
-watch(open, async (isOpen) => {
-  if (isOpen) {
-    selectedPlanId.value = null
-    customDueDate.value = ''
-    await loadPlans()
-  }
-})
+watch(
+  open,
+  async (isOpen) => {
+    if (isOpen) {
+      selectedPlanId.value = null
+      customDueDate.value = ''
+      await loadPlans()
+    }
+  },
+  { immediate: true },
+)
 
 async function loadPlans() {
   isLoadingPlans.value = true

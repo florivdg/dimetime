@@ -7,7 +7,7 @@ import {
   postExpectStatus,
 } from '@/lib/__fixtures__/bulk-route-assertions'
 import { seedUser } from '@/lib/__fixtures__/seeds'
-import { seedScopedPreset } from '@/lib/__fixtures__/route-guards-user'
+import { seedSharedPreset } from '@/lib/__fixtures__/preset-routes'
 
 const testDb = setupTestDb()
 
@@ -25,14 +25,28 @@ describe('GET /api/presets', () => {
     expect(res.status).toBe(401)
   })
 
-  it('returns paginated presets for the user', async () => {
-    await seedScopedPreset(
+  it('returns shared presets created by multiple users', async () => {
+    await seedSharedPreset(
       testDb,
       '11111111-1111-4111-8111-aaaaaaaaaaaa',
       userId,
     )
+    const otherUserId = '22222222-2222-4222-8222-222222222222'
+    await seedUser(testDb, {
+      id: otherUserId,
+      name: 'B',
+      email: 'b@example.com',
+    })
+    await seedSharedPreset(
+      testDb,
+      '22222222-2222-4222-8222-bbbbbbbbbbbb',
+      otherUserId,
+    )
     const body = await getExpectOkBody(GET, userId)
-    expect(body.presets).toHaveLength(1)
+    expect(
+      body.presets.map((preset: { userId: string }) => preset.userId).sort(),
+    ).toEqual([userId, otherUserId])
+    expect(body.pagination.total).toBe(2)
   })
 
   it('rejects invalid query (limit out of range)', async () => {

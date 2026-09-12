@@ -67,16 +67,16 @@ async function validateBudgetAndPlan(
   return null
 }
 
-async function applyBulkAssign(data: BulkAssignBudgetInput): Promise<number> {
-  return db.transaction(async (tx) => {
-    const [txCount, splitCount] = await Promise.all([
+function applyBulkAssign(data: BulkAssignBudgetInput): number {
+  return db.transaction((tx) => {
+    const txCount =
       data.ids.length > 0
         ? bulkAssignBudgetToTransactions(data.ids, data.budgetId, tx)
-        : 0,
+        : 0
+    const splitCount =
       data.splitIds.length > 0
         ? bulkAssignBudgetToSplits(data.splitIds, data.budgetId, tx)
-        : 0,
-    ])
+        : 0
     return txCount + splitCount
   })
 }
@@ -93,15 +93,10 @@ export const POST: APIRoute = async ({ request }) => {
   if (validationError) return validationError
 
   try {
-    const count = await applyBulkAssign(parsedResult.data)
+    const count = applyBulkAssign(parsedResult.data)
     return jsonResponse({ success: true, count })
   } catch (error) {
     console.error('Error bulk assigning budget to bank transactions:', error)
-    return jsonError(
-      error instanceof Error
-        ? error.message
-        : 'Fehler beim Zuweisen des Budgets',
-      500,
-    )
+    return jsonError('Fehler beim Zuweisen des Budgets', 500)
   }
 }

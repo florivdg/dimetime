@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Check, Copy } from 'lucide-vue-next'
 
@@ -9,21 +9,26 @@ defineProps<{
 }>()
 
 const copiedIndex = ref<number | null>(null)
+let resetTimer: ReturnType<typeof setTimeout> | undefined
 
-async function copyOne(code: string, index: number) {
-  await navigator.clipboard.writeText(code)
+onUnmounted(() => clearTimeout(resetTimer))
+
+function showCopied(index: number) {
+  clearTimeout(resetTimer)
   copiedIndex.value = index
-  setTimeout(() => {
+  resetTimer = setTimeout(() => {
     copiedIndex.value = null
   }, 2000)
 }
 
+async function copyOne(code: string, index: number) {
+  await navigator.clipboard.writeText(code)
+  showCopied(index)
+}
+
 async function copyAll(codes: string[]) {
   await navigator.clipboard.writeText(codes.join('\n'))
-  copiedIndex.value = -1
-  setTimeout(() => {
-    copiedIndex.value = null
-  }, 2000)
+  showCopied(-1)
 }
 </script>
 

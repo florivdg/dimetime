@@ -29,30 +29,26 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   try {
-    const count = await db.transaction(async (tx) => {
-      const [txCount, splitCount] = await Promise.all([
+    const count = db.transaction((tx) => {
+      // bun-sqlite commits when this callback returns; it must stay synchronous.
+      const txCount =
         parsed.data.ids.length > 0
           ? bulkArchiveBankTransactions(
               parsed.data.ids,
               parsed.data.isArchived,
               tx,
             )
-          : 0,
+          : 0
+      const splitCount =
         parsed.data.splitIds.length > 0
           ? bulkArchiveSplits(parsed.data.splitIds, parsed.data.isArchived, tx)
-          : 0,
-      ])
+          : 0
       return txCount + splitCount
     })
 
     return jsonResponse({ success: true, count })
   } catch (error) {
     console.error('Error bulk archiving bank transactions:', error)
-    return jsonError(
-      error instanceof Error
-        ? error.message
-        : 'Fehler beim Archivieren der Transaktionen',
-      500,
-    )
+    return jsonError('Fehler beim Archivieren der Transaktionen', 500)
   }
 }

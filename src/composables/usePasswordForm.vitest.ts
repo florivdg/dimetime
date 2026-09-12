@@ -1,8 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePasswordForm } from './usePasswordForm'
 import { withComposable } from '@/../test/composable-helpers'
+import { flushPromises } from '@vue/test-utils'
 
 describe('usePasswordForm', () => {
+  beforeEach(() => vi.useFakeTimers())
+
+  afterEach(async () => {
+    await vi.runAllTimersAsync()
+    await flushPromises()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  })
+
   it('rejects empty password via schema', () => {
     const { passwordSchema } = withComposable(usePasswordForm)
     const result = passwordSchema.safeParse({ password: '' })

@@ -71,21 +71,25 @@ function resetForm() {
   newIsBudget.value = false
 }
 
-watch(open, (isOpen) => {
-  if (isOpen && props.initialValues) {
-    newName.value = props.initialValues.name
-    newNote.value = props.initialValues.note ?? ''
-    newAmount.value = props.initialValues.amount / 100
-    newType.value = props.initialValues.type
-    newCategoryId.value = props.initialValues.categoryId
-    newIsBudget.value = props.initialValues.isBudget
-    newRecurrence.value = 'monatlich'
-    newStartMonth.value = getCurrentMonth()
-    newEndDate.value = ''
-  } else if (isOpen) {
-    resetForm()
-  }
-})
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen && props.initialValues) {
+      newName.value = props.initialValues.name
+      newNote.value = props.initialValues.note ?? ''
+      newAmount.value = props.initialValues.amount / 100
+      newType.value = props.initialValues.type
+      newCategoryId.value = props.initialValues.categoryId
+      newIsBudget.value = props.initialValues.isBudget
+      newRecurrence.value = 'monatlich'
+      newStartMonth.value = getCurrentMonth()
+      newEndDate.value = ''
+    } else if (isOpen) {
+      resetForm()
+    }
+  },
+  { immediate: true },
+)
 
 async function handleSubmit() {
   if (!newName.value.trim()) return

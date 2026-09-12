@@ -4,13 +4,19 @@
  * mounted in tests without pulling in the full reka-ui dependency surface.
  */
 import { h, defineComponent } from 'vue'
+import { Field, Form } from 'vee-validate'
 
 function passthrough(tag = 'div', extraProps: string[] = []) {
   return defineComponent({
     props: ['modelValue', 'open', 'asChild', ...extraProps],
     emits: ['update:modelValue', 'update:open', 'click'],
-    setup(_, { slots }) {
-      return () => h(tag, {}, slots.default?.())
+    setup(_, { slots, emit }) {
+      return () =>
+        h(
+          tag,
+          { onClick: (event: Event) => emit('click', event) },
+          slots.default?.(),
+        )
     },
   })
 }
@@ -18,12 +24,13 @@ function passthrough(tag = 'div', extraProps: string[] = []) {
 const button = defineComponent({
   props: ['variant', 'size', 'asChild', 'disabled', 'type'],
   emits: ['click'],
-  setup(_, { slots, emit }) {
+  setup(props, { slots, emit }) {
     return () =>
       h(
         'button',
         {
-          type: 'button',
+          type: props.type ?? 'button',
+          disabled: props.disabled,
           onClick: (e: Event) => emit('click', e),
         },
         slots.default?.(),
@@ -40,6 +47,7 @@ export const shadcnInput = {
       return () =>
         h('input', {
           type: props.type ?? 'text',
+          placeholder: props.placeholder,
           value: props.modelValue,
           onInput: (e: Event) =>
             emit('update:modelValue', (e.target as HTMLInputElement).value),
@@ -62,17 +70,9 @@ export const shadcnProgress = {
   }),
 }
 export const shadcnForm = {
-  Form: passthrough(),
+  Form,
   FormControl: passthrough(),
-  FormField: defineComponent({
-    props: ['name'],
-    setup(props, { slots }) {
-      return () =>
-        slots.default?.({
-          componentField: { name: props.name, 'onUpdate:modelValue': () => {} },
-        })
-    },
-  }),
+  FormField: Field,
   FormItem: passthrough(),
   FormLabel: passthrough('label'),
   FormMessage: passthrough('span'),
@@ -82,7 +82,19 @@ export const shadcnCheckbox = {
   Checkbox: defineComponent({
     props: ['modelValue'],
     emits: ['update:modelValue'],
-    setup: () => () => h('input', { type: 'checkbox' }),
+    setup:
+      (props, { emit }) =>
+      () =>
+        h('input', {
+          type: 'checkbox',
+          checked: props.modelValue === true,
+          indeterminate: props.modelValue === 'indeterminate',
+          onChange: (event: Event) =>
+            emit(
+              'update:modelValue',
+              (event.target as HTMLInputElement).checked,
+            ),
+        }),
   }),
 }
 export const shadcnAlertDialog = {

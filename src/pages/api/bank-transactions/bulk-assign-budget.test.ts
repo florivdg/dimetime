@@ -117,9 +117,18 @@ describe('POST /api/bank-transactions/bulk-assign-budget', () => {
 
   it('assigns the budget when plans match', async () => {
     await postExpectCount(POST, { budgetId, ids: [btId] }, 1)
+    expect(
+      await testDb
+        .select({
+          id: plansSchema.bankTransaction.id,
+          budgetId: plansSchema.bankTransaction.budgetId,
+        })
+        .from(plansSchema.bankTransaction),
+    ).toEqual([{ id: btId, budgetId }])
   })
 
   it('clears budget when budgetId=null', async () => {
+    await postExpectCount(POST, { budgetId, ids: [btId] }, 1)
     const res = (await POST(
       buildApiContext({
         method: 'POST',
@@ -127,12 +136,28 @@ describe('POST /api/bank-transactions/bulk-assign-budget', () => {
       }) as never,
     )) as Response
     expect(res.status).toBe(200)
+    expect(
+      await testDb
+        .select({
+          id: plansSchema.bankTransaction.id,
+          budgetId: plansSchema.bankTransaction.budgetId,
+        })
+        .from(plansSchema.bankTransaction),
+    ).toEqual([{ id: btId, budgetId: null }])
   })
 
   it('assigns budget to splits whose plan matches', async () => {
     const splitId = '77777777-7777-4777-8777-777777777777'
     await seedSplitOnBt(splitId, planA)
     await postExpectCount(POST, { budgetId, ids: [], splitIds: [splitId] }, 1)
+    expect(
+      await testDb
+        .select({
+          id: plansSchema.bankTransactionSplit.id,
+          budgetId: plansSchema.bankTransactionSplit.budgetId,
+        })
+        .from(plansSchema.bankTransactionSplit),
+    ).toEqual([{ id: splitId, budgetId }])
   })
 
   it('returns 400 when split plan differs from budget plan', async () => {

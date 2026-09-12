@@ -41,14 +41,19 @@ describe('formatAmount', () => {
 
 describe('formatDate', () => {
   it('formats ISO date string', () => {
-    const result = formatDate('2024-03-15')
-    expect(result).toContain('2024')
-    expect(result).toContain('15')
+    expect(formatDate('2024-03-15')).toBe('15.03.2024')
   })
 
   it('formats Date object', () => {
-    const result = formatDate(new Date('2024-06-01T00:00:00Z'))
-    expect(result).toContain('2024')
+    expect(formatDate(new Date(2024, 5, 1))).toBe('01.06.2024')
+  })
+
+  it('interprets timestamp strings in the same local timezone as Date objects', () => {
+    const timestamp = '2024-06-01T00:00:00Z'
+    const expected = new Intl.DateTimeFormat('de-DE', {
+      dateStyle: 'medium',
+    }).format(new Date(timestamp))
+    expect(formatDate(timestamp)).toBe(expected)
   })
 
   it('respects style parameter', () => {
@@ -64,14 +69,11 @@ describe('getPlanDisplayName', () => {
   })
 
   it('returns month/year from date when name is null', () => {
-    const result = getPlanDisplayName(null, '2024-03-01')
-    expect(result).toContain('2024')
-    expect(result.toLowerCase()).toContain('mär')
+    expect(getPlanDisplayName(null, '2024-03-01')).toBe('März 2024')
   })
 
   it('returns month/year from date when name is empty', () => {
-    const result = getPlanDisplayName('', '2024-01-01')
-    expect(result).toContain('2024')
+    expect(getPlanDisplayName('', '2024-01-01')).toBe('Januar 2024')
   })
 
   it('returns dash when both are null', () => {

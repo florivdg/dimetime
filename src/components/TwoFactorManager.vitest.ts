@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 
 const sessionRef = ref<{
@@ -22,6 +22,15 @@ vi.mock('@/lib/auth-client', () => ({
 const TwoFactorManager = (await import('./TwoFactorManager.vue')).default
 
 describe('TwoFactorManager.vue', () => {
+  beforeEach(() => vi.useFakeTimers())
+
+  afterEach(async () => {
+    await vi.runAllTimersAsync()
+    await flushPromises()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  })
+
   it('shows "Aktiviert" badge when 2FA enabled', () => {
     sessionRef.value = { data: { user: { twoFactorEnabled: true } } }
     const wrapper = mount(TwoFactorManager)

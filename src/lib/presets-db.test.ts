@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setSystemTime,
+} from 'bun:test'
 import {
   seedCategory,
   seedPlan as seedPlanRow,
@@ -55,9 +62,14 @@ async function insertPreset(
 }
 
 beforeEach(async () => {
+  setSystemTime(new Date('2026-03-15T12:00:00Z'))
   await seedUsers()
   await seedPlan()
   await seedPlan(archivedPlanId, true)
+})
+
+afterEach(() => {
+  setSystemTime()
 })
 
 describe('createPreset', () => {
@@ -155,39 +167,39 @@ describe('getPresets', () => {
     })
   })
 
-  it('returns all presets for the user (default sort = createdAt desc)', async () => {
-    const { presets, pagination } = await getPresets(userId)
+  it('returns all presets with an accurate total', async () => {
+    const { presets, pagination } = await getPresets()
     expect(presets).toHaveLength(3)
     expect(pagination.total).toBe(3)
   })
 
   it('filters by search', async () => {
-    const { presets } = await getPresets(userId, { search: 'App' })
+    const { presets } = await getPresets({ search: 'App' })
     expect(presets.map((p) => p.id)).toEqual(['p-1'])
   })
 
   it('filters by type', async () => {
-    const { presets } = await getPresets(userId, { type: 'income' })
+    const { presets } = await getPresets({ type: 'income' })
     expect(presets.map((p) => p.id)).toEqual(['p-2'])
   })
 
   it('filters by categoryId', async () => {
-    const { presets } = await getPresets(userId, { categoryId: 'cat-a' })
+    const { presets } = await getPresets({ categoryId: 'cat-a' })
     expect(presets.map((p) => p.id)).toEqual(['p-1'])
   })
 
   it('filters by recurrence', async () => {
-    const { presets } = await getPresets(userId, { recurrence: 'einmalig' })
+    const { presets } = await getPresets({ recurrence: 'einmalig' })
     expect(presets.map((p) => p.id)).toEqual(['p-2'])
   })
 
   it('hides expired when includeExpired=false', async () => {
-    const { presets } = await getPresets(userId, { includeExpired: false })
+    const { presets } = await getPresets({ includeExpired: false })
     expect(presets.map((p) => p.id)).not.toContain('p-3')
   })
 
   it('sorts by name ascending', async () => {
-    const { presets } = await getPresets(userId, {
+    const { presets } = await getPresets({
       sortBy: 'name',
       sortDir: 'asc',
     })
@@ -195,7 +207,7 @@ describe('getPresets', () => {
   })
 
   it('sorts by amount descending', async () => {
-    const { presets } = await getPresets(userId, {
+    const { presets } = await getPresets({
       sortBy: 'amount',
       sortDir: 'desc',
     })
@@ -203,7 +215,7 @@ describe('getPresets', () => {
   })
 
   it('paginates results', async () => {
-    const { presets, pagination } = await getPresets(userId, {
+    const { presets, pagination } = await getPresets({
       limit: 1,
       page: 2,
     })
@@ -212,15 +224,21 @@ describe('getPresets', () => {
   })
 
   it('returns all results when limit=-1', async () => {
-    const { presets, pagination } = await getPresets(userId, { limit: -1 })
+    const { presets, pagination } = await getPresets({ limit: -1 })
     expect(presets).toHaveLength(3)
     expect(pagination.totalPages).toBe(1)
   })
 
-  it('scopes to a single user', async () => {
+  it('includes presets created by every user in results and pagination', async () => {
     await insertPreset('p-other', { userId: otherUserId, name: 'Other' })
-    const { presets } = await getPresets(userId)
-    expect(presets.map((p) => p.id)).not.toContain('p-other')
+    const { presets, pagination } = await getPresets()
+    expect(presets.map((p) => p.id).sort()).toEqual([
+      'p-1',
+      'p-2',
+      'p-3',
+      'p-other',
+    ])
+    expect(pagination.total).toBe(4)
   })
 })
 
@@ -341,10 +359,11 @@ describe('getPresetsWithMatchStatus', () => {
       startMonth: '2026-01',
     })
     await insertPreset('no-match', {
+      userId: otherUserId,
       recurrence: 'einmalig',
       startMonth: '2027-01',
     })
-    const result = await getPresetsWithMatchStatus(userId, '2026-03')
+    const result = await getPresetsWithMatchStatus('2026-03')
     const matched = result.find((p) => p.id === 'match')
     const unmatched = result.find((p) => p.id === 'no-match')
     expect(matched?.isMatching).toBe(true)

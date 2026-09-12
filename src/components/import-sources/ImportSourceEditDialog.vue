@@ -197,8 +197,8 @@ async function handleSubmit() {
           <div class="flex items-end gap-3 pb-0.5">
             <Switch
               id="edit-active"
-              :checked="editIsActive"
-              @update:checked="editIsActive = $event"
+              :model-value="editIsActive"
+              @update:model-value="editIsActive = $event"
             />
             <Label for="edit-active">Aktiv</Label>
           </div>

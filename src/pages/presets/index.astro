@@ -10,7 +10,7 @@ if (!userId) {
 }
 
 // Fetch initial data
-const presetsData = await getPresets(userId, {
+const presetsData = await getPresets({
   page: 1,
   limit: 20,
   includeExpired: false,

@@ -1,7 +1,15 @@
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { applyPresetToPlan, getPresetById } from '@/lib/presets'
-import { handle, json, requireOwned, validateBody } from '@/lib/api/responses'
+import { requireUnarchivedPlan } from '@/lib/api/plan-guards'
+import {
+  handle,
+  json,
+  requireExisting,
+  requireUserId,
+  unwrap,
+  validateBody,
+} from '@/lib/api/responses'
 
 const applySchema = z.object({
   planId: z.uuid(),
@@ -13,21 +21,26 @@ const applySchema = z.object({
 
 // fallow-ignore-next-line code-duplication
 export const POST: APIRoute = async ({ params, request, locals }) => {
-  const owned = await requireOwned(
+  const userId = requireUserId(locals)
+  if (userId instanceof Response) return userId
+
+  const found = await requireExisting(
     params,
     'id',
     'Preset-ID',
-    locals,
     getPresetById,
     'Vorlage nicht gefunden',
   )
-  if (owned instanceof Response) return owned
+  if (found instanceof Response) return found
 
   const data = await validateBody(request, applySchema)
   if (data instanceof Response) return data
 
   return handle(
-    async () => json(await applyPresetToPlan(owned.id, data), 201),
+    async () => {
+      unwrap(await requireUnarchivedPlan(data.planId))
+      return json(await applyPresetToPlan(found.id, data), 201)
+    },
     'Fehler beim Anwenden der Vorlage',
     'Error applying preset',
   )

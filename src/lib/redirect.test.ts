@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { getSafeRedirectUrl } from './redirect'
 
 describe('getSafeRedirectUrl', () => {
@@ -56,7 +56,7 @@ describe('getSafeRedirectUrl', () => {
   describe('client-side same-origin check', () => {
     let originalWindow: typeof globalThis.window | undefined
 
-    beforeAll(() => {
+    beforeEach(() => {
       originalWindow = globalThis.window
       // Simulate a browser environment
       globalThis.window = {
@@ -64,7 +64,7 @@ describe('getSafeRedirectUrl', () => {
       } as never
     })
 
-    afterAll(() => {
+    afterEach(() => {
       if (originalWindow === undefined) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (globalThis as any).window

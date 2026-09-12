@@ -60,7 +60,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
   if (data instanceof Response) return data
 
   return handle(
-    async () => json(await getPresets(userId, data)),
+    async () => json(await getPresets(data)),
     'Fehler beim Laden der Vorlagen',
     'Error fetching presets',
   )

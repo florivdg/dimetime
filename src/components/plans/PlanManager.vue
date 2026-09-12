@@ -150,7 +150,10 @@ const filteredPlans = computed(() => {
 })
 
 const hasActiveFilters = computed(
-  () => searchQuery.value !== '' || selectedYear.value !== 'all',
+  () =>
+    searchQuery.value !== '' ||
+    selectedYear.value !== 'all' ||
+    hideArchived.value,
 )
 
 // API

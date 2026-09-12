@@ -1,4 +1,5 @@
-import { vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
+import { enableAutoUnmount } from '@vue/test-utils'
 import {
   shadcnAlertDialog,
   shadcnButton,
@@ -16,6 +17,14 @@ import {
   shadcnTable,
   shadcnTooltip,
 } from './component-mocks'
+
+// Vue deliberately avoids its delayed devtools probe in emulated DOMs whose
+// user agent identifies them as jsdom. happy-dom needs the same treatment so
+// every mounted wrapper does not leave a three-second timer behind.
+Object.defineProperty(window.navigator, 'userAgent', {
+  configurable: true,
+  value: `${window.navigator.userAgent} jsdom`,
+})
 
 // Globally stub the shadcn-vue / reka-ui wrappers that component tests mount.
 // These are pure pass-through stubs, so every `.vitest.ts` file can rely on the
@@ -38,8 +47,15 @@ vi.mock('@/components/ui/label', () => shadcnLabel)
 vi.mock('@/components/ui/checkbox', () => shadcnCheckbox)
 vi.mock('@/components/ui/progress', () => shadcnProgress)
 
-if (typeof globalThis.fetch === 'undefined') {
-  globalThis.fetch = vi.fn(() =>
-    Promise.reject(new Error('fetch not mocked in test')),
-  ) as never
-}
+enableAutoUnmount(afterEach)
+
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.reject(new Error('fetch not mocked in test'))),
+  )
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})

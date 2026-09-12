@@ -6,6 +6,7 @@ import {
   seedUser,
 } from '@/lib/__fixtures__/seeds'
 import { makeCsvFile } from '@/lib/__fixtures__/sample-csv'
+import { bankTransaction, statementImport } from '@/db/schema/plans'
 
 const testDb = setupTestDb()
 
@@ -29,8 +30,49 @@ describe('POST /api/bank-imports/commit', () => {
     } as never)) as Response
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.inserted).toBeGreaterThan(0)
-    expect(body.importId).toBeTypeOf('string')
+    expect(body).toEqual({
+      importId: expect.any(String),
+      inserted: 1,
+      updated: 0,
+      skipped: 0,
+      assigned: 0,
+      unassigned: 1,
+      warnings: [
+        '1 Transaktionen konnten keinem eindeutigen Monatsplan zugeordnet werden.',
+      ],
+    })
+    expect(
+      await testDb
+        .select({
+          amount: bankTransaction.amountCents,
+          bookingDate: bankTransaction.bookingDate,
+          firstSeenImportId: bankTransaction.firstSeenImportId,
+        })
+        .from(bankTransaction),
+    ).toEqual([
+      {
+        amount: -4500,
+        bookingDate: '2026-03-01',
+        firstSeenImportId: body.importId,
+      },
+    ])
+    expect(
+      await testDb
+        .select({
+          id: statementImport.id,
+          status: statementImport.status,
+          importedCount: statementImport.importedCount,
+          userId: statementImport.triggeredByUserId,
+        })
+        .from(statementImport),
+    ).toEqual([
+      {
+        id: body.importId,
+        status: 'success',
+        importedCount: 1,
+        userId: 'user-1',
+      },
+    ])
   })
 
   it('returns error response when parsing fails', async () => {
@@ -42,6 +84,12 @@ describe('POST /api/bank-imports/commit', () => {
       }),
       locals: {},
     } as never)) as Response
-    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error:
+        'ING-CSV konnte nicht gelesen werden: Kopfzeile mit Pflichtspalten nicht gefunden.',
+    })
+    expect(await testDb.select().from(bankTransaction)).toEqual([])
+    expect(await testDb.select().from(statementImport)).toEqual([])
   })
 })

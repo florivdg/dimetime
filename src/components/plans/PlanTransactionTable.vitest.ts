@@ -15,7 +15,7 @@ const PlanTransactionTable = (await import('./PlanTransactionTable.vue'))
 const sampleTx = sampleTransactionRow
 
 describe('PlanTransactionTable.vue', () => {
-  it('renders empty state when no transactions', () => {
+  it('renders an actionable empty state and emits fillFromPresets', async () => {
     const wrapper = mount(PlanTransactionTable, {
       props: {
         transactions: [],
@@ -28,7 +28,13 @@ describe('PlanTransactionTable.vue', () => {
         planDate: '2026-03-01',
       },
     })
-    expect(wrapper.html()).toBeTruthy()
+    expect(wrapper.text()).toContain('Keine Transaktionen vorhanden.')
+    const fillButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Mit Vorlagen füllen'))
+    expect(fillButton).toBeDefined()
+    await fillButton!.trigger('click')
+    expect(wrapper.emitted('fillFromPresets')).toHaveLength(1)
   })
 
   it('renders rows for given transactions', () => {

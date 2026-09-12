@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { setupTestDb } from '@/lib/__fixtures__/test-setup'
+import { plannedTransaction } from '@/db/schema/plans'
 import {
   postExpectCreated,
   postExpectStatus,
 } from '@/lib/__fixtures__/bulk-route-assertions'
 import { seedPlan, seedUser } from '@/lib/__fixtures__/seeds'
-import { seedScopedPreset } from '@/lib/__fixtures__/route-guards-user'
+import { seedSharedPreset } from '@/lib/__fixtures__/preset-routes'
 
 const testDb = setupTestDb()
 
@@ -29,8 +30,8 @@ async function seedAll() {
   })
 }
 
-async function seedPreset(id: string, owner = userId) {
-  await seedScopedPreset(testDb, id, owner)
+async function seedPreset(id: string, creatorId = userId) {
+  await seedSharedPreset(testDb, id, creatorId)
 }
 
 beforeEach(async () => {
@@ -66,16 +67,26 @@ describe('POST /api/presets/bulk-apply', () => {
       { body: { planId, presetIds: [preset1, preset2] }, userId },
       404,
     )
+    expect(await testDb.select().from(plannedTransaction)).toEqual([])
   })
 
-  it('returns 403 when a preset is owned by another user', async () => {
+  it('applies presets from multiple creators to the shared plan', async () => {
     await seedPreset(preset1)
     await seedPreset(preset2, otherUserId)
-    await postExpectStatus(
-      POST,
-      { body: { planId, presetIds: [preset1, preset2] }, userId },
-      403,
-    )
+    const body = await postExpectCreated(POST, {
+      body: { planId, presetIds: [preset1, preset2] },
+      userId,
+    })
+    expect(body.count).toBe(2)
+    const transactions = await testDb.select().from(plannedTransaction)
+    expect(
+      transactions
+        .map((row) => ({ name: row.name, planId: row.planId }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    ).toEqual([
+      { name: preset1, planId },
+      { name: preset2, planId },
+    ])
   })
 
   it('applies presets and returns 201', async () => {

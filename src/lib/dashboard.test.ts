@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setSystemTime,
+} from 'bun:test'
 import { monthOffsetDate } from '@/lib/__fixtures__/dates'
 import { currentMonth } from '@/lib/dates'
 import {
@@ -207,8 +214,11 @@ describe('getDashboardStats', () => {
 
 describe('getMonthlyChartData', () => {
   beforeEach(async () => {
+    setSystemTime(new Date(2026, 8, 15, 12))
     await insertPlanForCurrentMonth('p1')
   })
+
+  afterEach(() => setSystemTime())
 
   it('returns empty result when no transactions exist', async () => {
     const result = await getMonthlyChartData('6m')
@@ -291,13 +301,49 @@ describe('getMonthlyChartData', () => {
   })
 
   it('handles 12m range (lookback 11 months)', async () => {
+    for (const [id, date, amount] of [
+      ['too-old', '2025-09-30', 99999],
+      ['start', '2025-10-01', 12000],
+      ['middle', '2026-02-15', 34000],
+      ['now', '2026-09-01', 56000],
+    ] as const) {
+      await seedPlan(testDb, { id, date })
+      await insertTransaction({
+        id: `tx-${id}`,
+        planId: id,
+        amount,
+        type: 'income',
+        dueDate: '2026-09-15',
+      })
+    }
     const result = await getMonthlyChartData('12m')
-    expect(Array.isArray(result)).toBe(true)
+    expect(result).toEqual([
+      { month: new Date('2025-10-01'), income: 12000, expense: 0 },
+      { month: new Date('2026-02-01'), income: 34000, expense: 0 },
+      { month: new Date('2026-09-01'), income: 56000, expense: 0 },
+    ])
   })
 
   it('handles year range (since January)', async () => {
+    for (const [id, date, amount] of [
+      ['december', '2025-12-31', 99999],
+      ['september', '2026-09-01', 56000],
+      ['january', '2026-01-01', 12000],
+    ] as const) {
+      await seedPlan(testDb, { id, date })
+      await insertTransaction({
+        id: `tx-${id}`,
+        planId: id,
+        amount,
+        type: 'expense',
+        dueDate: '2026-09-15',
+      })
+    }
     const result = await getMonthlyChartData('year')
-    expect(Array.isArray(result)).toBe(true)
+    expect(result).toEqual([
+      { month: new Date('2026-01-01'), income: 0, expense: 12000 },
+      { month: new Date('2026-09-01'), income: 0, expense: 56000 },
+    ])
   })
 })
 
