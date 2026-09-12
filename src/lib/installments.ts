@@ -1132,6 +1132,18 @@ function isRunning(installment: InstallmentPlanWithStats): boolean {
 }
 
 /**
+ * The plans a month can still be charged for. Wider than {@link isRunning}: a
+ * plan whose last rate is already checked off has nothing left to project, but
+ * it still weighs on the month that rate was paid in. Only an ablösung takes a
+ * plan out for good.
+ */
+function chargeable(
+  installments: InstallmentPlanWithStats[],
+): InstallmentPlanWithStats[] {
+  return installments.filter((installment) => !installment.completedAt)
+}
+
+/**
  * The rate falling in the `index`-th projected month of an installment. Which
  * rate that is hangs off the position, not off the length of the projection:
  * the final rate is the last of the `remainingCount` open ones, so a projection
@@ -1149,12 +1161,22 @@ function projectedRateAmount(
 }
 
 /**
+ * The rate a checked row paid, priced by its own rank — the one case where a
+ * month can carry the final rate of a plan that is still running: paying the
+ * last rate ahead leaves earlier ones open.
+ */
+function paidRateAmount(
+  installment: InstallmentPlanWithStats,
+  rank: number,
+): number {
+  return rateAmountAt(installment, installment.prepaidInstallments + rank)
+}
+
+/**
  * Sum of the rates due in `today`: an installment contributes when its first
  * projected month is the current one (start month reached, no tombstone) — or
  * when this month's rate is already checked off, because the burden existed
- * either way. A checked row is priced by its own rank, which is the one case
- * where the current month can carry the final rate of a plan that is still
- * running: paying the last rate ahead leaves earlier ones open.
+ * either way.
  */
 function sumCurrentMonthlyLoad(
   installments: InstallmentPlanWithStats[],
@@ -1171,11 +1193,35 @@ function sumCurrentMonthlyLoad(
     }
     const paidRank = doneRanks.get(today)
     if (paidRank === undefined) return total
-    return (
-      total +
-      rateAmountAt(installment, installment.prepaidInstallments + paidRank)
-    )
+    return total + paidRateAmount(installment, paidRank)
   }, 0)
+}
+
+/**
+ * The rates an installment charges from `today` on, as month/amount pairs: its
+ * projected open rates plus the ones already checked off — those are left out
+ * of the projection, but the rate they paid still weighs on their month.
+ */
+function chargedRates(
+  installment: InstallmentPlanWithStats,
+  snapshot: InstallmentSnapshot,
+  today: string,
+): [month: string, amount: number][] {
+  const settled = snapshot.finalRatePaid.get(installment.id) ?? false
+  const projected = (snapshot.projectedMonths.get(installment.id) ?? []).map(
+    (month, index): [string, number] => [
+      month,
+      projectedRateAmount(installment, index, settled),
+    ],
+  )
+  const doneRanks = snapshot.doneMonths.get(installment.id) ?? EMPTY_RANKS
+  const paid = [...doneRanks]
+    .filter(([month]) => month >= today)
+    .map(([month, rank]): [string, number] => [
+      month,
+      paidRateAmount(installment, rank),
+    ])
+  return [...projected, ...paid]
 }
 
 /**
@@ -1191,14 +1237,12 @@ function buildTimeline(
   let lastMonth = ''
 
   for (const installment of installments) {
-    const months = snapshot.projectedMonths.get(installment.id) ?? []
-    const settled = snapshot.finalRatePaid.get(installment.id) ?? false
-    for (const [index, month] of months.entries()) {
+    for (const [month, amount] of chargedRates(installment, snapshot, today)) {
       const entries = byMonth.get(month) ?? []
       entries.push({
         installmentId: installment.id,
         name: installment.name,
-        amount: projectedRateAmount(installment, index, settled),
+        amount,
       })
       byMonth.set(month, entries)
       if (month > lastMonth) lastMonth = month
@@ -1238,7 +1282,11 @@ function summarize(
   return {
     running,
     aggregates: {
-      currentMonthlyLoad: sumCurrentMonthlyLoad(running, snapshot, today),
+      currentMonthlyLoad: sumCurrentMonthlyLoad(
+        chargeable(snapshot.plans),
+        snapshot,
+        today,
+      ),
       totalRemainingSum: running.reduce(
         (total, installment) => total + installment.remainingSum,
         0,
@@ -1256,11 +1304,11 @@ export async function getInstallmentOverview(
   today: string,
 ): Promise<InstallmentOverview> {
   const snapshot = await loadInstallmentSnapshot(today)
-  const { running, aggregates } = summarize(snapshot, today)
+  const { aggregates } = summarize(snapshot, today)
 
   return {
     installments: snapshot.plans,
     aggregates,
-    timeline: buildTimeline(running, snapshot, today),
+    timeline: buildTimeline(chargeable(snapshot.plans), snapshot, today),
   }
 }
