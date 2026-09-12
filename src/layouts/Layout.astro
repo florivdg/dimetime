@@ -46,9 +46,7 @@ const localStorageTheme = serverTheme ? apiToLocalTheme(serverTheme) : null
     <Font cssVariable="--font-inter" preload />
     <title>{title ? `${title} · DimeTime` : 'DimeTime'}</title>
   </head>
-  <body
-    class="bg-background text-foreground min-h-screen font-sans antialiased"
-  >
+  <body class="bg-background text-foreground min-h-screen font-sans antialiased">
     <Toaster client:load />
     <slot />
   </body>
