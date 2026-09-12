@@ -841,14 +841,48 @@ describe('projection', () => {
       '2026-05',
       '2026-06',
     ])
-    expect(overview.timeline.map((month) => month.total)).toEqual([
-      0, 5000, 5000, 5000,
-    ])
     // The rate of the current month was already paid, its burden still counts
+    expect(overview.timeline.map((month) => month.total)).toEqual([
+      5000, 5000, 5000, 5000,
+    ])
     expect(overview.aggregates.currentMonthlyLoad).toBe(5000)
   })
 
-  it('skips a month that was paid ahead', async () => {
+  it('keeps the checked final rate in the current month', async () => {
+    await seedMonthlyPlans(['2026-02', '2026-03'])
+    await seedInstallmentPlan(testDb, {
+      id: 'ip1',
+      amount: 5000,
+      totalInstallments: 2,
+      startMonth: '2026-02',
+    })
+    for (const month of ['2026-02', '2026-03']) {
+      await seedPlannedTransaction(testDb, {
+        id: `r-${month}`,
+        planId: `plan-${month}`,
+        installmentId: 'ip1',
+        isDone: true,
+      })
+    }
+
+    const [installment] = await statsOf('2026-03')
+    expect(installment.remainingCount).toBe(0)
+
+    // Nothing is left to project, but the last rate was still paid this month
+    const overview = await getInstallmentOverview('2026-03')
+    expect(overview.timeline).toEqual([
+      {
+        month: '2026-03',
+        entries: [
+          { installmentId: 'ip1', name: expect.any(String), amount: 5000 },
+        ],
+        total: 5000,
+      },
+    ])
+    expect(overview.aggregates.currentMonthlyLoad).toBe(5000)
+  })
+
+  it('projects around a month that was paid ahead', async () => {
     await seedMonthlyPlans(['2026-03', '2026-04', '2026-05'])
     await seedInstallmentPlan(testDb, {
       id: 'ip1',
@@ -866,12 +900,13 @@ describe('projection', () => {
     expect(installment.remainingCount).toBe(3)
     expect(installment.projectedEndMonth).toBe('2026-06')
 
+    // The paid-ahead rate still weighs on its own month
     const overview = await getInstallmentOverview('2026-03')
     expect(
       overview.timeline
         .filter((month) => month.entries.length > 0)
         .map((month) => month.month),
-    ).toEqual(['2026-03', '2026-04', '2026-06'])
+    ).toEqual(['2026-03', '2026-04', '2026-05', '2026-06'])
   })
 
   it('has no projected end month once nothing is left', async () => {
@@ -1302,7 +1337,7 @@ describe('abweichende Schlussrate', () => {
         '2026-05',
       ])
       expect(overview.timeline.map((month) => month.total)).toEqual([
-        0, 5000, 5000,
+        4735, 5000, 5000,
       ])
     })
 
