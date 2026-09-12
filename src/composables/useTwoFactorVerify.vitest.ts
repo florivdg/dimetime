@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { useAuthAction } from './useAuthAction'
 import { useTwoFactorVerify } from './useTwoFactorVerify'
@@ -85,8 +85,7 @@ describe('useTwoFactorVerify', () => {
       onSuccessCalled = true
     })
     verify.handlePinComplete(['1', '2', '3', '4', '5', '6'])
-    await new Promise((r) => setTimeout(r, 0))
-    await new Promise((r) => setTimeout(r, 0))
+    await flushPromises()
     expect(verify.totpCode.value).toEqual(['1', '2', '3', '4', '5', '6'])
     expect(onSuccessCalled).toBe(true)
   })

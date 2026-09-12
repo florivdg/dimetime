@@ -113,7 +113,7 @@ const themeOptions = [
         {{ errorMessage }}
       </div>
 
-      <div v-else class="space-y-6">
+      <div class="space-y-6">
         <div class="flex items-center justify-between gap-4">
           <div class="space-y-0.5">
             <Label for="theme-select" class="text-base"> Farbschema </Label>

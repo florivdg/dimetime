@@ -34,7 +34,7 @@ const loginSchema = z.object({
   email: z
     .string()
     .min(1, 'E-Mail ist erforderlich')
-    .email('Ungueltige E-Mail-Adresse'),
+    .email('Ungültige E-Mail-Adresse'),
   password: z
     .string()
     .min(1, 'Passwort ist erforderlich')
@@ -115,7 +115,7 @@ const onSubmit = form.handleSubmit(async (values) => {
         },
         onError: (ctx) => {
           if (ctx.error.status === 401) {
-            errorMessage.value = 'Ungueltige Anmeldedaten'
+            errorMessage.value = 'Ungültige Anmeldedaten'
           } else if (ctx.error.status === 403) {
             errorMessage.value = 'Zugriff verweigert'
           } else {
@@ -213,7 +213,7 @@ const onSubmit = form.handleSubmit(async (values) => {
               <Fingerprint class="size-4" />
               {{
                 isPasskeyLoading
-                  ? 'Passkey wird geprueft...'
+                  ? 'Passkey wird geprüft...'
                   : 'Mit Passkey anmelden'
               }}
             </Button>

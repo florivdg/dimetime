@@ -775,36 +775,37 @@ function buildUpsertSet() {
   }
 }
 
-async function applyCommit(
+function applyCommit(
   ctx: CommitContext,
   partition: Partition,
   triggeredByUserId: string | null,
-): Promise<void> {
+): void {
   const { preparedData, importId, now } = ctx
   const { allRows, pendingUpgradeRows, counts } = partition
 
-  await db.transaction(async (tx) => {
-    await tx.insert(statementImport).values({
-      id: importId,
-      sourceId: preparedData.source.id,
-      fileName: preparedData.fileName,
-      fileSha256: preparedData.fileSha256,
-      fileType: preparedData.fileType,
-      phase: 'commit',
-      status: 'success',
-      previewCount: preparedData.parsedRows.length,
-      importedCount: counts.insertedCount,
-      updatedCount: counts.updatedCount,
-      skippedCount: preparedData.duplicateInFile,
-      errorMessage: null,
-      triggeredByUserId,
-      createdAt: now,
-    })
+  db.transaction((tx) => {
+    tx.insert(statementImport)
+      .values({
+        id: importId,
+        sourceId: preparedData.source.id,
+        fileName: preparedData.fileName,
+        fileSha256: preparedData.fileSha256,
+        fileType: preparedData.fileType,
+        phase: 'commit',
+        status: 'success',
+        previewCount: preparedData.parsedRows.length,
+        importedCount: counts.insertedCount,
+        updatedCount: counts.updatedCount,
+        skippedCount: preparedData.duplicateInFile,
+        errorMessage: null,
+        triggeredByUserId,
+        createdAt: now,
+      })
+      .run()
 
     for (const upgrade of pendingUpgradeRows) {
       const { row, existingDbRow } = upgrade
-      await tx
-        .update(bankTransaction)
+      tx.update(bankTransaction)
         .set({
           dedupeKey: row.dedupeKey,
           externalTransactionId: row.externalTransactionId,
@@ -819,16 +820,17 @@ async function applyCommit(
           updatedAt: now,
         })
         .where(eq(bankTransaction.id, existingDbRow.id))
+        .run()
     }
 
     if (allRows.length === 0) return
-    await tx
-      .insert(bankTransaction)
+    tx.insert(bankTransaction)
       .values(allRows)
       .onConflictDoUpdate({
         target: [bankTransaction.sourceId, bankTransaction.dedupeKey],
         set: buildUpsertSet(),
       })
+      .run()
   })
 }
 
@@ -848,7 +850,7 @@ export async function commitBankImport(input: {
       now: new Date(),
     }
     const partition = partitionRows(ctx)
-    await applyCommit(ctx, partition, input.triggeredByUserId ?? null)
+    applyCommit(ctx, partition, input.triggeredByUserId ?? null)
 
     return {
       importId: ctx.importId,

@@ -492,46 +492,49 @@ export async function updateBankTransactionFields(
   return updated
 }
 
-export async function bulkArchiveBankTransactions(
+export function bulkArchiveBankTransactions(
   ids: string[],
   isArchived: boolean,
   txOrDb: DbOrTransaction = db,
-): Promise<number> {
-  const result = await txOrDb
+): number {
+  const result = txOrDb
     .update(bankTransaction)
     .set({ isArchived, updatedAt: new Date() })
     .where(inArray(bankTransaction.id, ids))
     .returning({ id: bankTransaction.id })
+    .all()
   return result.length
 }
 
-async function updateBankTxPlanGroup(
+function updateBankTxPlanGroup(
   txOrDb: DbOrTransaction,
   ids: string[],
   values: Partial<typeof bankTransaction.$inferInsert>,
 ) {
   if (ids.length === 0) return
-  await txOrDb
+  txOrDb
     .update(bankTransaction)
     .set(values)
     .where(inArray(bankTransaction.id, ids))
+    .run()
 }
 
-export async function bulkAssignPlanToTransactions(
+export function bulkAssignPlanToTransactions(
   ids: string[],
   planId: string | null,
   txOrDb: DbOrTransaction = db,
-): Promise<number> {
+): number {
   const now = new Date()
   const planAssignment: 'manual' | 'none' = planId ? 'manual' : 'none'
 
-  const targetTransactions = await txOrDb
+  const targetTransactions = txOrDb
     .select({
       id: bankTransaction.id,
       planId: bankTransaction.planId,
     })
     .from(bankTransaction)
     .where(inArray(bankTransaction.id, ids))
+    .all()
 
   if (targetTransactions.length === 0) return 0
 
@@ -540,13 +543,13 @@ export async function bulkAssignPlanToTransactions(
     planId,
   )
 
-  await updateBankTxPlanGroup(txOrDb, idsToClearBudget, {
+  updateBankTxPlanGroup(txOrDb, idsToClearBudget, {
     planId,
     planAssignment,
     budgetId: null,
     updatedAt: now,
   })
-  await updateBankTxPlanGroup(txOrDb, idsToKeepBudget, {
+  updateBankTxPlanGroup(txOrDb, idsToKeepBudget, {
     planId,
     planAssignment,
     updatedAt: now,
@@ -555,12 +558,12 @@ export async function bulkAssignPlanToTransactions(
   return targetTransactions.length
 }
 
-export async function bulkAssignBudgetToTransactions(
+export function bulkAssignBudgetToTransactions(
   ids: string[],
   budgetId: string | null,
   txOrDb: DbOrTransaction = db,
-): Promise<number> {
-  const result = await txOrDb
+): number {
+  const result = txOrDb
     .update(bankTransaction)
     .set({
       budgetId,
@@ -568,5 +571,6 @@ export async function bulkAssignBudgetToTransactions(
     })
     .where(inArray(bankTransaction.id, ids))
     .returning({ id: bankTransaction.id })
+    .all()
   return result.length
 }

@@ -4,29 +4,32 @@ import {
   error,
   handle,
   json,
-  requireOwned,
+  requireExisting,
+  requireUserId,
   validateBody,
 } from '@/lib/api/responses'
 import { updatePresetSchema } from './_schema'
 
 // fallow-ignore-next-line code-duplication
 export const PUT: APIRoute = async ({ params, request, locals }) => {
-  const owned = await requireOwned(
+  const userId = requireUserId(locals)
+  if (userId instanceof Response) return userId
+
+  const found = await requireExisting(
     params,
     'id',
     'Preset-ID',
-    locals,
     getPresetById,
     'Vorlage nicht gefunden',
   )
-  if (owned instanceof Response) return owned
+  if (found instanceof Response) return found
 
   const data = await validateBody(request, updatePresetSchema)
   if (data instanceof Response) return data
 
   return handle(
     async () => {
-      const updated = await updatePreset(owned.id, data)
+      const updated = await updatePreset(found.id, data)
       if (!updated) return error('Vorlage nicht gefunden', 404)
       return json(updated)
     },
@@ -36,19 +39,21 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
 }
 
 export const DELETE: APIRoute = async ({ params, locals }) => {
-  const owned = await requireOwned(
+  const userId = requireUserId(locals)
+  if (userId instanceof Response) return userId
+
+  const found = await requireExisting(
     params,
     'id',
     'Preset-ID',
-    locals,
     getPresetById,
     'Vorlage nicht gefunden',
   )
-  if (owned instanceof Response) return owned
+  if (found instanceof Response) return found
 
   return handle(
     async () => {
-      const success = await deletePreset(owned.id)
+      const success = await deletePreset(found.id)
       if (!success) return error('Vorlage nicht gefunden', 404)
       return json({ success: true, message: 'Vorlage wurde gelöscht' })
     },

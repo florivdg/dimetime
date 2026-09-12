@@ -5,6 +5,7 @@ import TwoFactorBackupCodes from './TwoFactorBackupCodes.vue'
 let writeTextMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
+  vi.useFakeTimers()
   writeTextMock = vi.fn(() => Promise.resolve())
   Object.defineProperty(globalThis.navigator, 'clipboard', {
     value: { writeText: writeTextMock },
@@ -14,6 +15,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.clearAllTimers()
   vi.useRealTimers()
 })
 
@@ -42,6 +44,9 @@ describe('TwoFactorBackupCodes.vue', () => {
     const buttons = wrapper.findAll('button')
     await buttons[0].trigger('click')
     expect(writeTextMock).toHaveBeenCalledWith('code-a')
+    expect(buttons[0].find('.lucide-check').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(buttons[0].find('.lucide-check').exists()).toBe(false)
   })
 
   it('copies all codes joined by newline on bulk button click', async () => {
@@ -62,5 +67,30 @@ describe('TwoFactorBackupCodes.vue', () => {
       slots: { default: '<span class="slot-marker">DONE</span>' },
     })
     expect(wrapper.html()).toContain('slot-marker')
+  })
+
+  it('keeps the latest copy confirmation visible for its full timeout', async () => {
+    const wrapper = mount(TwoFactorBackupCodes, {
+      props: { codes: ['a', 'b'], warningText: 'w' },
+    })
+    const buttons = wrapper.findAll('button')
+    await buttons[0].trigger('click')
+    await vi.advanceTimersByTimeAsync(1000)
+    await buttons[1].trigger('click')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(buttons[1].find('.lucide-check').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(buttons[1].find('.lucide-check').exists()).toBe(false)
+  })
+
+  it('cancels its pending confirmation timeout when unmounted', async () => {
+    const wrapper = mount(TwoFactorBackupCodes, {
+      props: { codes: ['a'], warningText: 'w' },
+    })
+    await vi.runAllTimersAsync()
+    await wrapper.get('button').trigger('click')
+    expect(vi.getTimerCount()).toBe(1)
+    wrapper.unmount()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

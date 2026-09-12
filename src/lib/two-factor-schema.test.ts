@@ -1,4 +1,11 @@
-import { describe, expect, test } from 'bun:test'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  setSystemTime,
+  test,
+} from 'bun:test'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { twoFactor } from 'better-auth/plugins'
@@ -62,14 +69,16 @@ function cookiesFrom(headers: Headers): Headers {
  * The stored secret is HMAC'd as raw UTF-8, not base32-decoded: the base32
  * string users scan is an encoding of these bytes, not the key itself.
  */
-async function currentCode(): Promise<string> {
+async function currentCode(stepOffset = 0): Promise<string> {
   const row = db.$client
     .query('select secret from two_factor limit 1')
     .get() as { secret: string }
   const raw = await symmetricDecrypt({ key: SECRET, data: row.secret })
 
   const counter = Buffer.alloc(8)
-  counter.writeBigInt64BE(BigInt(Math.floor(Date.now() / 1000 / 30)))
+  counter.writeBigInt64BE(
+    BigInt(Math.floor(Date.now() / 1000 / 30) + stepOffset),
+  )
   const digest = createHmac('sha1', Buffer.from(raw, 'utf8'))
     .update(counter)
     .digest()
@@ -119,6 +128,15 @@ async function signInAwaitingSecondFactor(auth: Auth): Promise<Headers> {
 }
 
 describe('two_factor schema vs better-auth two-factor plugin', () => {
+  beforeEach(() => {
+    // Freeze the clock so generation and verification cannot cross a TOTP step.
+    setSystemTime(new Date('2026-09-12T12:00:15Z'))
+  })
+
+  afterEach(() => {
+    setSystemTime()
+  })
+
   test('enrolling in 2FA does not hit a missing schema field', async () => {
     const auth = createAuth()
     const signUp = await auth.api.signUpEmail({
@@ -161,9 +179,16 @@ describe('two_factor schema vs better-auth two-factor plugin', () => {
     const challengeHeaders = await signInAwaitingSecondFactor(auth)
 
     let caught: unknown
+    // better-auth accepts the previous/current/next 30-second step. Exclude
+    // all three rather than hoping a hardcoded six-digit value is invalid.
+    const validCodes = await Promise.all([-1, 0, 1].map(currentCode))
+    let wrongCode = '000000'
+    while (validCodes.includes(wrongCode)) {
+      wrongCode = String(Number(wrongCode) + 1).padStart(6, '0')
+    }
     try {
       await auth.api.verifyTOTP({
-        body: { code: '000000' },
+        body: { code: wrongCode },
         headers: challengeHeaders,
       })
     } catch (error) {

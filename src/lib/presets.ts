@@ -46,11 +46,7 @@ export interface PresetQueryOptions {
   type?: 'income' | 'expense'
   categoryId?: string
   recurrence?:
-    | 'einmalig'
-    | 'monatlich'
-    | 'vierteljährlich'
-    | 'halbjährlich'
-    | 'jährlich'
+    'einmalig' | 'monatlich' | 'vierteljährlich' | 'halbjährlich' | 'jährlich'
   includeExpired?: boolean
   sortBy?: 'name' | 'createdAt' | 'lastUsedAt' | 'amount'
   sortDir?: 'asc' | 'desc'
@@ -65,11 +61,7 @@ export interface CreatePresetInput {
   type?: 'income' | 'expense'
   amount: number
   recurrence?:
-    | 'einmalig'
-    | 'monatlich'
-    | 'vierteljährlich'
-    | 'halbjährlich'
-    | 'jährlich'
+    'einmalig' | 'monatlich' | 'vierteljährlich' | 'halbjährlich' | 'jährlich'
   startMonth?: string | null // YYYY-MM format
   endDate?: string | null
   categoryId?: string | null
@@ -84,11 +76,7 @@ export interface UpdatePresetInput {
   type?: 'income' | 'expense'
   amount?: number
   recurrence?:
-    | 'einmalig'
-    | 'monatlich'
-    | 'vierteljährlich'
-    | 'halbjährlich'
-    | 'jährlich'
+    'einmalig' | 'monatlich' | 'vierteljährlich' | 'halbjährlich' | 'jährlich'
   startMonth?: string | null // YYYY-MM format
   endDate?: string | null
   categoryId?: string | null
@@ -114,7 +102,7 @@ function expiryCondition() {
   return sql`(${transactionPreset.endDate} IS NULL OR ${transactionPreset.endDate} >= ${today})`
 }
 
-function buildPresetConditions(userId: string, options: PresetQueryOptions) {
+function buildPresetConditions(options: PresetQueryOptions) {
   const {
     search,
     type,
@@ -125,7 +113,6 @@ function buildPresetConditions(userId: string, options: PresetQueryOptions) {
   const cond = <T>(v: T | undefined | null, build: (val: T) => SQL) =>
     v ? build(v) : null
   const candidates = [
-    eq(transactionPreset.userId, userId),
     cond(search, (v) => like(transactionPreset.name, `%${v}%`)),
     cond(type, (v) => eq(transactionPreset.type, v)),
     cond(categoryId, (v) => eq(transactionPreset.categoryId, v)),
@@ -156,7 +143,6 @@ function applyPresetSort<T extends { orderBy: (...args: never[]) => T }>(
  * Get paginated presets with optional filtering and sorting
  */
 export async function getPresets(
-  userId: string,
   options: PresetQueryOptions = {},
 ): Promise<PaginatedPresets> {
   const {
@@ -166,7 +152,7 @@ export async function getPresets(
     limit = 20,
   } = options
 
-  const conditions = buildPresetConditions(userId, options)
+  const conditions = buildPresetConditions(options)
 
   let baseQuery = db
     .select({
@@ -230,7 +216,7 @@ export async function getPresetById(
 }
 
 /**
- * Get multiple presets by IDs (basic columns; used for batch ownership checks).
+ * Get multiple presets by IDs (basic columns; used for batch existence checks).
  */
 export async function getPresetsByIds(
   ids: string[],
@@ -389,10 +375,9 @@ export async function applyPresetToPlan(
  * Get all presets with match status for a specific plan month
  */
 export async function getPresetsWithMatchStatus(
-  userId: string,
   planMonth: string,
 ): Promise<(PresetWithTags & { isMatching: boolean })[]> {
-  const { presets } = await getPresets(userId, {
+  const { presets } = await getPresets({
     includeExpired: false,
     limit: -1,
     sortBy: 'name',

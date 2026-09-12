@@ -50,11 +50,15 @@ const hasSelectedPresets = computed(() => selectedPresetIds.value.size > 0)
 const selectedCount = computed(() => selectedPresetIds.value.size)
 
 // Load presets when dialog opens
-watch(open, async (isOpen) => {
-  if (isOpen) {
-    await loadPresets()
-  }
-})
+watch(
+  open,
+  async (isOpen) => {
+    if (isOpen) {
+      await loadPresets()
+    }
+  },
+  { immediate: true },
+)
 
 async function loadPresets() {
   isLoading.value = true

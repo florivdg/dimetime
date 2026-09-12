@@ -3,6 +3,7 @@ import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
 import { itRejectsInvalidJson } from '@/lib/__fixtures__/route-guards'
 import { postExpectCount } from '@/lib/__fixtures__/bulk-route-assertions'
+import { bankTransaction } from '@/db/schema/plans'
 import {
   BULK_ASSIGN_IDS,
   seedPlan,
@@ -69,9 +70,19 @@ describe('POST /api/bank-transactions/bulk-assign-plan', () => {
 
   it('assigns plan and returns count', async () => {
     await postExpectCount(POST, { planId, ids: [btId] }, 1)
+    expect(
+      await testDb
+        .select({
+          id: bankTransaction.id,
+          planId: bankTransaction.planId,
+          assignment: bankTransaction.planAssignment,
+        })
+        .from(bankTransaction),
+    ).toEqual([{ id: btId, planId, assignment: 'manual' }])
   })
 
   it('accepts null planId (unassign)', async () => {
+    await postExpectCount(POST, { planId, ids: [btId] }, 1)
     const res = (await POST(
       buildApiContext({
         method: 'POST',
@@ -79,5 +90,14 @@ describe('POST /api/bank-transactions/bulk-assign-plan', () => {
       }) as never,
     )) as Response
     expect(res.status).toBe(200)
+    expect(
+      await testDb
+        .select({
+          id: bankTransaction.id,
+          planId: bankTransaction.planId,
+          assignment: bankTransaction.planAssignment,
+        })
+        .from(bankTransaction),
+    ).toEqual([{ id: btId, planId: null, assignment: 'none' }])
   })
 })

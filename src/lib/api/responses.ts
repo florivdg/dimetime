@@ -50,7 +50,7 @@ export async function handle<T>(
   } catch (err) {
     if (err instanceof Response) return err
     console.error(`${logTag}:`, err)
-    return error(err instanceof Error ? err.message : fallbackMsg, 500)
+    return error(fallbackMsg, 500)
   }
 }
 
@@ -71,25 +71,4 @@ export async function requireExisting<T>(
   const resource = await loader(id)
   if (!resource) return error(notFoundMsg, 404)
   return { id, resource }
-}
-
-// fallow-ignore-next-line complexity
-export async function requireOwned<T>(
-  params: Record<string, string | undefined>,
-  paramKey: string,
-  paramLabel: string,
-  locals: App.Locals,
-  loader: (id: string) => Promise<T | undefined | null>,
-  notFoundMsg: string,
-): Promise<{ id: string; userId: string; resource: T } | Response> {
-  const userId = locals.user?.id
-  if (!userId) return unauthorized()
-  const id = params[paramKey]
-  if (!id) return error(`${paramLabel} fehlt`, 400)
-  const resource = await loader(id)
-  if (!resource) return error(notFoundMsg, 404)
-  if ((resource as { userId?: unknown }).userId !== userId) {
-    return error('Nicht autorisiert', 403)
-  }
-  return { id, userId, resource }
 }

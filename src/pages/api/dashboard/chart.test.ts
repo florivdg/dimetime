@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'bun:test'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setSystemTime,
+} from 'bun:test'
 import { monthOffsetDate } from '@/lib/__fixtures__/dates'
 import { seedPlan, seedPlannedTransaction } from '@/lib/__fixtures__/seeds'
 import { setupTestDb } from '@/lib/__fixtures__/test-setup'
@@ -29,40 +36,46 @@ async function seedTx(
 }
 
 describe('GET /api/dashboard/chart', () => {
-  it('returns chart data for the default range (6m) when none specified', async () => {
-    const res = (await GET(
-      buildApiContext({ url: 'http://test/api/dashboard/chart' }) as never,
-    )) as Response
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(Array.isArray(body.data)).toBe(true)
+  beforeEach(() => {
+    setSystemTime(new Date(2026, 8, 15, 12))
   })
+  afterEach(() => setSystemTime())
 
-  it('respects valid range=12m', async () => {
+  it.each([
+    ['', ['2026-04', '2026-09']],
+    ['?range=6m', ['2026-04', '2026-09']],
+    [
+      '?range=12m',
+      ['2025-10', '2025-12', '2026-01', '2026-03', '2026-04', '2026-09'],
+    ],
+    ['?range=year', ['2026-01', '2026-03', '2026-04', '2026-09']],
+    ['?range=bogus', ['2026-04', '2026-09']],
+  ])('returns the exact ordered range for "%s"', async (query, months) => {
+    // Deliberately seed out of order, including the month before each cutoff.
+    for (const date of [
+      '2026-09-01',
+      '2025-09-30',
+      '2026-03-31',
+      '2026-04-01',
+      '2025-12-31',
+      '2026-01-01',
+      '2025-10-01',
+    ]) {
+      await seedTx(date, 50000, 'income')
+    }
     const res = (await GET(
       buildApiContext({
-        url: 'http://test/api/dashboard/chart?range=12m',
+        url: `http://test/api/dashboard/chart${query}`,
       }) as never,
     )) as Response
     expect(res.status).toBe(200)
-  })
-
-  it('respects valid range=year', async () => {
-    const res = (await GET(
-      buildApiContext({
-        url: 'http://test/api/dashboard/chart?range=year',
-      }) as never,
-    )) as Response
-    expect(res.status).toBe(200)
-  })
-
-  it('falls back to 6m for invalid range values', async () => {
-    const res = (await GET(
-      buildApiContext({
-        url: 'http://test/api/dashboard/chart?range=bogus',
-      }) as never,
-    )) as Response
-    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      data: months.map((month) => ({
+        month: `${month}-01T00:00:00.000Z`,
+        income: 50000,
+        expense: 0,
+      })),
+    })
   })
 
   it('includes seeded data points in the response', async () => {
@@ -71,8 +84,9 @@ describe('GET /api/dashboard/chart', () => {
       buildApiContext({ url: 'http://test/api/dashboard/chart' }) as never,
     )) as Response
     const body = await res.json()
-    expect(body.data.length).toBeGreaterThan(0)
-    expect(body.data.at(-1).income).toBe(50000)
+    expect(body.data).toEqual([
+      { month: '2026-09-01T00:00:00.000Z', income: 50000, expense: 0 },
+    ])
   })
 
   it('counts a transaction in its plan month, not in its due date month', async () => {
@@ -87,7 +101,8 @@ describe('GET /api/dashboard/chart', () => {
       buildApiContext({ url: 'http://test/api/dashboard/chart' }) as never,
     )) as Response
     const body = await res.json()
-    expect(body.data.length).toBe(1)
-    expect(body.data.at(-1).expense).toBe(12345)
+    expect(body.data).toEqual([
+      { month: '2026-09-01T00:00:00.000Z', income: 0, expense: 12345 },
+    ])
   })
 })

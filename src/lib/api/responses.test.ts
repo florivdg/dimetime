@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import { z } from 'zod'
 import {
   error,
@@ -6,7 +6,6 @@ import {
   json,
   parseJson,
   requireExisting,
-  requireOwned,
   requireUserId,
   unwrap,
   validate,
@@ -122,21 +121,39 @@ describe('handle', () => {
     expect(result).toBe(thrown)
   })
 
-  it('wraps an Error into a 500 Response with its message', async () => {
-    const result = await handle(async () => {
-      throw new Error('boom')
-    }, 'fallback')
-    expect(result).toBeInstanceOf(Response)
-    expect((result as Response).status).toBe(500)
-    expect(await (result as Response).json()).toEqual({ error: 'boom' })
+  it('does not expose an unexpected Error message in the response', async () => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const thrown = new Error('boom')
+      const result = await handle(
+        async () => {
+          throw thrown
+        },
+        'fallback',
+        'test handler',
+      )
+      expect(result).toBeInstanceOf(Response)
+      expect((result as Response).status).toBe(500)
+      expect(await (result as Response).json()).toEqual({ error: 'fallback' })
+      expect(consoleError).toHaveBeenCalledWith('test handler:', thrown)
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 
   it('falls back to fallbackMsg when thrown value is non-Error', async () => {
-    const result = await handle(async () => {
-      throw 'string-error'
-    }, 'fallback msg')
-    expect(result).toBeInstanceOf(Response)
-    expect(await (result as Response).json()).toEqual({ error: 'fallback msg' })
+    const consoleError = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const result = await handle(async () => {
+        throw 'string-error'
+      }, 'fallback msg')
+      expect(result).toBeInstanceOf(Response)
+      expect(await (result as Response).json()).toEqual({
+        error: 'fallback msg',
+      })
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 })
 
@@ -184,70 +201,5 @@ describe('requireExisting', () => {
       'not found',
     )
     expect(result).toEqual({ id: 'x', resource: { id: 'x', name: 'A' } })
-  })
-})
-
-describe('requireOwned', () => {
-  const locals = { user: { id: 'owner' } } as never
-
-  it('returns 401 when no user', async () => {
-    const result = await requireOwned(
-      { id: 'x' },
-      'id',
-      'ID',
-      {} as never,
-      async () => ({ id: 'x', userId: 'owner' }),
-      'not found',
-    )
-    expect((result as Response).status).toBe(401)
-  })
-
-  it('returns 400 when id missing', async () => {
-    const result = await requireOwned(
-      {},
-      'id',
-      'ID',
-      locals,
-      async () => ({ id: 'x', userId: 'owner' }),
-      'not found',
-    )
-    expect((result as Response).status).toBe(400)
-  })
-
-  it('returns 404 when loader returns null', async () => {
-    const result = await requireOwned(
-      { id: 'x' },
-      'id',
-      'ID',
-      locals,
-      async () => null,
-      'not found',
-    )
-    expect((result as Response).status).toBe(404)
-  })
-
-  it('returns 403 when resource belongs to another user', async () => {
-    const result = await requireOwned(
-      { id: 'x' },
-      'id',
-      'ID',
-      locals,
-      async () => ({ id: 'x', userId: 'someone-else' }),
-      'not found',
-    )
-    expect((result as Response).status).toBe(403)
-  })
-
-  it('returns full owned object on success', async () => {
-    const resource = { id: 'x', userId: 'owner', name: 'A' }
-    const result = await requireOwned(
-      { id: 'x' },
-      'id',
-      'ID',
-      locals,
-      async () => resource,
-      'not found',
-    )
-    expect(result).toEqual({ id: 'x', userId: 'owner', resource })
   })
 })

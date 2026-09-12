@@ -20,27 +20,20 @@ const bulkApplySchema = z.object({
     .optional(),
 })
 
-async function assertPresetsOwned(
-  presetIds: string[],
-  userId: string,
-): Promise<void> {
+async function assertPresetsExist(presetIds: string[]): Promise<void> {
   const presets = await getPresetsByIds(presetIds)
   if (presets.length !== presetIds.length) {
     throw error('Eine oder mehrere Vorlagen wurden nicht gefunden', 404)
-  }
-  const foreign = presets.find((p) => p.userId !== userId)
-  if (foreign) {
-    throw error(`Vorlage ${foreign.id} nicht autorisiert`, 403)
   }
 }
 
 export const POST: APIRoute = async ({ request, locals }) =>
   handle(
     async () => {
-      const userId = unwrap(requireUserId(locals))
+      unwrap(requireUserId(locals))
       const data = unwrap(await validateBody(request, bulkApplySchema))
       unwrap(await requireUnarchivedPlan(data.planId))
-      await assertPresetsOwned(data.presetIds, userId)
+      await assertPresetsExist(data.presetIds)
 
       const result = await applyMultiplePresetsToPlan(data.presetIds, {
         planId: data.planId,

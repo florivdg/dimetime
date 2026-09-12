@@ -27,7 +27,7 @@ function asImportApiError(error: unknown): {
   if (error instanceof Error) {
     return {
       status: 500,
-      message: error.message || 'Unbekannter interner Fehler',
+      message: 'Unbekannter interner Fehler',
     }
   }
 
@@ -96,6 +96,9 @@ export async function runImportFlow<T>(
     })
     return jsonResponse(result)
   } catch (error) {
+    if (!(error instanceof ImportApiError)) {
+      console.error('Bankimport fehlgeschlagen:', error)
+    }
     const mapped = asImportApiError(error)
     return jsonError(mapped.message, mapped.status)
   }

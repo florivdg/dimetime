@@ -71,12 +71,16 @@ const selectedSource = computed(() =>
 const canGoToStep2 = computed(() => Boolean(selectedSource.value?.isActive))
 const canGoToStep3 = computed(() => !!selectedFile.value)
 
-watch(open, async (isOpen) => {
-  if (isOpen) {
-    resetState()
-    await loadImportTypes()
-  }
-})
+watch(
+  open,
+  async (isOpen) => {
+    if (isOpen) {
+      resetState()
+      await loadImportTypes()
+    }
+  },
+  { immediate: true },
+)
 
 watch(selectedSourceId, () => {
   if (currentStep.value === 1 && canGoToStep2.value) {

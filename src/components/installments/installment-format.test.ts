@@ -23,7 +23,7 @@ describe('formatMonthNumeric', () => {
 
 describe('formatMonthShort', () => {
   it('formats a date as a short German month with a 2-digit year', () => {
-    expect(formatMonthShort(new Date(2026, 8, 1))).toContain('26')
+    expect(formatMonthShort(new Date(2026, 8, 1))).toBe('Sept. 26')
   })
 })
 

@@ -36,16 +36,16 @@ async function validateTargetPlan(
   return null
 }
 
-async function applyBulkAssign(data: BulkAssignPlanInput): Promise<number> {
-  return db.transaction(async (tx) => {
-    const [txCount, splitCount] = await Promise.all([
+function applyBulkAssign(data: BulkAssignPlanInput): number {
+  return db.transaction((tx) => {
+    const txCount =
       data.ids.length > 0
         ? bulkAssignPlanToTransactions(data.ids, data.planId, tx)
-        : 0,
+        : 0
+    const splitCount =
       data.splitIds.length > 0
         ? bulkAssignPlanToSplits(data.splitIds, data.planId, tx)
-        : 0,
-    ])
+        : 0
     return txCount + splitCount
   })
 }
@@ -62,13 +62,10 @@ export const POST: APIRoute = async ({ request }) => {
   if (planError) return planError
 
   try {
-    const count = await applyBulkAssign(parsedResult.data)
+    const count = applyBulkAssign(parsedResult.data)
     return jsonResponse({ success: true, count })
   } catch (error) {
     console.error('Error bulk assigning plan to bank transactions:', error)
-    return jsonError(
-      error instanceof Error ? error.message : 'Fehler beim Zuweisen des Plans',
-      500,
-    )
+    return jsonError('Fehler beim Zuweisen des Plans', 500)
   }
 }

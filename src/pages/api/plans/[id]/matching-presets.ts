@@ -24,8 +24,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
   const planMonth = found.resource.date.substring(0, 7)
 
   return handle(
-    async () =>
-      json({ presets: await getPresetsWithMatchStatus(userId, planMonth) }),
+    async () => json({ presets: await getPresetsWithMatchStatus(planMonth) }),
     'Fehler beim Laden der Vorlagen',
     'Error fetching matching presets',
   )

@@ -13,10 +13,13 @@
     "fallow": "fallow audit",
     "fallow:dupes": "fallow dupes",
     "fallow:dead": "fallow dead-code",
-    "test": "bun test && vitest run",
-    "test:unit": "bun test",
-    "test:vue": "vitest run",
-    "coverage": "bun test --coverage && vitest run --coverage"
+    "test": "bun run test:unit && bun run test:vue",
+    "test:unit": "bun test --parallel=4",
+    "test:vue": "vitest run --detectAsyncLeaks",
+    "test:stability": "bun test --parallel=4 --randomize --seed=42 && TZ=America/Los_Angeles bun test --parallel=4 --randomize --seed=1234 && vitest run --detectAsyncLeaks --sequence.shuffle --sequence.seed=42",
+    "coverage": "bun run coverage:unit && bun run coverage:vue",
+    "coverage:unit": "bun test --parallel=4 --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage/bun",
+    "coverage:vue": "vitest run --coverage"
   },
   "dependencies": {
     "@astrojs/check": "0.9.10",

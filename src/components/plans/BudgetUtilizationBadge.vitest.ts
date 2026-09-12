@@ -176,7 +176,6 @@ describe('BudgetUtilizationBadge.vue', () => {
       planDate: null,
     })
 
-    expect(wrapper.html()).toBeTruthy()
     expect(wrapper.text()).not.toContain('KW')
     expect(wrapper.text()).not.toContain('der Zeit vergangen')
     expect(hasTodayMarker(wrapper)).toBe(false)

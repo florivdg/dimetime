@@ -3,39 +3,50 @@ import { setupTestDb } from '@/lib/__fixtures__/test-setup'
 import { buildApiContext } from '@/lib/__fixtures__/api-context'
 import { itUpdatesViaPut } from '@/lib/__fixtures__/route-guards'
 import {
-  itGuardsUserScopedRoute,
-  itRejectsForeignOwner,
-  seedScopedPreset,
-  seedScopedUsers,
-  USER_SCOPED_IDS,
-} from '@/lib/__fixtures__/route-guards-user'
+  itGuardsPresetRoute,
+  seedSharedPreset,
+  seedPresetUsers,
+  PRESET_ROUTE_IDS,
+} from '@/lib/__fixtures__/preset-routes'
 
 const testDb = setupTestDb()
 
 const { PUT, DELETE } = await import('./[id]')
 
-const { userId, presetId } = USER_SCOPED_IDS
+const { userId, otherUserId, presetId } = PRESET_ROUTE_IDS
+const { getPresetById } = await import('@/lib/presets')
 
 async function seedPreset() {
-  await seedScopedPreset(testDb, presetId, userId)
+  await seedSharedPreset(testDb, presetId, userId)
 }
 
 beforeEach(async () => {
-  await seedScopedUsers(testDb)
+  await seedPresetUsers(testDb)
 })
 
 describe('PUT /api/presets/[id]', () => {
-  itGuardsUserScopedRoute(PUT, {
+  itGuardsPresetRoute(PUT, {
     method: 'PUT',
     userId,
     id: presetId,
     body: { name: 'X' },
   })
 
-  itRejectsForeignOwner(testDb, PUT, {
-    method: 'PUT',
-    body: { name: 'X' },
-    name: 'returns 403 when owned by another user',
+  it('updates a preset created by another authenticated user', async () => {
+    await seedSharedPreset(testDb, presetId, otherUserId)
+    const res = (await PUT(
+      buildApiContext({
+        method: 'PUT',
+        body: { name: 'Shared rent' },
+        params: { id: presetId },
+        userId,
+      }) as never,
+    )) as Response
+    expect(res.status).toBe(200)
+    expect(await getPresetById(presetId)).toMatchObject({
+      name: 'Shared rent',
+      userId: otherUserId,
+    })
   })
 
   itUpdatesViaPut(PUT, {
@@ -48,9 +59,10 @@ describe('PUT /api/presets/[id]', () => {
 })
 
 describe('DELETE /api/presets/[id]', () => {
-  itRejectsForeignOwner(testDb, DELETE, { method: 'DELETE' })
+  itGuardsPresetRoute(DELETE, { method: 'DELETE', userId, id: presetId })
 
-  it('returns 404 when not found', async () => {
+  it('deletes a preset created by another authenticated user', async () => {
+    await seedSharedPreset(testDb, presetId, otherUserId)
     const res = (await DELETE(
       buildApiContext({
         method: 'DELETE',
@@ -58,10 +70,11 @@ describe('DELETE /api/presets/[id]', () => {
         userId,
       }) as never,
     )) as Response
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(200)
+    expect(await getPresetById(presetId)).toBeUndefined()
   })
 
-  it('deletes for the owner', async () => {
+  it('deletes a preset created by the requesting user', async () => {
     await seedPreset()
     const res = (await DELETE(
       buildApiContext({
@@ -71,5 +84,6 @@ describe('DELETE /api/presets/[id]', () => {
       }) as never,
     )) as Response
     expect(res.status).toBe(200)
+    expect(await getPresetById(presetId)).toBeUndefined()
   })
 })

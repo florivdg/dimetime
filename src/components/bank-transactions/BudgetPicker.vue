@@ -35,20 +35,26 @@ const budgets = ref<Budget[]>([])
 const isLoading = ref(false)
 
 watch(
-  () => open.value,
-  async (isOpen) => {
-    if (isOpen && props.planId) {
+  () => [open.value, props.planId] as const,
+  async ([isOpen, planId], _, onCleanup) => {
+    let cancelled = false
+    onCleanup(() => {
+      cancelled = true
+    })
+    budgets.value = []
+    isLoading.value = false
+    if (isOpen && planId) {
       isLoading.value = true
       try {
-        const response = await fetch(`/api/plans/${props.planId}/budgets`)
+        const response = await fetch(`/api/plans/${planId}/budgets`)
         if (response.ok) {
           const data = await response.json()
-          budgets.value = data.budgets
+          if (!cancelled) budgets.value = data.budgets
         }
       } catch {
         // Silently ignore
       } finally {
-        isLoading.value = false
+        if (!cancelled) isLoading.value = false
       }
     }
   },

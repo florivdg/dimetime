@@ -72,7 +72,7 @@ async function updateSetting<K extends keyof UserSettings>(
         {{ errorMessage }}
       </div>
 
-      <div v-else class="space-y-6">
+      <div class="space-y-6">
         <div class="flex items-center justify-between gap-4">
           <div class="space-y-0.5">
             <Label for="groupByType" class="text-base">

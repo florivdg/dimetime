@@ -33,18 +33,39 @@ const baseTx = {
   sortOrder: 0,
 }
 
+function finishButton(wrapper: ReturnType<typeof mount>) {
+  const button = wrapper
+    .findAll('button')
+    .find((candidate) => candidate.text().includes('Fertig'))
+  if (!button) throw new Error('Fertig button not found')
+  return button
+}
+
 describe('SplitTransactionDialog.vue', () => {
-  it('mounts with a transaction', () => {
+  it('emits a signed two-way split including the calculated remainder', async () => {
     const wrapper = mount(SplitTransactionDialog, {
       props: { transaction: baseTx, open: true },
     })
-    expect(wrapper.html()).toBeTruthy()
+
+    await wrapper.get('#split-amount').setValue('60,00')
+    await wrapper.get('#split-label').setValue('Lebensmittel')
+    await finishButton(wrapper).trigger('click')
+
+    expect(wrapper.emitted('split')).toEqual([
+      [[{ amountCents: -6000, label: 'Lebensmittel' }, { amountCents: -4000 }]],
+    ])
   })
 
-  it('mounts with null transaction', () => {
+  it('rejects a one-part split equal to the original transaction', async () => {
     const wrapper = mount(SplitTransactionDialog, {
-      props: { transaction: null, open: false },
+      props: { transaction: baseTx, open: true },
     })
-    expect(wrapper.html()).toBeTruthy()
+
+    await wrapper.get('#split-amount').setValue('100')
+    const finish = finishButton(wrapper)
+
+    expect(finish.attributes('disabled')).toBe('')
+    await finish.trigger('click')
+    expect(wrapper.emitted('split')).toBeUndefined()
   })
 })

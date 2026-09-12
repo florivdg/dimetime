@@ -75,6 +75,7 @@ const hasActiveFilters = computed(() => {
     filters.value.search !== '' ||
     filters.value.categoryId !== null ||
     filters.value.isDone !== null ||
+    !filters.value.hideZeroValue ||
     advancedFilterCount.value > 0
   )
 })
